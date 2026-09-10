@@ -1870,7 +1870,7 @@ function renderCliRanges(){try{
   cliRangeHead.innerHTML=cliCustomDate?'<tr><th>Range</th><th>OTP Count</th></tr>':'<tr><th>Range</th><th>Today Count</th><th>Yesterday Count</th></tr>';
   cliRangeBody.innerHTML=rows.map(r=>cliCustomDate?`<tr><td><span class="tag tag-blue">${r.range_name||'Unknown'}</span></td><td class="cell-money">${r.total_count||0}</td></tr>`:`<tr><td><span class="tag tag-blue">${r.range_name||'Unknown'}</span></td><td class="cell-money">${r.today_count||0}</td><td class="cell-money">${r.yesterday_count||0}</td></tr>`).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No range analytics found</td></tr>`;
   cliRangeInfo.textContent=`Showing ${rows.length} of ${pag.total} ranges`;
-}catch(e){console.error(e);try{cliRangeBody.innerHTML=window.GX?GX.error(e.message||'Render failed','renderCliRanges()'):'⚠ Render error';}catch(_){}}
+}catch(e){console.error(e);try{cliRangeBody.innerHTML=window.GX?GX.error(e.message||'Render failed','renderCliRanges()'):'⚠ Render error';}catch(_){}}}
 
 
 /* =============== IMPORT JOBS / BULK DELETE =============== */
