@@ -192,6 +192,10 @@ a:hover{color:var(--accent)}
 .gx-btn.gx-amber{color:#fbbf24!important}
 .gx-btn.gx-amber:hover{border-color:rgba(251,191,36,.6)!important;box-shadow:0 0 0 1px rgba(251,191,36,.35),0 0 16px rgba(251,191,36,.18)}
 .gx-btn.gx-blue{color:#30abed!important}
+.gx-btn.gx-cyan{color:#22d3ee!important}
+.gx-btn.gx-cyan:hover{border-color:rgba(34,211,238,.6)!important;box-shadow:0 0 0 1px rgba(34,211,238,.35),0 0 16px rgba(34,211,238,.2)}
+.gx-btn.gx-violet{color:#a78bfa!important}
+.gx-btn.gx-violet:hover{border-color:rgba(167,139,250,.6)!important;box-shadow:0 0 0 1px rgba(167,139,250,.35),0 0 16px rgba(146,82,220,.22)}
 .gx-btn.gx-blue:hover{border-color:rgba(48,171,237,.6)!important;box-shadow:var(--glow)}
 /* ---------- MAP TAP/HOVER INFO CHIP (mobile-friendly) ---------- */
 .gx-map-info{
@@ -201,6 +205,8 @@ a:hover{color:var(--accent)}
 }
 .gx-map-info b{color:#fff}
 .gx-map-info .cnt{color:var(--accent);font-weight:750}
+/* touch-friendly icon buttons on mobile */
+@media(max-width:900px){.gx-btn{width:34px;height:34px}.gx-btn svg{width:17px;height:17px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* ---------- MOBILE (true mobile-first layer) ---------- */
 @media(max-width:900px){

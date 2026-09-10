@@ -82,3 +82,24 @@ body.gx-light .skeleton{background:linear-gradient(90deg,#eef2fa 25%,#f8fbff 50%
 }
 .gx-theme-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .gx-theme-btn:hover{color:var(--text)!important;border-color:rgba(48,171,237,.55)!important}
+
+/* ---------- legacy/fallback components (galaxy-dark-theme block) — light overrides ---------- */
+body.gx-light .stat-card.dash-metric,body.gx-light .metric{background:linear-gradient(150deg,#ffffff,#f3f7ff)!important;border-color:var(--border2)!important;box-shadow:var(--shadow)!important}
+body.gx-light .stat-card.dash-metric::before{background:linear-gradient(90deg,#30abed,#9252dc)!important}
+body.gx-light .stat-card.dash-metric::after{background:radial-gradient(circle,rgba(48,171,237,.10),transparent 68%)!important}
+body.gx-light .stat-card.dash-metric .stat-info h3,body.gx-light .metric h3{color:#16264f!important}
+body.gx-light .clock,body.gx-light .tb-date{background:#f2f6ff!important;color:#41507a!important;border-color:var(--border)!important}
+body.gx-light .drill .dchip{background:#ffffff!important;color:#41507a!important;border-color:var(--border)!important}
+body.gx-light .ms-notif-panel,body.gx-light .ms-profile-menu,body.gx-light .ms-toast{background:#ffffff!important;color:#16264f!important;border-color:var(--border)!important;box-shadow:var(--shadow)!important}
+body.gx-light .ms-notif-item,body.gx-light .ms-profile-item{color:#41507a!important;border-color:var(--border)!important}
+body.gx-light .ms-notif-head,body.gx-light .ms-notif-foot{background:#f6f9ff!important;color:#41507a!important}
+body.gx-light .ms-progress{background:linear-gradient(90deg,#30abed,#9252dc)!important}
+body.gx-light .upload-box{background:#f8fbff!important;color:#5c6a8a!important;border-color:#cdd8ea!important}
+body.gx-light .avatar,body.gx-light .av{color:#ffffff!important}
+body.gx-light .modal-overlay{background:rgba(15,23,60,.45)!important}
+body.gx-light .overlay{background:rgba(15,23,60,.35)!important}
+body.gx-light ::-webkit-scrollbar-track{background:#eef2f9!important}
+body.gx-light ::-webkit-scrollbar-thumb{background:#c3cee4!important;border-color:#eef2f9!important}
+body.gx-light [data-tip]::after{background:#ffffff;color:#16264f;border-color:var(--border2);box-shadow:var(--shadow)}
+body.gx-light .sidebar::after,body.gx-light .rail::after{background:var(--border)!important}
+body.gx-light .gx-map-info{background:#ffffff!important;color:#16264f!important}
