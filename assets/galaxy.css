@@ -170,22 +170,25 @@ a:hover{color:var(--accent)}
 .gx-pay-chip .v{font-size:22px;font-weight:750;color:#fff;font-variant-numeric:tabular-nums;margin-top:4px}
 .gx-pay-chip .s{color:#5f6a92;font-size:11.5px;margin-top:2px}
 .gx-map-card{margin-top:14px}
-.gx-map-wrap{position:relative;border-radius:12px;overflow:hidden;background:radial-gradient(700px 300px at 60% 20%,rgba(48,171,237,.08),transparent 60%),#070a18;border:1px solid var(--border)}
+.gx-map-wrap{position:relative;border-radius:12px;overflow:hidden;background:radial-gradient(700px 300px at 60% 20%,rgba(48,171,237,.12),transparent 62%),#0a1226;border:1px solid rgba(124,152,230,.22)}
 .gx-map-wrap svg{display:block;width:100%;height:auto}
-.gx-map-wrap path{fill:#141b38;stroke:rgba(199,209,248,.06);stroke-width:.4;transition:fill .2s ease}
-.gx-map-wrap path.gx-on{fill:#30abed}
+.gx-map-wrap path{fill:#16234a;stroke:rgba(124,152,230,.30);stroke-width:.45;transition:fill .2s ease}
+.gx-map-wrap path.gx-on{fill:#2f9fe0;filter:drop-shadow(0 0 4px rgba(48,171,237,.55))}
 .gx-map-wrap path:hover{fill:#9252dc!important}
 .gx-map-legend{display:flex;gap:16px;align-items:center;padding:10px 14px;color:var(--muted);font-size:12px;flex-wrap:wrap}
 .gx-map-legend .k{display:inline-flex;align-items:center;gap:6px}
 .gx-map-legend .sw{width:10px;height:10px;border-radius:3px;background:var(--grad)}
-/* ---------- 7-DAY CHART: distinct professional per-day colors (cyan->purple family) ---------- */
-.chart .bar-col:nth-child(1) .bar{background:#22d3ee!important}
-.chart .bar-col:nth-child(2) .bar{background:#30abed!important}
-.chart .bar-col:nth-child(3) .bar{background:#3b82f6!important}
-.chart .bar-col:nth-child(4) .bar{background:#6366f1!important}
-.chart .bar-col:nth-child(5) .bar{background:#8b5cf6!important}
-.chart .bar-col:nth-child(6) .bar{background:#a855f7!important}
-.chart .bar-col:nth-child(7) .bar{background:#9252dc!important}
+/* ---------- 7-DAY CHART: coordinated gradient bars (cyan->purple ramp), refined grid ---------- */
+.chart{--gxgrid:rgba(148,163,216,.10)}
+.chart .bar-col{background:repeating-linear-gradient(to top,transparent 0 calc(25% - 1px),var(--gxgrid) calc(25% - 1px) 25%);border-radius:8px}
+.chart .bar{border-radius:8px 8px 2px 2px!important;box-shadow:0 0 16px rgba(48,140,237,.14)}
+.chart .bar-col:nth-child(1) .bar{background:linear-gradient(180deg,#9be8ff 0%,#22d3ee 100%)!important}
+.chart .bar-col:nth-child(2) .bar{background:linear-gradient(180deg,#7cc8ff 0%,#30abed 100%)!important}
+.chart .bar-col:nth-child(3) .bar{background:linear-gradient(180deg,#82a8ff 0%,#3b82f6 100%)!important}
+.chart .bar-col:nth-child(4) .bar{background:linear-gradient(180deg,#93a0ff 0%,#6366f1 100%)!important}
+.chart .bar-col:nth-child(5) .bar{background:linear-gradient(180deg,#b39bff 0%,#8b5cf6 100%)!important}
+.chart .bar-col:nth-child(6) .bar{background:linear-gradient(180deg,#c48cf9 0%,#a855f7 100%)!important}
+.chart .bar-col:nth-child(7) .bar{background:linear-gradient(180deg,#d18df0 0%,#9252dc 100%)!important}
 /* ---------- GX ACTION BUTTONS: colored icon + tinted bg + soft professional glow ---------- */
 .gx-btn:hover{color:#dfe6ff!important;border-color:rgba(48,171,237,.5)!important;box-shadow:0 0 12px rgba(48,171,237,.25)}
 .gx-btn.gx-green{color:#3ddc97!important;background:rgba(52,211,153,.12)!important;border-color:rgba(52,211,153,.38)!important;box-shadow:0 0 10px rgba(52,211,153,.16)}
@@ -246,3 +249,41 @@ a:hover{color:var(--accent)}
   .gx-dash-grid{grid-template-columns:1fr 1fr!important}
   .gx-pay-chip{flex:1 1 100%}
 }
+
+/* ============ P9: DARK-BLUE DASHBOARD — full-surface gradient cards (navy identity) ============ */
+body:not(.gx-light) .gx-dash-grid .stat-card,body:not(.gx-light) .stats-grid .stat-card,body:not(.gx-light) .dash-metrics .stat-card{
+  border:1px solid rgba(124,152,230,.18)!important;border-radius:16px!important;overflow:hidden;
+  box-shadow:0 14px 34px rgba(3,6,20,.45)!important;
+}
+body:not(.gx-light) .gx-dash-grid .stat-card,body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+1),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+1){
+  background:linear-gradient(150deg,rgba(48,171,237,.30) 0%,rgba(15,26,58,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+2),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+2){
+  background:linear-gradient(150deg,rgba(59,130,246,.28) 0%,rgba(14,22,52,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+3),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+3){
+  background:linear-gradient(150deg,rgba(99,102,241,.26) 0%,rgba(16,18,52,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+4),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+4){
+  background:linear-gradient(150deg,rgba(139,92,246,.26) 0%,rgba(18,14,50,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+5),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+5){
+  background:linear-gradient(150deg,rgba(146,82,220,.26) 0%,rgba(19,12,46,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+6),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+6){
+  background:linear-gradient(150deg,rgba(20,184,166,.22) 0%,rgba(10,26,44,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+7),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+7){
+  background:linear-gradient(150deg,rgba(232,151,60,.20) 0%,rgba(26,18,10,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stats-grid .stat-card:nth-child(8n+8),body:not(.gx-light) .dash-metrics .stat-card:nth-child(8n+8){
+  background:linear-gradient(150deg,rgba(127,24,179,.26) 0%,rgba(20,10,38,.95) 46%,rgba(8,12,28,.98) 100%)!important;
+}
+body:not(.gx-light) .stat-card.dash-metric.d-blue{background:linear-gradient(150deg,rgba(48,171,237,.30) 0%,rgba(15,26,58,.95) 46%,rgba(8,12,28,.98) 100%)!important}
+body:not(.gx-light) .stat-card.dash-metric.d-green{background:linear-gradient(150deg,rgba(20,184,166,.24) 0%,rgba(10,26,44,.95) 46%,rgba(8,12,28,.98) 100%)!important}
+body:not(.gx-light) .stat-card.dash-metric.d-orange{background:linear-gradient(150deg,rgba(232,151,60,.22) 0%,rgba(26,18,10,.95) 46%,rgba(8,12,28,.98) 100%)!important}
+body:not(.gx-light) .stat-card.dash-metric.d-pink{background:linear-gradient(150deg,rgba(168,85,247,.24) 0%,rgba(19,12,46,.95) 46%,rgba(8,12,28,.98) 100%)!important}
+/* payout chips: full-surface */
+body:not(.gx-light) .gx-pay-chip{border:1px solid rgba(124,152,230,.18)!important;box-shadow:0 14px 34px rgba(3,6,20,.4)!important}
+body:not(.gx-light) .gx-pay-chip:nth-of-type(1),body:not(.gx-light) .gx-pay-chip:first-child{background:linear-gradient(150deg,rgba(48,171,237,.24) 0%,rgba(9,14,32,.96) 55%)!important}
+body:not(.gx-light) .gx-pay-chip:nth-of-type(2),body:not(.gx-light) .gx-pay-chip:last-child{background:linear-gradient(150deg,rgba(146,82,220,.24) 0%,rgba(12,8,28,.96) 55%)!important}

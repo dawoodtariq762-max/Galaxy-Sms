@@ -68,9 +68,9 @@ body.gx-light select option{background:#ffffff!important;color:#16264f!important
 body.gx-light .chart .bar-track{background:#eef2fa!important}
 body.gx-light .chart .bar .val{color:#41507a!important}
 /* map */
-body.gx-light .gx-map-wrap{background:radial-gradient(700px 300px at 60% 20%,rgba(48,171,237,.06),transparent 60%),#f6f9ff!important}
-body.gx-light .gx-map-wrap path{fill:#dbe4f5;stroke:rgba(22,38,79,.06)}
-body.gx-light .gx-map-wrap path.gx-on{fill:#30abed}
+body.gx-light .gx-map-wrap{background:linear-gradient(180deg,#f4f8ff 0%,#e9f1fc 100%)!important;border:1px solid #d7e3f5!important}
+body.gx-light .gx-map-wrap path{fill:#c2d2e8;stroke:#f5f9ff;stroke-width:.5}
+body.gx-light .gx-map-wrap path.gx-on{fill:#1e8fd6}
 body.gx-light .gx-map-wrap path:hover{fill:#9252dc!important}
 body.gx-light .gx-map-info{background:#ffffff!important;color:#16264f!important;border-color:var(--border2)!important}
 /* skeleton */
@@ -147,15 +147,46 @@ body.gx-light .nav-item.active svg,body.gx-light .ritem.active svg,body.gx-light
 body.gx-light .sub-item.active,body.gx-light .rsubitem.active{background:rgba(48,171,237,.16)!important;color:#10234e!important;box-shadow:inset 2px 0 0 #30abed!important}
 body.gx-light .topbar,body.gx-light .tb1,body.gx-light .mgr-topbar{background:#ffffff!important;border-bottom:1px solid #e2e9f6!important}
 
-/* ============ P8: DASHBOARD CARDS — distinct tasteful gradients (blank-white nahi) ============ */
-body.gx-light .gx-dash-grid .stat-card,body.gx-light .stats-grid .stat-card,body.gx-light .dash-metrics .stat-card{border:1px solid #e3eaf6!important;border-left-width:4px!important;border-left-color:#30abed!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+1),body.gx-light .stats-grid .stat-card:nth-child(8n+1),body.gx-light .dash-metrics .stat-card:nth-child(8n+1){background:linear-gradient(135deg,#ddebff 0%,#f6faff 75%)!important;border-left-color:#30abed!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+2),body.gx-light .stats-grid .stat-card:nth-child(8n+2),body.gx-light .dash-metrics .stat-card:nth-child(8n+2){background:linear-gradient(135deg,#eadcff 0%,#f9f6ff 75%)!important;border-left-color:#9252dc!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+3),body.gx-light .stats-grid .stat-card:nth-child(8n+3),body.gx-light .dash-metrics .stat-card:nth-child(8n+3){background:linear-gradient(135deg,#d9f5e7 0%,#f4fdf8 75%)!important;border-left-color:#12b981!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+4),body.gx-light .stats-grid .stat-card:nth-child(8n+4),body.gx-light .dash-metrics .stat-card:nth-child(8n+4){background:linear-gradient(135deg,#ffedd0 0%,#fffaf0 75%)!important;border-left-color:#e5970f!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+5),body.gx-light .stats-grid .stat-card:nth-child(8n+5),body.gx-light .dash-metrics .stat-card:nth-child(8n+5){background:linear-gradient(135deg,#d7f6fd 0%,#f2fdff 75%)!important;border-left-color:#0fb5cc!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+6),body.gx-light .stats-grid .stat-card:nth-child(8n+6),body.gx-light .dash-metrics .stat-card:nth-child(8n+6){background:linear-gradient(135deg,#ffe3f0 0%,#fff5f9 75%)!important;border-left-color:#e0559a!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+7),body.gx-light .stats-grid .stat-card:nth-child(8n+7),body.gx-light .dash-metrics .stat-card:nth-child(8n+7){background:linear-gradient(135deg,#e0e5ff 0%,#f6f8ff 75%)!important;border-left-color:#5b6cf0!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+8),body.gx-light .stats-grid .stat-card:nth-child(8n+8),body.gx-light .dash-metrics .stat-card:nth-child(8n+8){background:linear-gradient(135deg,#eef7d8 0%,#fbfef4 75%)!important;border-left-color:#84b512!important}
+/* ============ P9: LIGHT DASHBOARD — full-surface premium gradients (blank-white nahi) ============ */
+body.gx-light .gx-dash-grid .stat-card,body.gx-light .stats-grid .stat-card,body.gx-light .dash-metrics .stat-card{
+  border:1px solid rgba(48,111,237,.14)!important;border-radius:16px!important;overflow:hidden;
+  box-shadow:0 12px 30px rgba(22,54,120,.10)!important;
+}
+body.gx-light .gx-dash-grid .stat-card,body.gx-light .stats-grid .stat-card:nth-child(8n+1),body.gx-light .dash-metrics .stat-card:nth-child(8n+1){
+  background:linear-gradient(140deg,#cfe9ff 0%,#e9f5ff 55%,#f8fcff 100%)!important;border-left:4px solid #30abed!important;
+}
+body.gx-light .stats-grid .stat-card:nth-child(8n+2),body.gx-light .dash-metrics .stat-card:nth-child(8n+2){
+  background:linear-gradient(140deg,#d3e2ff 0%,#ecf3ff 55%,#f8faff 100%)!important;border-left:4px solid #3b82f6!important;
+}
+body.gx-light .stats-grid .stat-card:nth-child(8n+3),body.gx-light .dash-metrics .stat-card:nth-child(8n+3){
+  background:linear-gradient(140deg,#d9dcff 0%,#eff1ff 55%,#fafbff 100%)!important;border-left:4px solid #6366f1!important;
+}
+body.gx-light .stats-grid .stat-card:nth-child(8n+4),body.gx-light .dash-metrics .stat-card:nth-child(8n+4){
+  background:linear-gradient(140deg,#e2d4ff 0%,#f4edff 55%,#fcf9ff 100%)!important;border-left:4px solid #8b5cf6!important;
+}
+body.gx-light .stats-grid .stat-card:nth-child(8n+5),body.gx-light .dash-metrics .stat-card:nth-child(8n+5){
+  background:linear-gradient(140deg,#ecd8ff 0%,#f8f0ff 55%,#fefbff 100%)!important;border-left:4px solid #9252dc!important;
+}
+body.gx-light .stats-grid .stat-card:nth-child(8n+6),body.gx-light .dash-metrics .stat-card:nth-child(8n+6){
+  background:linear-gradient(140deg,#c8f0ea 0%,#ebfaf7 55%,#f7fdfb 100%)!important;border-left:4px solid #14b8a6!important;
+}
+body.gx-light .stats-grid .stat-card:nth-child(8n+7),body.gx-light .dash-metrics .stat-card:nth-child(8n+7){
+  background:linear-gradient(140deg,#ffe4c2 0%,#fff5e6 55%,#fffbf3 100%)!important;border-left:4px solid #e8973c!important;
+}
+body.gx-light .stats-grid .stat-card:nth-child(8n+8),body.gx-light .dash-metrics .stat-card:nth-child(8n+8){
+  background:linear-gradient(140deg,#e4c9f7 0%,#f5ebfd 55%,#fdf9ff 100%)!important;border-left:4px solid #7f18b3!important;
+}
+body.gx-light .stat-card.dash-metric.d-blue{background:linear-gradient(140deg,#cfe9ff 0%,#e9f5ff 55%,#f8fcff 100%)!important;border-left:4px solid #30abed!important}
+body.gx-light .stat-card.dash-metric.d-green{background:linear-gradient(140deg,#c8f0ea 0%,#ebfaf7 55%,#f7fdfb 100%)!important;border-left:4px solid #14b8a6!important}
+body.gx-light .stat-card.dash-metric.d-orange{background:linear-gradient(140deg,#ffe4c2 0%,#fff5e6 55%,#fffbf3 100%)!important;border-left:4px solid #e8973c!important}
+body.gx-light .stat-card.dash-metric.d-pink{background:linear-gradient(140deg,#e4c9f7 0%,#f5ebfd 55%,#fdf9ff 100%)!important;border-left:4px solid #7f18b3!important}
+/* payout chips: full-surface light */
+body.gx-light .gx-pay-chip{border:1px solid rgba(48,111,237,.14)!important;box-shadow:0 12px 30px rgba(22,54,120,.10)!important}
+body.gx-light .gx-pay-chip:nth-of-type(1),body.gx-light .gx-pay-chip:first-child{background:linear-gradient(140deg,#d7ebff 0%,#f0f8ff 70%)!important}
+body.gx-light .gx-pay-chip:nth-of-type(2),body.gx-light .gx-pay-chip:last-child{background:linear-gradient(140deg,#e6d9ff 0%,#f7f2ff 70%)!important}
+/* chart light: grid + labels */
+body.gx-light .chart{--gxgrid:rgba(90,110,170,.16)}
+body.gx-light .chart .bar .val{color:#41507a!important}
+body.gx-light .chart .bar{box-shadow:0 6px 16px rgba(22,54,120,.16)!important}
 body.gx-light .stat-card .stat-info h3,body.gx-light .stat-card.dash-metric .stat-info h3{color:#10234e!important;font-weight:760!important}
 body.gx-light .stat-card .stat-info p,body.gx-light .stat-card .stat-info span,body.gx-light .stat-card.dash-metric .stat-info p,body.gx-light .stat-card.dash-metric .stat-info span{color:#5e6c92!important}
