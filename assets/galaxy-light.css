@@ -125,3 +125,37 @@ body.gx-light tbody tr td b{color:#0f2454!important}
 body.gx-light .page-head h2,body.gx-light .breadcrumb,body.gx-light .sub{color:#16264f!important}
 body.gx-light .breadcrumb,body.gx-light .sub,body.gx-light .hint,body.gx-light .muted{color:#5c6a8a!important}
 body.gx-light .gx-pay-chip .v{color:#16264f!important}
+
+/* ============ P8: LIGHT SIDEBAR — soft Galaxy gradient (na pure-white, na navy) ============ */
+body.gx-light .sidebar,body.gx-light .rail,body.gx-light .navshell,body.gx-light .appbar{
+  background:linear-gradient(180deg,#f7f9ff 0%,#eff4fd 55%,#e9f0fb 100%)!important;
+  border-color:#d9e3f4!important;box-shadow:1px 0 0 #d9e3f4!important;
+}
+body.gx-light .sb-brand,body.gx-light .rail-brand,body.gx-light .brand-text,body.gx-light .brand{border-bottom:1px solid #dfe7f5!important}
+body.gx-light .sb-brand h1,body.gx-light .brand h1,body.gx-light .brand-text h1,body.gx-light .brand-logo h1,body.gx-light .sidebar h1,body.gx-light .brand b{color:#10234e!important;font-weight:760!important}
+body.gx-light .sb-brand h1 span,body.gx-light .brand-text h1 span{background:linear-gradient(96deg,#1e8fd6,#7f18b3)!important;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important}
+body.gx-light .sb-brand small,body.gx-light .brand small,body.gx-light .brand-text small,body.gx-light .sidebar small{color:#5e6c92!important}
+body.gx-light .sb-logo,body.gx-light .brand .logo,body.gx-light .rail .logo,body.gx-light .sb-brand .logo,body.gx-light .brand-logo .logo,body.gx-light .logo{background:#ffffff!important;border:1px solid #d9e3f4!important;box-shadow:0 6px 16px rgba(22,38,79,.10)!important}
+body.gx-light .sb-section,body.gx-light .sb-sec,body.gx-light .sec{color:#8291b6!important}
+body.gx-light .nav-item,body.gx-light .sub-item,body.gx-light .ritem,body.gx-light .rsubitem,body.gx-light .navtab,body.gx-light .item{color:#42527c!important}
+body.gx-light .nav-item:hover,body.gx-light .sub-item:hover,body.gx-light .ritem:hover,body.gx-light .item:hover{background:rgba(48,171,237,.10)!important;color:#10234e!important}
+body.gx-light .nav-item.active,body.gx-light .tab.active,body.gx-light .ritem.active,body.gx-light .navtab.active,body.gx-light .item.active{
+  background:linear-gradient(96deg,#30abed,#9252dc)!important;color:#ffffff!important;
+  box-shadow:0 8px 22px rgba(48,111,237,.30)!important;
+}
+body.gx-light .nav-item.active svg,body.gx-light .ritem.active svg,body.gx-light .item.active svg{stroke:#ffffff!important;color:#ffffff!important;opacity:1!important}
+body.gx-light .sub-item.active,body.gx-light .rsubitem.active{background:rgba(48,171,237,.16)!important;color:#10234e!important;box-shadow:inset 2px 0 0 #30abed!important}
+body.gx-light .topbar,body.gx-light .tb1,body.gx-light .mgr-topbar{background:#ffffff!important;border-bottom:1px solid #e2e9f6!important}
+
+/* ============ P8: DASHBOARD CARDS — distinct tasteful gradients (blank-white nahi) ============ */
+body.gx-light .gx-dash-grid .stat-card,body.gx-light .stats-grid .stat-card,body.gx-light .dash-metrics .stat-card{border:1px solid #e3eaf6!important;border-left-width:4px!important;border-left-color:#30abed!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+1),body.gx-light .stats-grid .stat-card:nth-child(8n+1),body.gx-light .dash-metrics .stat-card:nth-child(8n+1){background:linear-gradient(135deg,#ddebff 0%,#f6faff 75%)!important;border-left-color:#30abed!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+2),body.gx-light .stats-grid .stat-card:nth-child(8n+2),body.gx-light .dash-metrics .stat-card:nth-child(8n+2){background:linear-gradient(135deg,#eadcff 0%,#f9f6ff 75%)!important;border-left-color:#9252dc!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+3),body.gx-light .stats-grid .stat-card:nth-child(8n+3),body.gx-light .dash-metrics .stat-card:nth-child(8n+3){background:linear-gradient(135deg,#d9f5e7 0%,#f4fdf8 75%)!important;border-left-color:#12b981!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+4),body.gx-light .stats-grid .stat-card:nth-child(8n+4),body.gx-light .dash-metrics .stat-card:nth-child(8n+4){background:linear-gradient(135deg,#ffedd0 0%,#fffaf0 75%)!important;border-left-color:#e5970f!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+5),body.gx-light .stats-grid .stat-card:nth-child(8n+5),body.gx-light .dash-metrics .stat-card:nth-child(8n+5){background:linear-gradient(135deg,#d7f6fd 0%,#f2fdff 75%)!important;border-left-color:#0fb5cc!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+6),body.gx-light .stats-grid .stat-card:nth-child(8n+6),body.gx-light .dash-metrics .stat-card:nth-child(8n+6){background:linear-gradient(135deg,#ffe3f0 0%,#fff5f9 75%)!important;border-left-color:#e0559a!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+7),body.gx-light .stats-grid .stat-card:nth-child(8n+7),body.gx-light .dash-metrics .stat-card:nth-child(8n+7){background:linear-gradient(135deg,#e0e5ff 0%,#f6f8ff 75%)!important;border-left-color:#5b6cf0!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+8),body.gx-light .stats-grid .stat-card:nth-child(8n+8),body.gx-light .dash-metrics .stat-card:nth-child(8n+8){background:linear-gradient(135deg,#eef7d8 0%,#fbfef4 75%)!important;border-left-color:#84b512!important}
+body.gx-light .stat-card .stat-info h3,body.gx-light .stat-card.dash-metric .stat-info h3{color:#10234e!important;font-weight:760!important}
+body.gx-light .stat-card .stat-info p,body.gx-light .stat-card .stat-info span,body.gx-light .stat-card.dash-metric .stat-info p,body.gx-light .stat-card.dash-metric .stat-info span{color:#5e6c92!important}
