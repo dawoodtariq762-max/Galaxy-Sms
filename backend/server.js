@@ -3166,6 +3166,9 @@ function getClientIp(req){
 }
 function carrierIpAllowed(config, ip){
   const allowed = String(config.carrier_ip||'').split(/[\s,;]+/).map(cleanIp).filter(Boolean);
+  try { // GALAXY: Activity Integration entries (Provider Name + IP) bhi allowlist ka hissa
+    for (const r of db.all('SELECT ip FROM activity_ips WHERE enabled=1')) allowed.push(cleanIp(r.ip));
+  } catch(e) {}
   return allowed.includes(cleanIp(ip));
 }
 function cleanupWebhookLogs(days){
@@ -3208,6 +3211,87 @@ function carrierRuntimeStatus(){
     last_error: last ? (last.error || '') : ''
   };
 }
+/* ===== GALAXY: Activity Integration IPs (Provider Name + IP) ===== */
+app.get('/api/activity-ips', authRequired, requireRole('admin'), (req,res)=>{
+  res.json(db.all('SELECT * FROM activity_ips ORDER BY id DESC'));
+});
+app.post('/api/activity-ips', authRequired, requireRole('admin'), (req,res)=>{
+  const b = req.body || {};
+  const ip = cleanIp(b.ip || '');
+  if (!ip) return res.status(400).json({ error: 'Valid IP address required' });
+  const name = String(b.provider_name || '').trim();
+  try {
+    db.run('INSERT INTO activity_ips (provider_name,ip,enabled) VALUES (?,?,?)', [name, ip, b.enabled === false ? 0 : 1]);
+    logAction(req, 'activity_ip_add', 'activity_ips', { provider: name, ip });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+app.put('/api/activity-ips/:id', authRequired, requireRole('admin'), (req,res)=>{
+  const b = req.body || {};
+  db.run('UPDATE activity_ips SET provider_name=?, ip=?, enabled=? WHERE id=?',
+    [String(b.provider_name||'').trim(), cleanIp(b.ip||''), b.enabled === false ? 0 : 1, +req.params.id]);
+  logAction(req, 'activity_ip_update', 'activity_ips', { id: +req.params.id });
+  res.json({ ok: true });
+});
+app.delete('/api/activity-ips/:id', authRequired, requireRole('admin'), (req,res)=>{
+  db.run('DELETE FROM activity_ips WHERE id=?', [+req.params.id]);
+  logAction(req, 'activity_ip_delete', 'activity_ips', { id: +req.params.id });
+  res.json({ ok: true });
+});
+
+/* ===== GALAXY: Provider registry (relationship/payment/reporting) ===== */
+app.get('/api/providers-info', authRequired, requireRole('admin'), (req,res)=>{
+  const provs = db.all('SELECT * FROM galaxy_providers ORDER BY name COLLATE NOCASE');
+  const names = new Set(provs.map(p => p.name));
+  const discover = (n) => { if (n && !names.has(n)) { names.add(n); provs.push({ id: 'auto:' + n, name: n, payment_term: '', currency: 'USD', rate: '', notes: '', auto: true }); } };
+  db.all("SELECT name FROM sync_providers").forEach(r => discover(r.name));
+  db.all("SELECT name FROM smpp_connections").forEach(r => discover(r.name));
+  db.all("SELECT DISTINCT provider_name n FROM activity_ips WHERE provider_name != ''").forEach(r => discover(r.n));
+  db.all("SELECT DISTINCT provider n FROM ranges WHERE provider != ''").forEach(r => discover(r.n));
+  const since7 = db.get(`SELECT datetime('now','-7 days') d`)?.d;
+  const out = [];
+  for (const p of provs) {
+    let conns = { api: 0, smpp: 0, ips: [] };
+    try {
+      conns.api = db.get('SELECT COUNT(*) c FROM sync_providers WHERE name=?', [p.name])?.c || 0;
+      conns.smpp = db.get('SELECT COUNT(*) c FROM smpp_connections WHERE name=?', [p.name])?.c || 0;
+      conns.ips = db.all('SELECT provider_name, ip, enabled FROM activity_ips WHERE provider_name=?', [p.name]);
+    } catch(e) {}
+    let stats = { msgs_7d: 0, payout_7d: 0, ranges: 0, numbers: 0 };
+    try {
+      stats.ranges = db.get('SELECT COUNT(*) c FROM ranges WHERE provider=? AND COALESCE(deleted_at,\'\')=\'\'', [p.name])?.c || 0;
+      stats.numbers = db.get('SELECT COUNT(*) c FROM numbers n JOIN ranges r ON r.id=n.range_id WHERE r.provider=?', [p.name])?.c || 0;
+      stats.msgs_7d = db.get(`SELECT COUNT(*) c FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=? AND s.received_at >= ?`, [p.name, since7])?.c || 0;
+      stats.payout_7d = normalizeDecimalString(db.get(`SELECT COALESCE(SUM(CAST(s.payout_amount AS REAL)),0) p FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=? AND s.received_at >= ?`, [p.name, since7])?.p || 0) || '0';
+    } catch(e) {}
+    out.push({ ...p, connections: conns, stats });
+  }
+  res.json(out);
+});
+app.post('/api/providers-info', authRequired, requireRole('admin'), (req,res)=>{
+  const b = req.body || {};
+  const name = String(b.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Provider name required' });
+  try {
+    db.run('INSERT INTO galaxy_providers (name,payment_term,currency,rate,notes) VALUES (?,?,?,?,?)',
+      [name, String(b.payment_term||''), String(b.currency||'USD'), String(b.rate||''), String(b.notes||'')]);
+    logAction(req, 'provider_add', 'galaxy_providers', { name });
+    res.json({ ok: true });
+  } catch(e) { res.status(400).json({ error: /UNIQUE/.test(e.message) ? 'Provider already exists' : e.message }); }
+});
+app.put('/api/providers-info/:id', authRequired, requireRole('admin'), (req,res)=>{
+  const b = req.body || {};
+  db.run("UPDATE galaxy_providers SET name=?,payment_term=?,currency=?,rate=?,notes=?,updated_at=datetime('now') WHERE id=?",
+    [String(b.name||'').trim(), String(b.payment_term||''), String(b.currency||'USD'), String(b.rate||''), String(b.notes||''), +req.params.id]);
+  logAction(req, 'provider_update', 'galaxy_providers', { id: +req.params.id });
+  res.json({ ok: true });
+});
+app.delete('/api/providers-info/:id', authRequired, requireRole('admin'), (req,res)=>{
+  db.run('DELETE FROM galaxy_providers WHERE id=?', [+req.params.id]);
+  logAction(req, 'provider_delete', 'galaxy_providers', { id: +req.params.id });
+  res.json({ ok: true });
+});
+
 app.get('/api/carrier-settings', authRequired, requireRole('admin'), (req,res)=>{
   if (!requireCarrierLock(req, res)) return;
   const c=getCarrierSettings();

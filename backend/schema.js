@@ -314,6 +314,26 @@ function createTables() {
   ensureColumn('ranges', 'range_start', "TEXT DEFAULT ''");
   ensureColumn('ranges', 'range_end', "TEXT DEFAULT ''");
   ensureColumn('ranges', 'status', "TEXT DEFAULT 'Active'");
+  // GALAXY: Activity Integration entries (Provider Name + IP allowlist)
+  db.run(`CREATE TABLE IF NOT EXISTS activity_ips (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider_name TEXT DEFAULT '',
+    ip TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_activity_ips_enabled ON activity_ips(enabled)`);
+  // GALAXY: Provider-level registry (relationship/payment/reporting — credentials stay in connections)
+  db.run(`CREATE TABLE IF NOT EXISTS galaxy_providers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    payment_term TEXT DEFAULT '',
+    currency TEXT DEFAULT 'USD',
+    rate TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
   ensureColumn('sms_records', 'is_test', 'INTEGER DEFAULT 0');
   ensureColumn('sms_records', 'test_batch_id', "TEXT DEFAULT ''");
   ensureColumn('sms_records', 'source', "TEXT DEFAULT 'carrier'");

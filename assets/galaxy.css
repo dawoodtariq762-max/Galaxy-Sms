@@ -178,6 +178,29 @@ a:hover{color:var(--accent)}
 .gx-map-legend{display:flex;gap:16px;align-items:center;padding:10px 14px;color:var(--muted);font-size:12px;flex-wrap:wrap}
 .gx-map-legend .k{display:inline-flex;align-items:center;gap:6px}
 .gx-map-legend .sw{width:10px;height:10px;border-radius:3px;background:var(--grad)}
+/* ---------- 7-DAY CHART: distinct professional per-day colors (cyan->purple family) ---------- */
+.chart .bar-col:nth-child(1) .bar{background:#22d3ee!important}
+.chart .bar-col:nth-child(2) .bar{background:#30abed!important}
+.chart .bar-col:nth-child(3) .bar{background:#3b82f6!important}
+.chart .bar-col:nth-child(4) .bar{background:#6366f1!important}
+.chart .bar-col:nth-child(5) .bar{background:#8b5cf6!important}
+.chart .bar-col:nth-child(6) .bar{background:#a855f7!important}
+.chart .bar-col:nth-child(7) .bar{background:#9252dc!important}
+/* ---------- GX ACTION BUTTON COLORS (action-type distinct, still professional) ---------- */
+.gx-btn.gx-green{color:#34d399!important}
+.gx-btn.gx-green:hover{border-color:rgba(52,211,153,.6)!important;box-shadow:0 0 0 1px rgba(52,211,153,.35),0 0 16px rgba(52,211,153,.2)}
+.gx-btn.gx-amber{color:#fbbf24!important}
+.gx-btn.gx-amber:hover{border-color:rgba(251,191,36,.6)!important;box-shadow:0 0 0 1px rgba(251,191,36,.35),0 0 16px rgba(251,191,36,.18)}
+.gx-btn.gx-blue{color:#30abed!important}
+.gx-btn.gx-blue:hover{border-color:rgba(48,171,237,.6)!important;box-shadow:var(--glow)}
+/* ---------- MAP TAP/HOVER INFO CHIP (mobile-friendly) ---------- */
+.gx-map-info{
+  position:absolute;top:10px;left:10px;z-index:5;background:#151b36;color:var(--text);
+  border:1px solid var(--border2);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:650;
+  box-shadow:0 12px 30px rgba(1,2,12,.55);display:none;pointer-events:none;max-width:220px;
+}
+.gx-map-info b{color:#fff}
+.gx-map-info .cnt{color:var(--accent);font-weight:750}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* ---------- MOBILE (true mobile-first layer) ---------- */
 @media(max-width:900px){

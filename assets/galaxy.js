@@ -105,6 +105,14 @@ GX.map = async function(hostSel, data){
   host.innerHTML='<div class="gx-map-wrap">'+svg+'</div>'+
     '<div class="gx-map-legend"><span class="k"><span class="sw"></span> SMS volume today (darker = more)</span><span class="k" id="gxMapTop"></span></div>';
   const wrap=host.querySelector('.gx-map-wrap');
+  const info=document.createElement('div');
+  info.className='gx-map-info';
+  wrap.appendChild(info);
+  const showInfo=(d)=>{
+    info.innerHTML='<b>'+d.name+'</b><br><span class="cnt">'+d.count.toLocaleString()+'</span> SMS today';
+    info.style.display='block';
+    clearTimeout(info._t); info._t=setTimeout(()=>{info.style.display='none';},2600);
+  };
   wrap.querySelectorAll('path').forEach(p=>{
     const iso=(p.getAttribute('id')||'').toLowerCase();
     const d=names[iso];
@@ -113,8 +121,9 @@ GX.map = async function(hostSel, data){
       p.classList.add('gx-on');
       p.setAttribute('fill-opacity',(0.25+0.75*t).toFixed(2));
       const tip=document.createElementNS('http://www.w3.org/2000/svg','title');
-      tip.textContent=d.name+': '+d.count.toLocaleString()+' SMS today';
+      tip.textContent=d.name+': '+d.count.toLocaleString()+' SMS today'; /* desktop hover */
       p.appendChild(tip);
+      p.addEventListener('click',()=>showInfo(d)); /* mobile tap */
     }
   });
   const top=[...arr].sort((a,b)=>b.count-a.count).slice(0,5);
@@ -156,5 +165,35 @@ GX.wireExports = function(){
   });
 };
 try{ GX.wireExports(); }catch(e){}
+/* ---------------- LIGHT/DARK THEME TOGGLE (visual only, localStorage) ---------------- */
+GX.theme = {
+  apply(t){ document.body.classList.toggle('gx-light', t==='light'); },
+  current(){ try{ return localStorage.getItem('gx-theme')||'dark'; }catch(e){ return 'dark'; } },
+  init(){
+    this.apply(this.current());
+    const build=()=>{
+      const btn=document.createElement('button');
+      btn.type='button'; btn.className='gx-theme-btn'; btn.setAttribute('data-tip','Dark / Light theme'); btn.setAttribute('aria-label','Toggle theme');
+      const paint=()=>{ btn.innerHTML = document.body.classList.contains('gx-light') ? GX.icon('clock').replace('clock','') || GX.icon('clock') : GX.icon('clock'); };
+      const sun='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="4.2" y1="4.2" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.8" y2="19.8"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.2" y1="19.8" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.8" y2="4.2"/></svg>';
+      const moon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+      const paint2=()=>{ btn.innerHTML = document.body.classList.contains('gx-light') ? moon : sun; };
+      paint2();
+      btn.addEventListener('click',()=>{
+        const next = document.body.classList.contains('gx-light') ? 'dark' : 'light';
+        this.apply(next);
+        try{ localStorage.setItem('gx-theme', next); }catch(e){}
+        paint2();
+      });
+      const tb=document.querySelector('.topbar')||document.querySelector('.tb1')||document.querySelector('.mgr-topbar');
+      if(tb){ tb.appendChild(btn); }
+      else { btn.style.cssText='position:fixed;right:12px;bottom:12px;z-index:80'; document.body.appendChild(btn); }
+    };
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+  }
+};
+try{ GX.theme.init(); }catch(e){}
+GX.moneyShort=(v)=>{const n=Number(v)||0;const a=Math.abs(n);if(a>=1e9)return (n/1e9).toFixed(a%1e9?2:0)+'B';if(a>=1e6)return (n/1e6).toFixed(a%1e6?2:0)+'M';if(a>=1e4)return (n/1e3).toFixed(a%1e3?1:0)+'K';let s=String(n);if(s.includes('.'))s=s.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');return s;};
 GX.GX=GX; window.GX=GX;
 })();

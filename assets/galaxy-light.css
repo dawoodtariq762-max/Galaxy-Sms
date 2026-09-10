@@ -1,0 +1,84 @@
+/* ============================================================================
+   GALAXY SMS — LIGHT THEME (galaxy-light.css v1)
+   body.gx-light par apply hota hai. Dark theme untouched — ye sirf UPAR
+   override karta hai (galaxy.css ke baad load hota hai). Pure invert nahi —
+   coherent professional light palette (Galaxy brand compatible).
+   ========================================================================== */
+body.gx-light{
+  --bg:#eef2f9; --bg2:#f6f8fd; --panel:#ffffff; --panel2:#f2f6ff; --row:#ffffff;
+  --border:#dfe6f2; --border2:#cdd8ea;
+  --text:#16264f; --muted:#5c6a8a; --ice:#16264f;
+  --sidebar:#ffffff; --topbar:rgba(255,255,255,.92);
+  --shadow:0 10px 28px rgba(22,38,79,.08);
+  --glow:0 0 0 1px rgba(48,171,237,.35),0 0 14px rgba(146,82,220,.18);
+}
+body.gx-light{
+  background:
+    radial-gradient(900px 500px at 90% -10%, rgba(146,82,220,.07), transparent 55%),
+    radial-gradient(800px 460px at -10% 110%, rgba(48,171,237,.07), transparent 55%),
+    var(--bg)!important;
+  color:var(--text)!important;
+}
+body.gx-light ::-webkit-scrollbar-thumb{background:#c3cee4;border-color:var(--bg)}
+body.gx-light .sidebar,body.gx-light .rail,body.gx-light .navshell{background:#ffffff!important;border-color:var(--border)!important;box-shadow:1px 0 0 var(--border)!important}
+body.gx-light .nav-item,body.gx-light .side-item,body.gx-light .sub-item,body.gx-light .navtab,body.gx-light .item{color:#41507a!important}
+body.gx-light .nav-item:hover,body.gx-light .side-item:hover,body.gx-light .sub-item:hover{background:#f0f6ff!important;color:var(--text)!important}
+body.gx-light .nav-item.active,body.gx-light .side-item.active,body.gx-light .sub-item.active{
+  background:linear-gradient(90deg,rgba(48,171,237,.12),rgba(146,82,220,.10))!important;color:#0f2454!important;
+  box-shadow:inset 0 0 0 1px rgba(48,171,237,.25)!important;
+}
+body.gx-light .topbar,body.gx-light .tb1,body.gx-light .navshell{background:var(--topbar)!important;border-color:var(--border)!important}
+body.gx-light .page-head h2{color:#0f2454!important}
+body.gx-light .breadcrumb,body.gx-light .sub,body.gx-light .muted,body.gx-light .hint,body.gx-light .ps,body.gx-light .clock,body.gx-light .tb-date,body.gx-light .bar-label{color:#5c6a8a!important}
+body.gx-light .card,body.gx-light .panel,body.gx-light .stat-card,body.gx-light .table-wrap,body.gx-light .modal-box,body.gx-light .modal,body.gx-light .ms-modal,body.gx-light .box,body.gx-light .toolbar,body.gx-light .gx-pay-chip{
+  background:#ffffff!important;border-color:var(--border)!important;box-shadow:var(--shadow)!important;
+}
+body.gx-light .card-head h3,body.gx-light .stat-info h3,body.gx-light .t1,body.gx-light .pt,body.gx-light .nm{color:#16264f!important}
+body.gx-light .stat-info p,body.gx-light .stat-info span{color:#5c6a8a!important}
+body.gx-light .stat-card::after{opacity:.75}
+/* dashboard cards: distinct professional pastels (light) */
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+1){background:linear-gradient(180deg,#ffffff,#f0f9ff)!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+2){background:linear-gradient(180deg,#ffffff,#f5f3ff)!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+3){background:linear-gradient(180deg,#ffffff,#ecfdf5)!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+4){background:linear-gradient(180deg,#ffffff,#fff7ed)!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+5){background:linear-gradient(180deg,#ffffff,#eff6ff)!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+6){background:linear-gradient(180deg,#ffffff,#fdf2f8)!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+7){background:linear-gradient(180deg,#ffffff,#f0fdfa)!important}
+body.gx-light .gx-dash-grid .stat-card:nth-child(8n+8){background:linear-gradient(180deg,#ffffff,#fefce8)!important}
+/* tables */
+body.gx-light thead th,body.gx-light table th{background:#f2f6ff!important;color:#3a4a6b!important;border-bottom-color:var(--border2)!important}
+body.gx-light tbody tr:nth-child(even){background:#f8fbff}
+body.gx-light tbody tr:hover,body.gx-light table tr:hover{background:#eef6ff!important}
+body.gx-light td,body.gx-light th{color:var(--text)}
+/* forms */
+body.gx-light input,body.gx-light select,body.gx-light textarea{background:#ffffff!important;color:#16264f!important;border-color:#cdd8ea!important}
+body.gx-light input::placeholder,body.gx-light textarea::placeholder{color:#8b97b5!important}
+/* tags/chips keep readable on light */
+body.gx-light .tag-gray{background:#eef2f9!important;color:#41507a!important}
+body.gx-light .tag-mgr{background:#e7f5fe!important;color:#136a9e!important}
+body.gx-light .tag-agt{background:#f3ecfe!important;color:#6b31b8!important}
+body.gx-light .chip{background:#e7f5fe!important;color:#136a9e!important}
+/* gx action buttons */
+body.gx-light .gx-btn{background:#f2f6ff!important;color:#41507a!important;border-color:#d5dff0!important}
+body.gx-light .gx-btn:hover{color:#0f2454!important}
+/* pager */
+body.gx-light .pager button,body.gx-light .page-btn,body.gx-light .pg-btn,body.gx-light .pagination button{background:#fff!important;color:#41507a!important;border-color:var(--border)!important}
+body.gx-light select option{background:#ffffff!important;color:#16264f!important}
+/* charts */
+body.gx-light .chart .bar-track{background:#eef2fa!important}
+body.gx-light .chart .bar .val{color:#41507a!important}
+/* map */
+body.gx-light .gx-map-wrap{background:radial-gradient(700px 300px at 60% 20%,rgba(48,171,237,.06),transparent 60%),#f6f9ff!important}
+body.gx-light .gx-map-wrap path{fill:#dbe4f5;stroke:rgba(22,38,79,.06)}
+body.gx-light .gx-map-wrap path.gx-on{fill:#30abed}
+body.gx-light .gx-map-wrap path:hover{fill:#9252dc!important}
+body.gx-light .gx-map-info{background:#ffffff!important;color:#16264f!important;border-color:var(--border2)!important}
+/* skeleton */
+body.gx-light .skeleton{background:linear-gradient(90deg,#eef2fa 25%,#f8fbff 50%,#eef2fa 75%)}
+/* gx theme toggle */
+.gx-theme-btn{
+  width:32px;height:32px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  background:var(--panel2)!important;border:1px solid var(--border2)!important;color:var(--muted)!important;flex:0 0 auto;
+}
+.gx-theme-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.gx-theme-btn:hover{color:var(--text)!important;border-color:rgba(48,171,237,.55)!important}
