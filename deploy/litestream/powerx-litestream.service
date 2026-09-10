@@ -1,0 +1,19 @@
+# PowerX — Litestream replicate daemon (systemd)
+# Continuous WAL shipping: even a total VPS loss loses at most ~1s of data.
+[Unit]
+Description=PowerX Litestream continuous backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=powerx
+EnvironmentFile=-/etc/powerx/litestream.env
+ExecStart=/usr/local/bin/litestream replicate -config /etc/litestream.yml
+Restart=always
+RestartSec=5
+# Litestream is I/O light; keep it from being OOM-killed before the app
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

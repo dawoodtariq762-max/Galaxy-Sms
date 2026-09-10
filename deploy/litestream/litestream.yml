@@ -1,0 +1,24 @@
+# PowerX — Litestream continuous backup config
+# Copy to /etc/litestream.yml on the VPS. Continuous WAL shipping = RPO ~1s
+# (default sync interval) instead of the 3h snapshot window.
+#
+#   sudo cp deploy/litestream/litestream.yml /etc/litestream.yml
+#   # S3-compatible (Wasabi/B2/DigitalOcean Spaces viaendpoint): export creds first
+#   export LITESTREAM_ACCESS_KEY_ID=... LITESTREAM_SECRET_ACCESS_KEY=...
+#   sudo systemctl restart litestream
+#
+# Keep at least one replica on a DIFFERENT disk than the database.
+
+dbs:
+  - path: ${POWERX_DB_FILE}
+    replicas:
+      # Primary: S3-compatible object storage (~$1-5/month at this size)
+      - type: s3
+        bucket: ${LITESTREAM_S3_BUCKET}
+        path: powerx
+        region: ${LITESTREAM_S3_REGION}
+        retention: 720h          # 30 days of point-in-time WAL
+        snapshot-interval: 24h
+      # Fallback: second local disk (fastest restore path)
+      - type: file
+        path: ${LITESTREAM_LOCAL_DIR}/powerx.db

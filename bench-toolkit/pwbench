@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# pwbench wrapper — /opt/powerx-bench/pwbench <command> --token ...
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec node "$DIR/pwbench.js" "$@"

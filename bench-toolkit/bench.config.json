@@ -1,0 +1,14 @@
+{
+  "APP_ROOT": "/opt/powerx",
+  "BENCH_PORT": 4888,
+  "BENCH_DB_DIR": "/var/tmp/pw20",
+  "REPORT_DIR": "/opt/powerx-bench/reports",
+  "MONITOR_PORT": 4999,
+  "TOKEN": "CHANGE-ME-install-script-generates",
+  "MAX_DURATION_MIN": 180,
+  "MAX_SYNTHETIC_MESSAGES": 5000000,
+  "MAX_WORKERS": 64,
+  "MAX_ALLOC_BATCH": 50000,
+  "ALLOW_PROD_TARGET": false,
+  "DEFAULT_INGEST_LIMIT_PER_MIN": 120000
+}
