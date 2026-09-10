@@ -88,10 +88,10 @@ body{
 .gx-actions{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .gx-btn{
   width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;
-  background:var(--panel2)!important;border:1px solid var(--border2)!important;color:var(--muted)!important;
+  background:var(--panel2)!important;border:1px solid var(--border2)!important;color:#aab6d8!important;
   cursor:pointer;position:relative;flex:0 0 auto;padding:0!important;
 }
-.gx-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.gx-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .gx-btn:hover{color:#fff!important;border-color:rgba(48,171,237,.55)!important;box-shadow:var(--glow)}
 .gx-btn.danger:hover{border-color:rgba(248,113,113,.6)!important;box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 16px rgba(248,113,113,.2)}
 .gx-btn.ok:hover{border-color:rgba(52,211,153,.6)!important}
@@ -186,17 +186,20 @@ a:hover{color:var(--accent)}
 .chart .bar-col:nth-child(5) .bar{background:#8b5cf6!important}
 .chart .bar-col:nth-child(6) .bar{background:#a855f7!important}
 .chart .bar-col:nth-child(7) .bar{background:#9252dc!important}
-/* ---------- GX ACTION BUTTON COLORS (action-type distinct, still professional) ---------- */
-.gx-btn.gx-green{color:#34d399!important}
-.gx-btn.gx-green:hover{border-color:rgba(52,211,153,.6)!important;box-shadow:0 0 0 1px rgba(52,211,153,.35),0 0 16px rgba(52,211,153,.2)}
-.gx-btn.gx-amber{color:#fbbf24!important}
-.gx-btn.gx-amber:hover{border-color:rgba(251,191,36,.6)!important;box-shadow:0 0 0 1px rgba(251,191,36,.35),0 0 16px rgba(251,191,36,.18)}
-.gx-btn.gx-blue{color:#30abed!important}
-.gx-btn.gx-cyan{color:#22d3ee!important}
-.gx-btn.gx-cyan:hover{border-color:rgba(34,211,238,.6)!important;box-shadow:0 0 0 1px rgba(34,211,238,.35),0 0 16px rgba(34,211,238,.2)}
-.gx-btn.gx-violet{color:#a78bfa!important}
-.gx-btn.gx-violet:hover{border-color:rgba(167,139,250,.6)!important;box-shadow:0 0 0 1px rgba(167,139,250,.35),0 0 16px rgba(146,82,220,.22)}
-.gx-btn.gx-blue:hover{border-color:rgba(48,171,237,.6)!important;box-shadow:var(--glow)}
+/* ---------- GX ACTION BUTTONS: colored icon + tinted bg + soft professional glow ---------- */
+.gx-btn:hover{color:#dfe6ff!important;border-color:rgba(48,171,237,.5)!important;box-shadow:0 0 12px rgba(48,171,237,.25)}
+.gx-btn.gx-green{color:#3ddc97!important;background:rgba(52,211,153,.12)!important;border-color:rgba(52,211,153,.38)!important;box-shadow:0 0 10px rgba(52,211,153,.16)}
+.gx-btn.gx-green:hover{background:rgba(52,211,153,.2)!important;color:#8ff0c4!important;border-color:rgba(52,211,153,.65)!important;box-shadow:0 0 16px rgba(52,211,153,.32)}
+.gx-btn.gx-amber{color:#ffc94d!important;background:rgba(251,191,36,.1)!important;border-color:rgba(251,191,36,.36)!important;box-shadow:0 0 10px rgba(251,191,36,.14)}
+.gx-btn.gx-amber:hover{background:rgba(251,191,36,.18)!important;color:#ffdd8a!important;border-color:rgba(251,191,36,.6)!important;box-shadow:0 0 16px rgba(251,191,36,.28)}
+.gx-btn.gx-blue{color:#4cc2ff!important;background:rgba(48,171,237,.12)!important;border-color:rgba(48,171,237,.38)!important;box-shadow:0 0 10px rgba(48,171,237,.16)}
+.gx-btn.gx-blue:hover{background:rgba(48,171,237,.2)!important;color:#9adcff!important;border-color:rgba(48,171,237,.65)!important;box-shadow:0 0 16px rgba(48,171,237,.3)}
+.gx-btn.gx-cyan{color:#2ee0f5!important;background:rgba(34,211,238,.1)!important;border-color:rgba(34,211,238,.36)!important;box-shadow:0 0 10px rgba(34,211,238,.14)}
+.gx-btn.gx-cyan:hover{background:rgba(34,211,238,.18)!important;color:#8df0fb!important;border-color:rgba(34,211,238,.6)!important;box-shadow:0 0 16px rgba(34,211,238,.28)}
+.gx-btn.gx-violet{color:#b39bff!important;background:rgba(146,82,220,.14)!important;border-color:rgba(167,139,250,.4)!important;box-shadow:0 0 10px rgba(146,82,220,.18)}
+.gx-btn.gx-violet:hover{background:rgba(146,82,220,.22)!important;color:#d3c4ff!important;border-color:rgba(167,139,250,.65)!important;box-shadow:0 0 16px rgba(146,82,220,.32)}
+.gx-btn.danger{color:#ff7b92!important;background:rgba(248,113,113,.1)!important;border-color:rgba(248,113,113,.36)!important;box-shadow:0 0 10px rgba(248,113,113,.14)}
+.gx-btn.danger:hover{background:rgba(248,113,113,.18)!important;color:#ffb3c0!important;border-color:rgba(248,113,113,.6)!important;box-shadow:0 0 16px rgba(248,113,113,.3)}
 /* ---------- MAP TAP/HOVER INFO CHIP (mobile-friendly) ---------- */
 .gx-map-info{
   position:absolute;top:10px;left:10px;z-index:5;background:#151b36;color:var(--text);

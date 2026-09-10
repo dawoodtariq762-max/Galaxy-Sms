@@ -189,8 +189,11 @@ GX.icons={
   shuffle:I('<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>'),
   eye:I('<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'),
   key:I('<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m3 3L22 7l-3-3-3.5 3.5z"/>'),
-  play:I('<polygon points="6 3 20 12 6 21 6 3"/>')
+  play:I('<polygon points="6 3 20 12 6 21 6 3"/>'),
+  dollar:I('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+  history:I('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')
 };
+GX.svg=(k)=>GX.icons[k]?('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+GX.icons[k]+'</svg>'):'';
 /* emoji icon-btns -> consistent SVG (dynamic tables re-render: MutationObserver) */
 GX.iconifyActions=function(root){
   const map={'\u270e':'edit','\u270f':'edit','\ud83d\uddd1':'trash','\u2699':'key','\u25b6':'play','\u27f3':'refresh','\u21c4':'shuffle','\ud83d\udc41':'eye'};
@@ -236,6 +239,7 @@ GX.theme = {
 };
 try{ GX.theme.init(); }catch(e){}
 try{ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>GX.iconifyActions()); else GX.iconifyActions(); }catch(e){}
+GX.pay3=(v)=>{let s=String(v??'').replace(/[$,\s]/g,'');const m=s.match(/-?\d+(?:\.\d+)?/);if(!m)return '0';const p=m[0].split('.');if(p.length<2)return p[0];const d=p[1].slice(0,3).replace(/0+$/,'');return d?p[0]+'.'+d:p[0];};
 GX.moneyShort=(v)=>{const n=Number(v)||0;const a=Math.abs(n);if(a>=1e9)return (n/1e9).toFixed(a%1e9?2:0)+'B';if(a>=1e6)return (n/1e6).toFixed(a%1e6?2:0)+'M';if(a>=1e4)return (n/1e3).toFixed(a%1e3?1:0)+'K';let s=String(n);if(s.includes('.'))s=s.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');return s;};
 GX.GX=GX; window.GX=GX;
 })();

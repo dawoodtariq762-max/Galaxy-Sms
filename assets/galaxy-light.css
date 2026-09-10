@@ -103,3 +103,18 @@ body.gx-light ::-webkit-scrollbar-thumb{background:#c3cee4!important;border-colo
 body.gx-light [data-tip]::after{background:#ffffff;color:#16264f;border-color:var(--border2);box-shadow:var(--shadow)}
 body.gx-light .sidebar::after,body.gx-light .rail::after{background:var(--border)!important}
 body.gx-light .gx-map-info{background:#ffffff!important;color:#16264f!important}
+
+/* ---------- icon action colors (light): darker tones for contrast, subtle glow ---------- */
+body.gx-light .gx-btn:hover{color:#16264f!important;border-color:rgba(48,171,237,.55)!important;box-shadow:0 2px 10px rgba(48,171,237,.22)}
+body.gx-light .gx-btn.gx-green{color:#0e9f6e!important;background:rgba(16,185,129,.1)!important;border-color:rgba(16,185,129,.35)!important;box-shadow:0 1px 6px rgba(16,185,129,.14)}
+body.gx-light .gx-btn.gx-green:hover{background:rgba(16,185,129,.18)!important;color:#0b7c56!important}
+body.gx-light .gx-btn.gx-amber{color:#b97a10!important;background:rgba(217,119,6,.1)!important;border-color:rgba(217,119,6,.35)!important;box-shadow:0 1px 6px rgba(217,119,6,.14)}
+body.gx-light .gx-btn.gx-amber:hover{background:rgba(217,119,6,.18)!important;color:#8f5f0a!important}
+body.gx-light .gx-btn.gx-blue{color:#1265c4!important;background:rgba(37,99,235,.1)!important;border-color:rgba(37,99,235,.35)!important;box-shadow:0 1px 6px rgba(37,99,235,.14)}
+body.gx-light .gx-btn.gx-blue:hover{background:rgba(37,99,235,.18)!important;color:#0d4ea0!important}
+body.gx-light .gx-btn.gx-cyan{color:#0e97a5!important;background:rgba(14,151,165,.1)!important;border-color:rgba(14,151,165,.35)!important;box-shadow:0 1px 6px rgba(14,151,165,.14)}
+body.gx-light .gx-btn.gx-cyan:hover{background:rgba(14,151,165,.18)!important;color:#0b707c!important}
+body.gx-light .gx-btn.gx-violet{color:#7c3aed!important;background:rgba(124,58,237,.1)!important;border-color:rgba(124,58,237,.35)!important;box-shadow:0 1px 6px rgba(124,58,237,.14)}
+body.gx-light .gx-btn.gx-violet:hover{background:rgba(124,58,237,.18)!important;color:#5b21b6!important}
+body.gx-light .gx-btn.danger{color:#d64545!important;background:rgba(220,38,38,.08)!important;border-color:rgba(220,38,38,.32)!important;box-shadow:0 1px 6px rgba(220,38,38,.12)}
+body.gx-light .gx-btn.danger:hover{background:rgba(220,38,38,.15)!important;color:#a82f2f!important}

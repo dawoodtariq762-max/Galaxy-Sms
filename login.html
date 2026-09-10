@@ -67,6 +67,7 @@
 
   /* ===== GALAXY mobile login: chhota logo seedha form ke upar -> form foran visible, NO SCROLL ===== */
   .m-brand{display:none}
+  .login-card:before{content:none!important}
   @media(max-width:900px){
     .m-brand{display:flex!important;align-items:center;justify-content:center;gap:0;margin:0 0 10px;padding:0;border:0;background:none!important}
     .m-brand img{width:46px!important;height:46px!important;border-radius:12px;object-fit:cover;box-shadow:0 6px 16px rgba(10,10,11,.18)}
@@ -110,14 +111,14 @@
   .footer{display:none!important}
   .login-card:before{display:none!important;content:none!important}
 }</style>
-<link rel="stylesheet" href="/assets/galaxy.css?v=gal-2"/><script src="/assets/galaxy.js?v=gal-2" defer></script></head>
+<link rel="stylesheet" href="/assets/galaxy.css?v=gal-3"/><script src="/assets/galaxy.js?v=gal-3" defer></script></head>
 <body>
   <main class="shell">
     <section class="brand-panel logo-only-panel" aria-label="GALAXY SMS branding">
       <img class="login-hero-logo" src="/assets/galaxy-logo.png?v=gal-1" alt="GALAXY SMS" />
     </section>
     <section class="login-panel"><div class="login-card">
-      <div class="m-brand"><img src="/assets/galaxy-logo.png?v=gal-1" alt="GALAXY SMS"/><div class="m-brand-t"><b>GALAXY SMS</b><span>Intelligent Messaging Infrastructure</span></div></div>
+      <div class="m-brand"><img src="/assets/galaxy-logo.png?v=gal-2" alt="GALAXY SMS" width="46" height="46" style="width:46px!important;height:46px!important;max-width:46px!important;max-height:46px!important;object-fit:cover;border-radius:12px;display:block"/><div class="m-brand-t"><b>GALAXY SMS</b><span>Intelligent Messaging Infrastructure</span></div></div>
       <div class="login-head"><div class="eyebrow">Galaxy Secure Access</div><h2>Welcome to Galaxy SMS</h2><p>Sign in to the Galaxy SMS control panel. Available to Admin, Manager, Agent, Client and Test Panel users.</p></div>
       <form id="loginForm" autocomplete="off">
         <div class="field"><label for="username">Username</label><div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><input type="text" id="username" placeholder="Enter username" required /></div></div>
