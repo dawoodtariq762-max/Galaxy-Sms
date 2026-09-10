@@ -30,21 +30,19 @@ body.gx-light .nav-item.active,body.gx-light .side-item.active,body.gx-light .su
 body.gx-light .topbar,body.gx-light .tb1,body.gx-light .navshell{background:var(--topbar)!important;border-color:var(--border)!important}
 body.gx-light .page-head h2{color:#0f2454!important}
 body.gx-light .breadcrumb,body.gx-light .sub,body.gx-light .muted,body.gx-light .hint,body.gx-light .ps,body.gx-light .clock,body.gx-light .tb-date,body.gx-light .bar-label{color:#5c6a8a!important}
-body.gx-light .card,body.gx-light .panel,body.gx-light .stat-card,body.gx-light .table-wrap,body.gx-light .modal-box,body.gx-light .modal,body.gx-light .ms-modal,body.gx-light .box,body.gx-light .toolbar,body.gx-light .gx-pay-chip{
-  background:#ffffff!important;border-color:var(--border)!important;box-shadow:var(--shadow)!important;
-}
+
 body.gx-light .card-head h3,body.gx-light .stat-info h3,body.gx-light .t1,body.gx-light .pt,body.gx-light .nm{color:#16264f!important}
 body.gx-light .stat-info p,body.gx-light .stat-info span{color:#5c6a8a!important}
-body.gx-light .stat-card::after{opacity:.75}
+
 /* dashboard cards: distinct professional pastels (light) */
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+1){background:linear-gradient(180deg,#ffffff,#f0f9ff)!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+2){background:linear-gradient(180deg,#ffffff,#f5f3ff)!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+3){background:linear-gradient(180deg,#ffffff,#ecfdf5)!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+4){background:linear-gradient(180deg,#ffffff,#fff7ed)!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+5){background:linear-gradient(180deg,#ffffff,#eff6ff)!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+6){background:linear-gradient(180deg,#ffffff,#fdf2f8)!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+7){background:linear-gradient(180deg,#ffffff,#f0fdfa)!important}
-body.gx-light .gx-dash-grid .stat-card:nth-child(8n+8){background:linear-gradient(180deg,#ffffff,#fefce8)!important}
+
+
+
+
+
+
+
+
 /* tables */
 body.gx-light thead th,body.gx-light table th{background:#f2f6ff!important;color:#3a4a6b!important;border-bottom-color:var(--border2)!important}
 body.gx-light tbody tr:nth-child(even){background:#f8fbff}
@@ -84,10 +82,10 @@ body.gx-light .skeleton{background:linear-gradient(90deg,#eef2fa 25%,#f8fbff 50%
 .gx-theme-btn:hover{color:var(--text)!important;border-color:rgba(48,171,237,.55)!important}
 
 /* ---------- legacy/fallback components (galaxy-dark-theme block) — light overrides ---------- */
-body.gx-light .stat-card.dash-metric,body.gx-light .metric{background:linear-gradient(150deg,#ffffff,#f3f7ff)!important;border-color:var(--border2)!important;box-shadow:var(--shadow)!important}
-body.gx-light .stat-card.dash-metric::before{background:linear-gradient(90deg,#30abed,#9252dc)!important}
-body.gx-light .stat-card.dash-metric::after{background:radial-gradient(circle,rgba(48,171,237,.10),transparent 68%)!important}
-body.gx-light .stat-card.dash-metric .stat-info h3,body.gx-light .metric h3{color:#16264f!important}
+
+
+
+
 body.gx-light .clock,body.gx-light .tb-date{background:#f2f6ff!important;color:#41507a!important;border-color:var(--border)!important}
 body.gx-light .drill .dchip{background:#ffffff!important;color:#41507a!important;border-color:var(--border)!important}
 body.gx-light .ms-notif-panel,body.gx-light .ms-profile-menu,body.gx-light .ms-toast{background:#ffffff!important;color:#16264f!important;border-color:var(--border)!important;box-shadow:var(--shadow)!important}
@@ -118,13 +116,13 @@ body.gx-light .gx-btn.gx-violet{color:#7c3aed!important;background:rgba(124,58,2
 body.gx-light .gx-btn.gx-violet:hover{background:rgba(124,58,237,.18)!important;color:#5b21b6!important}
 body.gx-light .gx-btn.danger{color:#d64545!important;background:rgba(220,38,38,.08)!important;border-color:rgba(220,38,38,.32)!important;box-shadow:0 1px 6px rgba(220,38,38,.12)}
 body.gx-light .gx-btn.danger:hover{background:rgba(220,38,38,.15)!important;color:#a82f2f!important}
-body.gx-light .gx-pay-chip .v{color:#16264f!important}
-body.gx-light .gx-pay-chip .t{color:#5c6a8a!important}
+
+
 body.gx-light tbody tr td,body.gx-light tbody td{color:#16264f!important}
 body.gx-light tbody tr td b{color:#0f2454!important}
 body.gx-light .page-head h2,body.gx-light .breadcrumb,body.gx-light .sub{color:#16264f!important}
 body.gx-light .breadcrumb,body.gx-light .sub,body.gx-light .hint,body.gx-light .muted{color:#5c6a8a!important}
-body.gx-light .gx-pay-chip .v{color:#16264f!important}
+
 
 /* ============ P8: LIGHT SIDEBAR — soft Galaxy gradient (na pure-white, na navy) ============ */
 body.gx-light .sidebar,body.gx-light .rail,body.gx-light .navshell,body.gx-light .appbar{
@@ -148,45 +146,29 @@ body.gx-light .sub-item.active,body.gx-light .rsubitem.active{background:rgba(48
 body.gx-light .topbar,body.gx-light .tb1,body.gx-light .mgr-topbar{background:#ffffff!important;border-bottom:1px solid #e2e9f6!important}
 
 /* ============ P9: LIGHT DASHBOARD — full-surface premium gradients (blank-white nahi) ============ */
-body.gx-light .gx-dash-grid .stat-card,body.gx-light .stats-grid .stat-card,body.gx-light .dash-metrics .stat-card{
-  border:1px solid rgba(48,111,237,.14)!important;border-radius:16px!important;overflow:hidden;
-  box-shadow:0 12px 30px rgba(22,54,120,.10)!important;
-}
-body.gx-light .gx-dash-grid .stat-card,body.gx-light .stats-grid .stat-card:nth-child(8n+1),body.gx-light .dash-metrics .stat-card:nth-child(8n+1){
-  background:linear-gradient(140deg,#cfe9ff 0%,#e9f5ff 55%,#f8fcff 100%)!important;border-left:4px solid #30abed!important;
-}
-body.gx-light .stats-grid .stat-card:nth-child(8n+2),body.gx-light .dash-metrics .stat-card:nth-child(8n+2){
-  background:linear-gradient(140deg,#d3e2ff 0%,#ecf3ff 55%,#f8faff 100%)!important;border-left:4px solid #3b82f6!important;
-}
-body.gx-light .stats-grid .stat-card:nth-child(8n+3),body.gx-light .dash-metrics .stat-card:nth-child(8n+3){
-  background:linear-gradient(140deg,#d9dcff 0%,#eff1ff 55%,#fafbff 100%)!important;border-left:4px solid #6366f1!important;
-}
-body.gx-light .stats-grid .stat-card:nth-child(8n+4),body.gx-light .dash-metrics .stat-card:nth-child(8n+4){
-  background:linear-gradient(140deg,#e2d4ff 0%,#f4edff 55%,#fcf9ff 100%)!important;border-left:4px solid #8b5cf6!important;
-}
-body.gx-light .stats-grid .stat-card:nth-child(8n+5),body.gx-light .dash-metrics .stat-card:nth-child(8n+5){
-  background:linear-gradient(140deg,#ecd8ff 0%,#f8f0ff 55%,#fefbff 100%)!important;border-left:4px solid #9252dc!important;
-}
-body.gx-light .stats-grid .stat-card:nth-child(8n+6),body.gx-light .dash-metrics .stat-card:nth-child(8n+6){
-  background:linear-gradient(140deg,#c8f0ea 0%,#ebfaf7 55%,#f7fdfb 100%)!important;border-left:4px solid #14b8a6!important;
-}
-body.gx-light .stats-grid .stat-card:nth-child(8n+7),body.gx-light .dash-metrics .stat-card:nth-child(8n+7){
-  background:linear-gradient(140deg,#ffe4c2 0%,#fff5e6 55%,#fffbf3 100%)!important;border-left:4px solid #e8973c!important;
-}
-body.gx-light .stats-grid .stat-card:nth-child(8n+8),body.gx-light .dash-metrics .stat-card:nth-child(8n+8){
-  background:linear-gradient(140deg,#e4c9f7 0%,#f5ebfd 55%,#fdf9ff 100%)!important;border-left:4px solid #7f18b3!important;
-}
-body.gx-light .stat-card.dash-metric.d-blue{background:linear-gradient(140deg,#cfe9ff 0%,#e9f5ff 55%,#f8fcff 100%)!important;border-left:4px solid #30abed!important}
-body.gx-light .stat-card.dash-metric.d-green{background:linear-gradient(140deg,#c8f0ea 0%,#ebfaf7 55%,#f7fdfb 100%)!important;border-left:4px solid #14b8a6!important}
-body.gx-light .stat-card.dash-metric.d-orange{background:linear-gradient(140deg,#ffe4c2 0%,#fff5e6 55%,#fffbf3 100%)!important;border-left:4px solid #e8973c!important}
-body.gx-light .stat-card.dash-metric.d-pink{background:linear-gradient(140deg,#e4c9f7 0%,#f5ebfd 55%,#fdf9ff 100%)!important;border-left:4px solid #7f18b3!important}
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* payout chips: full-surface light */
-body.gx-light .gx-pay-chip{border:1px solid rgba(48,111,237,.14)!important;box-shadow:0 12px 30px rgba(22,54,120,.10)!important}
-body.gx-light .gx-pay-chip:nth-of-type(1),body.gx-light .gx-pay-chip:first-child{background:linear-gradient(140deg,#d7ebff 0%,#f0f8ff 70%)!important}
-body.gx-light .gx-pay-chip:nth-of-type(2),body.gx-light .gx-pay-chip:last-child{background:linear-gradient(140deg,#e6d9ff 0%,#f7f2ff 70%)!important}
+
+
+
 /* chart light: grid + labels */
 body.gx-light .chart{--gxgrid:rgba(90,110,170,.16)}
 body.gx-light .chart .bar .val{color:#41507a!important}
 body.gx-light .chart .bar{box-shadow:0 6px 16px rgba(22,54,120,.16)!important}
-body.gx-light .stat-card .stat-info h3,body.gx-light .stat-card.dash-metric .stat-info h3{color:#10234e!important;font-weight:760!important}
-body.gx-light .stat-card .stat-info p,body.gx-light .stat-card .stat-info span,body.gx-light .stat-card.dash-metric .stat-info p,body.gx-light .stat-card.dash-metric .stat-info span{color:#5e6c92!important}
+
+
+
+/* ============ P10: vivid stat cards galaxy.css se dono themes par apply hote hain (light me strip bypass) ============ */
+body.gx-light{background:linear-gradient(180deg,#F6F8FE 0%,#EAF0F9 55%,#E6EDF8 100%)!important}
