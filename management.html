@@ -75,7 +75,7 @@
   .tb-btn:hover{background:var(--panel2);color:var(--text)}.tb-btn svg{width:19px;height:19px;stroke:currentColor}
   .tb-btn .badge{position:absolute;top:7px;right:8px;width:8px;height:8px;background:var(--green);border-radius:50%;border:2px solid var(--bg2)}
   .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#475569,#334155);margin-left:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#cbd5e1;border:2px solid var(--border2)}
-  .content{padding:22px;flex:1}
+  .content{padding:22px;flex:0 0 auto}
   .page-head{margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px}
   .page-head h2{font-size:22px;font-weight:600}
   .breadcrumb{color:var(--muted);font-size:12.5px;margin-top:4px}.breadcrumb b{color:#a5b4fc;font-weight:500}
@@ -374,7 +374,7 @@
 
 
 <!-- GALAXY DARK THEME (official): navy Galaxy palette. Purana black variant REMOVE. galaxy.css iske UPAR load hota hai aur primary layer hai; ye fallback coverage deta hai. --><style id="galaxy-dark-theme">:root{--px-bg:#05060F;--px-bg-2:#080A18;--px-surface:#0B0E1D;--px-surface-2:#101430;--px-surface-3:#151A3A;--px-rail:#070912;--px-accent:#30ABED;--px-accent-2:#8B93B8;--px-accent-3:#8B93B8;--px-accent-soft:rgba(48,171,237,.14);--px-accent-line:rgba(48,171,237,.34);--px-ok:#25D9A4;--px-warn:#FFB443;--px-danger:#FF5C7A;--px-info:#8B93B8;--px-text:#E7EAF8;--px-text-2:#C9CDE8;--px-muted:#8B93B8;--px-dim:#6A7295;--px-border:rgba(199,209,248,.14);--px-border-2:rgba(199,209,248,.24);--px-radius:14px;--px-radius-lg:20px;--px-shadow:0 18px 50px rgba(0,0,0,.55);--px-shadow-sm:0 8px 24px rgba(0,0,0,.42);--px-glow:0 0 0 1px rgba(48,171,237,.30),0 14px 34px rgba(146,82,220,.24);--bg:#05060F!important;--bg2:#080A18!important;--panel:#0B0E1D!important;--panel2:#101430!important;--row:#0B0E1D!important;--border:rgba(199,209,248,.14)!important;--border2:rgba(199,209,248,.24)!important;--text:#F2F3F5!important;--muted:#93979E!important;--sidebar:#070912!important;--accent:#30ABED!important;--accent2:#8B93B8!important;--blue:#8B93B8!important;--green:#25D9A4!important;--amber:#FFB443!important;--red:#FF5C7A!important;--cyan:#30ABED!important}html{background:var(--px-bg)!important}body{background:#05060F!important;color:var(--px-text)!important;font-family:'Inter','Plus Jakarta Sans','Segoe UI',Roboto,system-ui,-apple-system,sans-serif!important;font-size:14px!important;letter-spacing:.005em!important;-webkit-font-smoothing:antialiased}.main,.content{background:transparent!important;color:var(--px-text)!important}::selection{background:rgba(48,171,237,.28);color:#fff}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:var(--px-bg-2)}::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#1D2350,#11152E);border-radius:8px;border:2px solid var(--px-bg-2)}::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#262C5A,#141938)}*{scrollbar-color:#1D2350 var(--px-bg-2);scrollbar-width:thin}.sidebar,.rail,.appbar{background:linear-gradient(185deg,#0B0B0D 0%,#070912 46%,#04050C 100%)!important;border-right:1px solid var(--px-border)!important;box-shadow:18px 0 60px rgba(0,0,0,.55)!important;color:var(--px-text-2)!important}.sidebar::after,.rail::after{content:""!important;display:block!important;position:absolute!important;top:0;right:0;bottom:0;width:1px;background:linear-gradient(180deg,transparent,rgba(48,171,237,.42) 22%,rgba(199,209,248,.32) 66%,transparent)!important;pointer-events:none!important}.appbar{border-right:0!important;border-bottom:1px solid var(--px-border)!important;box-shadow:0 14px 40px rgba(0,0,0,.5)!important}.sb-brand,.rail-brand,.brand-text,.appbar-top,.side .brand,.brand{background:transparent!important;border-bottom:1px solid var(--px-border)!important}.sb-brand h1,.brand h1,.brand-text h1,.brand-logo h1,.sidebar h1,.appbar h1,.brand b{color:#FFFFFF!important;font-weight:750!important;letter-spacing:-.012em!important;font-size:16.5px!important}.sb-brand h1 span,.brand-text h1 span{background:linear-gradient(96deg,var(--px-accent),#7F18B3)!important;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important;color:transparent!important}.sb-brand small,.brand small,.brand-text small,.sidebar small,.appbar small,.brand .muted{color:var(--px-muted)!important;font-size:11px!important;font-weight:600!important;text-transform:uppercase!important;letter-spacing:.13em!important}.sb-logo,.brand .logo,.rail .logo,.sb-brand .logo,.brand-logo .logo,.logo,.brand img{background:#04050C!important;padding:0!important;overflow:hidden!important;border:1px solid var(--px-accent-line)!important;box-shadow:0 10px 26px rgba(48,171,237,.16),inset 0 0 0 1px rgba(255,255,255,.04)!important}.powerx-logo-img,.logo img,.login-hero-logo,.brand img{filter:saturate(1.06) contrast(1.02)!important}.sb-section,.sb-sec,.sec{color:var(--px-dim)!important;font-weight:700!important;font-size:10px!important;letter-spacing:.16em!important;text-transform:uppercase!important;padding-left:2px!important}.nav-item,.sub-item,.tab,.ritem,.rsubitem,.navtab,.dropitem,.item{color:var(--px-text-2)!important;background:transparent!important;border-radius:11px!important;font-weight:550!important;position:relative!important}.nav-item svg,.sub-item svg,.tab svg,.ritem svg,.rsubitem svg,.navtab svg,.item svg{stroke:currentColor!important;color:inherit!important;opacity:.85!important}.nav-item:hover,.sub-item:hover,.tab:hover,.ritem:hover,.rsubitem:hover,.navtab:hover,.dropitem:hover,.item:hover{background:rgba(199,209,248,.09)!important;color:#FFFFFF!important}.nav-item:hover svg,.ritem:hover svg,.item:hover svg{opacity:1!important;stroke:var(--px-accent)!important}.nav-item.active,.tab.active,.ritem.active,.navtab.active,.item.active{background:linear-gradient(96deg,rgba(48,171,237,.20),rgba(199,209,248,.14))!important;color:#FFFFFF!important;box-shadow:inset 0 0 0 1px rgba(48,171,237,.34),0 10px 26px rgba(146,82,220,.18)!important}.nav-item.active::before,.ritem.active::before,.item.active::before{content:""!important;position:absolute!important;left:0;top:18%;bottom:18%;width:3px;border-radius:0 4px 4px 0;background:linear-gradient(180deg,var(--px-accent),#7F18B3)!important;box-shadow:0 0 14px rgba(48,171,237,.7)!important}.nav-item.active svg,.tab.active svg,.ritem.active svg,.navtab.active svg,.item.active svg{stroke:var(--px-accent)!important;color:var(--px-accent)!important;opacity:1!important}.sub-item.active,.rsubitem.active,.dropitem.active{background:rgba(48,171,237,.10)!important;color:#FFFFFF!important;box-shadow:inset 2px 0 0 var(--px-accent)!important}.navtab.active{border-bottom-color:var(--px-accent)!important}.nav-item .chev,.ritem .chev{color:var(--px-dim)!important}.topbar,.tb1,.navshell,.mgr-topbar,.top{background:#080A18!important;border-bottom:1px solid var(--px-border)!important;box-shadow:0 8px 30px rgba(0,0,0,.40)!important;color:var(--px-text)!important}.topbar::before,.tb1::before,.navshell::before{display:none!important}.tb-btn,.hamburger,.mgr-topbar-menu,.icon-btn{color:var(--px-muted)!important;background:transparent!important;border-radius:10px!important}.tb-btn:hover,.hamburger:hover,.mgr-topbar-menu:hover{background:rgba(199,209,248,.12)!important;color:var(--px-accent)!important}.clock,.tb-date{background:rgba(16,20,48,.8)!important;color:var(--px-text-2)!important;border:1px solid var(--px-border)!important;border-radius:10px!important;font-variant-numeric:tabular-nums!important}.avatar,.av,.who .av{background:linear-gradient(135deg,#30ABED,#7F18B3)!important;color:#FFFFFF!important;border:1px solid rgba(48,171,237,.42)!important;font-weight:800!important;box-shadow:0 8px 22px rgba(48,171,237,.22)!important}.who .nm,.who .t1,.who .pt{color:var(--px-text)!important}.who .ps,.who .t2{color:var(--px-muted)!important}.page-head{border-bottom:1px solid var(--px-border)!important;padding-bottom:15px!important}.page-head h2,.head h2{color:#FFFFFF!important;font-weight:700!important;letter-spacing:-.028em!important}.breadcrumb,.sub,.muted,.clock,.tb-date,.t2,.ps,.bar-label,.hint,.cell-sub,.info{color:var(--px-muted)!important}.page>.toolbar:not(:first-child)::before,.page>.table-wrap:not(:first-child)::before,.page>.card:not(:first-child)::before,.page>.grid2:not(:first-child)::before{background:var(--px-border)!important;opacity:1!important}.card,.toolbar,.table-wrap,.modal,.modal-box,.ms-modal,.box,.table,.dash-note-card{background:linear-gradient(180deg,#101430,#0B0E1D)!important;border:1px solid var(--px-border)!important;border-radius:var(--px-radius-lg)!important;box-shadow:var(--px-shadow-sm)!important;color:var(--px-text)!important}.card:hover,.table-wrap:hover{border-color:var(--px-border-2)!important}.card-head{border-bottom:1px solid var(--px-border)!important}.card-head h3,.card h3,.box h3{color:#FFFFFF!important;font-weight:680!important;letter-spacing:-.01em!important}.card-head .sub{color:var(--px-muted)!important}.grid2,.two-col,.stats-grid,.grid{background:transparent!important}.stats-grid,.dash-metrics{gap:18px!important}.stat-card{background:linear-gradient(180deg,rgba(16,20,48,.72),rgba(20,20,22,.92))!important;border:1px solid var(--px-border)!important;border-radius:18px!important}.stat-card.dash-metric,.metric{position:relative!important;overflow:hidden!important;border:1px solid var(--px-border-2)!important;border-radius:18px!important;background:linear-gradient(150deg,rgba(35,35,39,.92),rgba(13,13,15,.96))!important;box-shadow:0 16px 40px rgba(0,0,0,.48)!important;color:var(--px-text)!important;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease!important}.stat-card.dash-metric:hover{transform:translateY(-3px)!important;border-color:var(--px-accent-line)!important;box-shadow:0 24px 56px rgba(146,82,220,.26)!important}.stat-card.dash-metric::before{content:""!important;display:block!important;position:absolute!important;left:0!important;right:0!important;top:0!important;width:auto!important;height:2px!important;border-radius:0!important;background:linear-gradient(90deg,var(--px-accent),#9252DC,var(--px-accent-2))!important;opacity:.9!important}.stat-card.dash-metric::after{content:""!important;position:absolute!important;width:190px!important;height:190px!important;right:-72px!important;bottom:-96px!important;border-radius:50%!important;background:radial-gradient(circle,rgba(48,171,237,.16),transparent 68%)!important}.stat-card.dash-metric .stat-info p,.metric .muted{color:var(--px-muted)!important;text-transform:uppercase!important;font-size:10.5px!important;font-weight:700!important;letter-spacing:.14em!important}.stat-card.dash-metric .stat-info h3,.metric h3{color:#FFFFFF!important;font-weight:750!important;font-variant-numeric:tabular-nums!important;letter-spacing:-.02em!important}.stat-card.dash-metric .stat-info span{color:var(--px-text-2)!important}.dash-go{background:rgba(48,171,237,.12)!important;border:1px solid var(--px-accent-line)!important;color:var(--px-accent)!important}.dash-metric.d-blue::before{background:linear-gradient(90deg,#30ABED,#9252DC)!important}.dash-metric.d-blue::after{background:radial-gradient(circle,rgba(48,171,237,.18),transparent 68%)!important}.dash-metric.d-green::before{background:linear-gradient(90deg,#8B93B8,#8B93B8)!important}.dash-metric.d-green::after{background:radial-gradient(circle,rgba(199,209,248,.16),transparent 68%)!important}.dash-metric.d-pink::before{background:linear-gradient(90deg,#30ABED,#8B93B8)!important}.dash-metric.d-pink::after{background:radial-gradient(circle,rgba(48,171,237,.14),transparent 68%)!important}.dash-metric.d-orange::before{background:linear-gradient(90deg,#9252DC,#8B93B8)!important}.dash-metric.d-orange::after{background:radial-gradient(circle,rgba(199,209,248,.14),transparent 68%)!important}.dash-metric.d-blue,.dash-metric.d-green,.dash-metric.d-pink,.dash-metric.d-orange{background:linear-gradient(150deg,rgba(35,35,39,.92),rgba(13,13,15,.96))!important}.dash-note-card .card-head{border-bottom:1px solid var(--px-border)!important}.chart{background:linear-gradient(180deg,rgba(13,13,15,.55),transparent)!important;border-radius:14px!important;background-image:repeating-linear-gradient(to top,rgba(199,209,248,.07) 0 1px,transparent 1px 25%)!important}.bar{background:linear-gradient(180deg,#30ABED,#0E9E9A)!important;border-radius:8px 8px 3px 3px!important;box-shadow:0 0 18px rgba(48,171,237,.28)!important}.bar-col:nth-child(2n) .bar{background:linear-gradient(180deg,#8B93B8,#1663B8)!important;box-shadow:0 0 18px rgba(199,209,248,.26)!important}.bar-col:nth-child(3n) .bar{background:linear-gradient(180deg,#8B93B8,#4B4FC4)!important;box-shadow:0 0 18px rgba(139,147,184,.24)!important}.bar:hover{filter:brightness(1.18)!important}.bar .val{color:var(--px-text)!important;font-weight:650!important;font-variant-numeric:tabular-nums!important}.bar-label{color:var(--px-muted)!important}.bar-track{border-bottom:1px solid var(--px-border)!important}table{background:transparent!important;border-collapse:separate!important;border-spacing:0!important}thead th{background:#0B1026!important;color:var(--px-text-2)!important;font-weight:650!important;font-size:11px!important;text-transform:uppercase!important;letter-spacing:.10em!important;border-top:0!important;border-bottom:1px solid var(--px-border-2)!important;position:sticky!important;top:0!important;z-index:2!important}tbody tr td{background:transparent!important;color:var(--px-text)!important;border-bottom:1px solid rgba(199,209,248,.08)!important}tbody tr:nth-child(even) td{background:rgba(199,209,248,.022)!important}tbody tr:hover td{background:rgba(199,209,248,.075)!important;color:#FFFFFF!important}tbody tr:hover{transform:none!important}.table-wrap,.tscroll{border-color:var(--px-border)!important}.table-controls,.table-foot,.filter-row{background:transparent!important;color:var(--px-muted)!important;border-color:var(--px-border)!important}.table-controls label,.tc-right label,.tc-left label,.filter-row label{color:var(--px-text-2)!important;font-weight:600!important}.table-foot .info{color:var(--px-muted)!important}.pagination button{background:rgba(16,20,48,.85)!important;border:1px solid var(--px-border)!important;color:var(--px-text-2)!important;border-radius:9px!important}.pagination button:hover:not(.active){background:rgba(199,209,248,.14)!important;color:#FFFFFF!important;border-color:var(--px-border-2)!important}.pagination button.active{background:linear-gradient(96deg,var(--px-accent),#7F18B3)!important;color:#FFFFFF!important;border-color:transparent!important;font-weight:750!important;box-shadow:0 8px 20px rgba(48,171,237,.26)!important}.mono{font-family:'JetBrains Mono','SFMono-Regular',Consolas,Menlo,monospace!important;color:var(--px-text)!important;letter-spacing:.02em!important}.cell-money{color:var(--px-ok)!important;font-weight:700!important;font-variant-numeric:tabular-nums!important}.payout-rate,.rate-cell,.money{color:var(--px-accent-2)!important;font-weight:700!important;font-variant-numeric:tabular-nums!important}.otp{color:var(--px-accent)!important;font-weight:750!important;letter-spacing:.08em!important}.msg-body{color:var(--px-text-2)!important}.check-ok{color:var(--px-ok)!important}.sortable,.sort{color:inherit!important}.btn,button.btn,.ms-btn{border-radius:11px!important;font-weight:650!important;letter-spacing:.005em!important;border:1px solid transparent!important;transition:transform .14s ease,box-shadow .16s ease,filter .16s ease,background-color .16s ease!important}.btn-blue,.btn-purple,.btn-teal,.btn-rose,.ms-btn.primary,button.btn-gold,.btn:not([class*="btn-"]){background:linear-gradient(96deg,#30ABED 0%,#7F18B3 100%)!important;color:#FFFFFF!important;border:0!important;box-shadow:0 10px 26px rgba(146,82,220,.26)!important}.btn-green{background:linear-gradient(96deg,#25D9A4,#0FA97E)!important;color:#FFFFFF!important;border:0!important;box-shadow:0 10px 24px rgba(37,217,164,.22)!important}.btn-amber{background:linear-gradient(96deg,#FFB443,#F08A2E)!important;color:#1A1204!important;border:0!important;box-shadow:0 10px 24px rgba(255,180,67,.22)!important}.btn-red{background:linear-gradient(96deg,#FF5C7A,#E03457)!important;color:#FFF!important;border:0!important;box-shadow:0 10px 24px rgba(255,92,122,.24)!important}.btn-ghost,.ms-btn.ghost,.btn.ghost{background:rgba(16,20,48,.75)!important;color:var(--px-text-2)!important;border:1px solid var(--px-border-2)!important;box-shadow:none!important}.btn-ghost:hover,.btn.ghost:hover{background:rgba(199,209,248,.12)!important;color:#FFFFFF!important;border-color:var(--px-accent-line)!important}.btn:hover{transform:translateY(-1px)!important;filter:brightness(1.06)!important}.btn:active{transform:translateY(0)!important}.btn:focus-visible{outline:2px solid var(--px-accent)!important;outline-offset:2px!important}.icon-btn{border-radius:9px!important;color:#FFFFFF!important}.icon-btn svg{stroke:currentColor!important}input,select,textarea,.ms-field input{background:rgba(5,6,15,.82)!important;color:var(--px-text)!important;border:1px solid var(--px-border-2)!important;border-radius:11px!important;transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease!important}input::placeholder,textarea::placeholder{color:var(--px-dim)!important}input:hover,select:hover,textarea:hover{border-color:rgba(199,209,248,.34)!important}input:focus,select:focus,textarea:focus{border-color:var(--px-accent)!important;box-shadow:0 0 0 4px rgba(48,171,237,.14)!important;background:rgba(8,14,40,.95)!important;outline:none!important}select option{background:#0B0E1D!important;color:var(--px-text)!important}input[type="checkbox"],input[type="radio"]{accent-color:var(--px-accent)!important}.form-group label,.field label,label{color:var(--px-text-2)!important;font-weight:600!important}.form-group .hint,.hint{color:var(--px-dim)!important}.form-group label .req,.req{color:var(--px-danger)!important}.upload-box{background:rgba(5,6,15,.6)!important;border:2px dashed var(--px-border-2)!important;color:var(--px-muted)!important;border-radius:14px!important}.upload-box:hover{border-color:var(--px-accent)!important;color:var(--px-text)!important;background:rgba(48,171,237,.05)!important}.upload-box svg{stroke:var(--px-accent)!important}.upload-box b{color:var(--px-accent)!important}.tag,.tag-blue,.tag-green,.tag-amber,.tag-red,.tag-gray,.tag-mgr,.tag-agt,.tag-cli,.tag-client,.chip{border-radius:8px!important;font-weight:650!important;font-size:11.5px!important;letter-spacing:.02em!important;box-shadow:none!important;background:rgba(199,209,248,.10)!important;color:var(--px-text-2)!important;border:1px solid var(--px-border-2)!important}.tag-mgr{background:rgba(139,147,184,.16)!important;color:#B9C2FF!important;border:1px solid rgba(139,147,184,.38)!important}.tag-agt{background:rgba(48,171,237,.14)!important;color:#7DF0DA!important;border:1px solid rgba(48,171,237,.36)!important}.tag-cli,.tag-client{background:rgba(199,209,248,.14)!important;color:#9AD8FF!important;border:1px solid rgba(199,209,248,.36)!important}.tag-blue{background:rgba(199,209,248,.14)!important;color:#9AD8FF!important;border:1px solid rgba(199,209,248,.36)!important}.tag-green{background:rgba(37,217,164,.14)!important;color:#84EFC9!important;border:1px solid rgba(37,217,164,.36)!important}.tag-amber{background:rgba(255,180,67,.14)!important;color:#FFD79A!important;border:1px solid rgba(255,180,67,.36)!important}.tag-red{background:rgba(255,92,122,.14)!important;color:#FFB0BF!important;border:1px solid rgba(255,92,122,.36)!important}.tag-gray{background:rgba(199,209,248,.10)!important;color:var(--px-muted)!important;border:1px solid var(--px-border-2)!important}.tag .x{opacity:.6!important}.tag .x:hover{opacity:1!important;color:var(--px-danger)!important}.drill .dchip{background:rgba(16,20,48,.8)!important;border:1px solid var(--px-border-2)!important;color:var(--px-text-2)!important;border-radius:999px!important}.drill .dchip:hover{border-color:var(--px-accent)!important;color:#FFFFFF!important}.drill .dchip.active{background:linear-gradient(96deg,var(--px-accent),#7F18B3)!important;color:#FFFFFF!important;border-color:transparent!important}.section-title{color:var(--px-accent)!important;font-weight:650!important}.dot{box-shadow:0 0 0 5px rgba(37,217,164,.16)!important}.modal-overlay{backdrop-filter:blur(4px)!important}.modal-overlay{background:rgba(2,4,12,.76)!important}.modal,.modal-box,.ms-modal,.box{background:linear-gradient(180deg,#101430,#0A0D20)!important;border:1px solid var(--px-border-2)!important;border-radius:20px!important;box-shadow:0 34px 80px rgba(0,0,0,.72)!important}.modal-head,.ms-modal-head{border-bottom:1px solid var(--px-border)!important;background:transparent!important}.modal-head h3,.ms-modal-head h3{color:#FFFFFF!important}.modal-foot,.ms-modal-foot{border-top:1px solid var(--px-border)!important;background:transparent!important}.modal-close{color:var(--px-muted)!important}.modal-close:hover{color:var(--px-danger)!important}.overlay{background:rgba(2,4,12,.62)!important}.ms-notif-panel,.ms-profile-menu{background:linear-gradient(180deg,#101430,#0A0D20)!important;border:1px solid var(--px-border-2)!important;color:var(--px-text)!important;box-shadow:0 26px 70px rgba(0,0,0,.7)!important;border-radius:16px!important}.ms-notif-head,.ms-notif-foot{background:rgba(5,6,15,.7)!important;border-color:var(--px-border)!important;color:var(--px-text)!important}.ms-notif-item{border-color:var(--px-border)!important;color:var(--px-text-2)!important}.ms-notif-item:hover,.ms-notif-item.unread,.ms-profile-item:hover{background:rgba(199,209,248,.10)!important}.ms-profile-item{color:var(--px-text)!important}.ms-toast{background:linear-gradient(96deg,#0B0E1D,#131736)!important;border:1px solid var(--px-accent-line)!important;color:#FFFFFF!important;box-shadow:0 20px 50px rgba(146,82,220,.28)!important}.ms-progress{background:linear-gradient(90deg,#30ABED,#9252DC,#8B93B8)!important}.ms-working{box-shadow:0 0 0 4px rgba(48,171,237,.20)!important}.ms-switch{color:var(--px-text)!important}.ms-page-link-overlay:focus{outline-color:var(--px-accent)!important}@keyframes pxFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}.page.active{animation:pxFade .26s cubic-bezier(.22,.9,.3,1) both!important}@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}@media(max-width:900px){.sidebar,.rail,.appbar{box-shadow:24px 0 70px rgba(0,0,0,.7)!important}.content{background:transparent!important}.stat-card.dash-metric{border-radius:16px!important}}</style>
-<link rel="stylesheet" href="/assets/galaxy.css?v=gal-3"/><link rel="stylesheet" href="/assets/galaxy-light.css?v=gal-3"/><script src="/assets/galaxy.js?v=gal-3" defer></script></head>
+<link rel="stylesheet" href="/assets/galaxy.css?v=gal-5"/><link rel="stylesheet" href="/assets/galaxy-light.css?v=gal-5"/><script src="/assets/galaxy.js?v=gal-5" defer></script></head>
 <body>
 <div class="layout">
   <!-- ================= SIDEBAR ================= -->
@@ -385,7 +385,7 @@
     </div>
     <nav class="sb-nav">
       <div class="sb-section">Number Maintenance</div>
-      <div class="nav-item" data-page="import"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import Numbers / Ranges</span></div>
+      <div class="nav-item" data-page="import"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import Numbers</span></div>
       <!-- GALAXY: Import Test Numbers nav removed per spec -->
 
       <div class="sb-section">Pricing</div>
@@ -439,7 +439,7 @@
 
       <!-- ========== IMPORT ========== -->
       <section class="page" id="page-import">
-        <div class="page-head"><div><h2>Import Numbers / Ranges</h2><div class="breadcrumb"><b>SMS Module</b> › Import</div></div></div>
+        <div class="page-head"><div><h2>Import Numbers</h2><div class="breadcrumb"><b>SMS Module</b> › Import</div></div></div>
         <div class="two-col">
           <div class="card">
             <div class="card-head"><div><h3>Upload Numbers File</h3><div class="sub">CSV / Excel / TXT — bulk numbers</div></div></div>
@@ -453,10 +453,7 @@
             <div id="numFileInfo" class="hint"></div>
             <button class="btn btn-purple" style="margin-top:12px;width:100%" onclick="doImport('numFile')">Import Numbers</button>
           </div>
-          <!-- GALAXY: Upload Ranges File card removed per spec (backend untouched) -->
-        </div>
-
-        <div class="card" style="margin-top:16px;max-width:720px">
+<div class="card">
           <div class="card-head"><div><h3>Bulk Number Import by TXT Files</h3><div class="sub">Select multiple .txt files. Each file name is used as Range Name, and file contents are numbers.</div></div></div>
           <div class="form-grid" style="grid-template-columns:2fr 1fr;gap:14px;align-items:end">
             <div class="form-group"><label>TXT Files (one range per file)</label><input type="file" id="bulkTxtFiles" accept=".txt,.csv" multiple /></div>
@@ -466,11 +463,10 @@
           <button class="btn btn-purple" onclick="bulkImportTxtFiles()">Import Selected TXT Files</button>
           <div class="hint" id="bulkTxtInfo" style="margin-top:10px">Example: <b>Nigeria.txt</b> will import all numbers inside it into range <b>Nigeria</b>.</div>
         </div>
+          <!-- GALAXY: Upload Ranges File card removed per spec (backend untouched) -->
+        </div>
 
-
-
-
-      </section>
+        </section>
 
 
       <!-- ========== IMPORT TEST NUMBERS ========== -->
@@ -735,36 +731,58 @@ Nigeria"></textarea><div class="hint">Default rates will be NA. You can edit pay
       <section class="page" id="page-providers">
         <div class="page-head"><div><h2>Providers</h2><div class="breadcrumb"><b>System Master</b> › Provider Management</div></div>
           <div class="head-actions"><button class="btn btn-purple" onclick='openProvModal(null)'>+ Add Provider</button></div></div>
+        <div class="hint" id="provUnlinked" style="display:none;margin-bottom:10px"></div>
         <div class="table-wrap"><div class="tscroll"><table>
-          <thead><tr><th>Provider</th><th>Connection</th><th>Payment Term</th><th>Method</th><th>Currency</th><th>Numbers</th><th>Total Msgs</th><th>Unpaid Payout</th><th>Last Payment</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Provider</th><th>Connection</th><th>Payment Term</th><th>Currency</th><th>Numbers</th><th>Messages</th><th>Unpaid Payout</th><th>Last Payment</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="provBody"></tbody>
         </table></div><div class="table-foot"><div class="info" id="provInfo"></div></div></div>
-        <div class="hint" style="margin-top:10px">Credentials connection pages par hi rehte hain (HTTP / API / SMPP). Unpaid payout sirf <b>Clear Pay</b> par settle hota hai — payment term sirf schedule/information hai. "auto" = connection ke naam se mila hua provider (record banane ke liye Edit use karein). Over-limit panel ki sd_limit definition follow karta hai (7d window).</div>
+        <div class="hint" style="margin-top:10px">Providers sirf manually bante hain (integrations se auto-create nahi hote). Credentials connection pages par hi rehte hain (HTTP / API / SMPP). Unpaid = lifetime payout − settled; partial payment allowed.</div>
       </section>
 
-      <div class="modal-overlay" id="provModal"><div class="modal" style="max-width:560px">
+      <div class="modal-overlay" id="provModal"><div class="modal" style="max-width:540px">
         <div class="modal-head"><h3 id="provModalTitle">Add Provider</h3><button class="modal-close" onclick="closeModal('provModal')">×</button></div>
         <div class="modal-body">
           <div class="form-group"><label>Provider Name <span class="req">*</span></label><input id="pvName" placeholder="e.g. Example Provider" /></div>
           <div class="form-grid">
             <div class="form-group"><label>Provider Connection</label><select id="pvConn"><option value="">—</option><option>HTTP</option><option>API</option><option>SMPP</option><option>Multiple</option></select></div>
-            <div class="form-group"><label>Payment Term</label><select id="pvTerm"><option value="">—</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="weekly_7_7">7/7</option><option value="monthly_30x45">Monthly</option></select></div>
+            <div class="form-group"><label>Payment Term</label><select id="pvTerm"><option value="">—</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="weekly_7_7">7/7</option><option value="monthly_30x45">30/45 (30d cycle, pay after 45)</option></select></div>
           </div>
           <div class="form-grid">
-            <div class="form-group"><label>Payment Method</label><select id="pvMethod"><option value="">—</option><option>USDT</option><option>Bank Transfer</option><option>Other</option></select></div>
             <div class="form-group"><label>Currency</label><select id="pvCurrency"><option>USD</option><option>EUR</option><option>USDT</option></select></div>
+            <div class="form-group"><label>Status</label><select id="pvStatus"><option>Active</option><option>Inactive</option></select></div>
           </div>
-          <div class="form-group"><label>Notes</label><input id="pvNotes" placeholder="Optional" /></div>
-          <div class="hint">Provider Rate field jaan-bujh kar nahi hai — payout messages pe existing range/number rates se calculate hota hai. Host/port/keys yahan duplicate nahi hote.</div>
+          <div class="hint">Provider Rate / Payment Method jaan-bujh kar nahi hain. Payout messages par existing range/number rates se calculate hota hai. Credentials yahan duplicate nahi hote.</div>
         </div>
         <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('provModal')">Cancel</button><button class="btn btn-purple" onclick="saveProvider()">Save Provider</button></div>
       </div></div>
 
-      <div class="modal-overlay" id="provHistModal"><div class="modal" style="max-width:640px">
+      <div class="modal-overlay" id="provViewModal"><div class="modal" style="max-width:680px">
+        <div class="modal-head"><h3 id="provViewTitle">Provider</h3><button class="modal-close" onclick="closeModal('provViewModal')">×</button></div>
+        <div class="modal-body">
+          <div id="provViewChips" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px"></div>
+          <div class="card-head" style="margin-bottom:8px"><div><h3 style="font-size:14px">Payout Periods</h3></div></div>
+          <div id="provViewPeriods" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px"></div>
+          <div class="card-head" style="margin-bottom:8px"><div><h3 style="font-size:14px">Connections & Inventory</h3></div></div>
+          <div id="provViewConns" style="margin-bottom:6px"></div>
+        </div>
+        <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('provViewModal')">Close</button><button class="btn btn-blue" id="provViewHistBtn" onclick="">Payment History</button><button class="btn btn-green" id="provViewPayBtn" onclick="">Record Payment</button></div>
+      </div></div>
+
+      <div class="modal-overlay" id="provPayModal"><div class="modal" style="max-width:440px">
+        <div class="modal-head"><h3 id="provPayTitle">Record Payment</h3><button class="modal-close" onclick="closeModal('provPayModal')">×</button></div>
+        <div class="modal-body">
+          <div style="margin-bottom:12px"><span class="muted">Current Unpaid Payout:</span> <b id="provPayUnpaid" class="cell-money" style="font-size:18px">$ 0</b></div>
+          <div class="form-group"><label>Payment Amount <span class="req">*</span></label><input type="text" inputmode="decimal" id="payAmount" placeholder="0.00" /><div class="hint">Partial payment allowed — baqi amount unpaid rehta hai.</div></div>
+          <div class="form-group"><label>Payment Period (optional)</label><input id="payPeriod" placeholder="e.g. weekly / 1-7 Sep" /></div>
+        </div>
+        <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('provPayModal')">Cancel</button><button class="btn btn-green" onclick="provPaySave()">Confirm Payment</button></div>
+      </div></div>
+
+      <div class="modal-overlay" id="provHistModal"><div class="modal" style="max-width:760px">
         <div class="modal-head"><h3 id="provHistTitle">Payment History</h3><button class="modal-close" onclick="closeModal('provHistModal')">×</button></div>
         <div class="modal-body">
           <div class="table-wrap"><div class="tscroll"><table>
-            <thead><tr><th>Date</th><th>Amount</th><th>Currency</th><th>By</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Date</th><th>Amount</th><th>Prev Unpaid</th><th>Remaining</th><th>Period</th><th>By</th><th>Notes</th></tr></thead>
             <tbody id="provHistBody"></tbody>
           </table></div></div>
         </div>
@@ -2131,14 +2149,15 @@ async function loadCarrierSettings(){
     await loadCarrierWebhookLogs();
   }catch(e){ if(String(e.message||'').includes('locked')||String(e.message||'').includes('Locked')){localStorage.removeItem('carrier_integration_lock');updateCarrierLockView();alert('❌ Wrong carrier integration password.');} else console.warn(e); }
 }
-/* ===== GALAXY P6: HTTP Integration IPs + Provider Management ===== */
+/* ===== GALAXY P7: HTTP Integration IPs + Provider Management (manual) ===== */
 function pay3(v){ if(window.GX&&GX.pay3) return GX.pay3(v); let s=String(v??'').replace(/[$,\s]/g,'');const mm=s.match(/-?\d+(?:\.\d+)?/);if(!mm)return'0';const p=mm[0].split('.');if(p.length<2)return p[0];const d=p[1].slice(0,3).replace(/0+$/,'');return d?p[0]+'.'+d:p[0]; }
 async function fillProvDatalists(){
   try{
-    const rows=await API.get('/providers-info');
-    const names=(rows||[]).map(p=>p.name).filter(Boolean);
-    ['provNames'].forEach(id=>{ const dl=document.getElementById(id); if(dl) dl.innerHTML=names.map(n=>'<option value="'+n+'">').join(''); });
-    return rows||[];
+    const resp=await API.get('/providers-info');
+    const rows=(resp&&resp.providers)||[];
+    const names=rows.map(p=>p.name).filter(Boolean);
+    const dl=document.getElementById('provNames'); if(dl) dl.innerHTML=names.map(n=>'<option value="'+n+'">').join('');
+    return rows;
   }catch(e){ return []; }
 }
 async function loadActivityIps(){
@@ -2176,61 +2195,65 @@ async function delActivityIp(id){
   if(!confirm('Delete this IP entry?')) return;
   try{ await API.del('/activity-ips/'+id); loadActivityIps(); }catch(e){ alert('\u274c '+e.message); }
 }
-let editProvId=null;
+/* ---------- Providers (manual-only) ---------- */
+let editProvId=null, provsCache=[], payProv=null, histProv=null;
 async function loadProviders(){
   try{
-    const rows=await API.get('/providers-info');
-    const names=(rows||[]).map(p=>p.name).filter(Boolean);
+    const resp=await API.get('/providers-info');
+    provsCache=(resp&&resp.providers)||[];
+    const names=provsCache.map(p=>p.name).filter(Boolean);
     const dl=document.getElementById('provNames'); if(dl) dl.innerHTML=names.map(n=>'<option value="'+n+'">').join('');
+    const ul=document.getElementById('provUnlinked');
+    if(ul){
+      const un=(resp&&resp.unlinked)||[];
+      if(un.length){ ul.style.display='block'; ul.innerHTML='\u2139 In ranges referenced (lekin abhi provider record linked nahi): '+un.map(u=>'<b>'+u.name+'</b> ('+u.ranges+' range'+(u.ranges>1?'s':'')+')').join(', ')+'. Provider tab tak stats bina record ke nahi dikhte \u2014 same naam se + Add Provider banao.'; }
+      else { ul.style.display='none'; ul.innerHTML=''; }
+    }
     const b=document.getElementById('provBody'); if(!b) return;
-    b.innerHTML=(rows||[]).map(p=>{
+    b.innerHTML=(provsCache||[]).map(p=>{
       const badges=[
         p.connections.api?`<span class="tag tag-blue">API</span>`:'',
         p.connections.smpp?`<span class="tag tag-agt">SMPP</span>`:'',
         (p.connections.ips&&p.connections.ips.length)?`<span class="tag tag-mgr">HTTP IP \u00d7${p.connections.ips.length}</span>`:''
       ].filter(Boolean).join(' ');
       const connTxt=[p.conn_type?p.conn_type:'',badges].filter(Boolean).join(' ');
-      const pid=String(p.id).startsWith('auto:')?'':p.id;
-      const unpaid=Number(p.totals.payout_unpaid||0);
-      const status=unpaid>0.0000001
-        ? '<span class="tag tag-amber">Due</span>'
-        : '<span class="tag tag-green">Cleared</span>';
+      const status=(String(p.status||'Active')==='Inactive')
+        ? '<span class="tag tag-gray">Inactive</span>'
+        : '<span class="tag tag-green">Active</span>';
       const lp=p.last_payment?`$ ${pay3(p.last_payment.amount)}<div class="muted" style="font-size:11px">${String(p.last_payment.paid_at||'').slice(0,10)}</div>`:'\u2014';
-      const acts=pid
-        ? `<button type="button" class="gx-btn gx-green" onclick="clearProvPay(${p.id},'${p.name.replace(/'/g,"")}',${unpaid})" data-tip="Clear Pay" title="Clear Pay" aria-label="Clear Pay">${window.GX&&GX.svg?GX.svg('dollar'):'$'}</button>
-           <button type="button" class="gx-btn" onclick="provHistory(${p.id},'${p.name.replace(/'/g,"")}')" data-tip="Payment history" title="Payment history" aria-label="Payment history">${window.GX&&GX.svg?GX.svg('history'):'\ud83d\udd52'}</button>
-           <button type="button" class="gx-btn gx-blue" onclick='openProvModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' data-tip="Edit" title="Edit" aria-label="Edit">${window.GX&&GX.svg?GX.svg('edit'):'\u270e'}</button>
-           <button type="button" class="gx-btn danger" onclick="delProvider(${p.id},'${p.name.replace(/'/g,"")}')" data-tip="Delete" title="Delete" aria-label="Delete">${window.GX&&GX.svg?GX.svg('trash'):'\ud83d\uddd1'}</button>`
-        : '<span class="muted">view only</span>';
+      const ic=k=>window.GX&&GX.svg?GX.svg(k):'\u2022';
       return `<tr>
-        <td data-label="Provider"><b>${p.name}</b>${p.auto?' <span class="tag tag-gray">auto</span>':''}</td>
+        <td data-label="Provider"><b>${p.name}</b></td>
         <td data-label="Connection">${connTxt||'<span class="tag tag-gray">\u2014</span>'}</td>
         <td data-label="Payment Term">${p.payment_term?(window.GX&&GX.payterm?GX.payterm(p.payment_term):p.payment_term):'\u2014'}</td>
-        <td data-label="Method">${p.payment_method||'\u2014'}</td>
         <td data-label="Currency">${p.currency||'USD'}</td>
         <td data-label="Numbers">${(p.stats.numbers||0).toLocaleString()}</td>
-        <td data-label="Total Msgs">${(p.totals.msgs||0).toLocaleString()}</td>
-        <td data-label="Unpaid Payout" class="cell-money">$ ${pay3(p.totals.payout_unpaid||0)}</td>
+        <td data-label="Messages">${(p.totals.msgs||0).toLocaleString()}</td>
+        <td data-label="Unpaid Payout"><a href="#" onclick="return provPayOpen(${p.id})" class="cell-money" style="text-decoration:underline dotted" title="Payment record karein">$ ${pay3(p.totals.payout_unpaid||0)}</a></td>
         <td data-label="Last Payment">${lp}</td>
         <td data-label="Status">${status}</td>
-        <td data-label="Actions" style="white-space:nowrap">${acts}</td></tr>`;
-    }).join('')||'<tr><td colspan="11" class="muted" style="text-align:center;padding:18px">No providers yet \u2014 + Add Provider se shuru karein</td></tr>';
-    const info=document.getElementById('provInfo'); if(info) info.textContent=`${(rows||[]).length} provider(s)`;
+        <td data-label="Actions" style="white-space:nowrap">
+          <button type="button" class="gx-btn" onclick="provView(${p.id})" data-tip="View details" title="View details" aria-label="View details">${ic('eye')}</button>
+          <button type="button" class="gx-btn gx-blue" onclick='openProvModal(provsCache.find(x=>x.id===${p.id}))' data-tip="Edit" title="Edit" aria-label="Edit">${ic('edit')}</button>
+          <button type="button" class="gx-btn gx-green" onclick="provPayOpen(${p.id})" data-tip="Record payment" title="Record payment" aria-label="Record payment">${ic('dollar')}</button>
+          <button type="button" class="gx-btn danger" onclick="delProvider(${p.id},'${p.name.replace(/'/g,"")}')" data-tip="Delete" title="Delete" aria-label="Delete">${ic('trash')}</button>
+        </td></tr>`;
+    }).join('')||'<tr><td colspan="10" class="muted" style="text-align:center;padding:18px">No providers yet \u2014 + Add Provider se manually shuru karein</td></tr>';
+    const info=document.getElementById('provInfo'); if(info) info.textContent=`${(provsCache||[]).length} provider(s)`;
   }catch(e){ console.warn(e); }
 }
 function openProvModal(p){
-  editProvId=p&&p.id&&!String(p.id).startsWith('auto:')?p.id:null;
+  editProvId=p&&p.id?p.id:null;
   document.getElementById('provModalTitle').textContent=editProvId?'Edit Provider':'Add Provider';
   document.getElementById('pvName').value=(p&&p.name)||'';
   document.getElementById('pvConn').value=(p&&p.conn_type)||'';
   document.getElementById('pvTerm').value=(p&&p.payment_term)||'';
-  document.getElementById('pvMethod').value=(p&&p.payment_method)||'';
   document.getElementById('pvCurrency').value=(p&&p.currency)||'USD';
-  document.getElementById('pvNotes').value=(p&&p.notes)||'';
+  document.getElementById('pvStatus').value=(p&&String(p.status)==='Inactive')?'Inactive':'Active';
   document.getElementById('provModal').classList.add('show');
 }
 async function saveProvider(){
-  const body={name:document.getElementById('pvName').value.trim(),conn_type:document.getElementById('pvConn').value,payment_term:document.getElementById('pvTerm').value,payment_method:document.getElementById('pvMethod').value,currency:document.getElementById('pvCurrency').value,notes:document.getElementById('pvNotes').value.trim()};
+  const body={name:document.getElementById('pvName').value.trim(),conn_type:document.getElementById('pvConn').value,payment_term:document.getElementById('pvTerm').value,currency:document.getElementById('pvCurrency').value,status:document.getElementById('pvStatus').value};
   if(!body.name){ alert('Provider name required.'); return; }
   try{
     if(editProvId) await API.put('/providers-info/'+editProvId,body);
@@ -2242,28 +2265,79 @@ async function delProvider(id,name){
   if(!confirm('Remove provider record "'+name+'"? (Payment history delete NAHI hogi; connections/keys untouched)')) return;
   try{ await API.del('/providers-info/'+id); loadProviders(); }catch(e){ alert('\u274c '+e.message); }
 }
-async function clearProvPay(id,name,unpaid){
-  if(!(unpaid>0)){ alert('Current unpaid payout $0 hai \u2014 clear karne ke liye kuch nahi.'); return; }
-  if(!confirm('Clear Pay \u2014 "'+name+'" ki current unpaid payout $ '+pay3(unpaid)+' ko settle karein?\n\nHistory mein record rahega aur accumulation 0 se start hogi.')) return;
-  try{ const r=await API.post('/providers-info/'+id+'/clear-pay',{}); alert('\u2705 Settled: $ '+pay3(r.amount)+' \u2014 history mein record saved.'); loadProviders(); }
-  catch(e){ alert('\u274c '+e.message); }
+function provView(id){
+  const p=(provsCache||[]).find(x=>x.id===id); if(!p) return;
+  document.getElementById('provViewTitle').textContent='Provider \u2014 '+p.name;
+  const unpaid=Number(p.totals.payout_unpaid||0);
+  const chip=(l,v,cls)=>'<div class="card" style="min-width:130px;padding:10px 14px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em">'+l+'</div><div class="'+(cls||'')+'" style="font-weight:750;font-size:16px">'+v+'</div></div>';
+  document.getElementById('provViewChips').innerHTML=
+    chip('Unpaid Payout','$ '+pay3(p.totals.payout_unpaid||0),'cell-money')+
+    chip('Last Payment',p.last_payment?('$ '+pay3(p.last_payment.amount)+'<div class="muted" style="font-size:11px">'+String(p.last_payment.paid_at||'').slice(0,10)+'</div>'):'\u2014')+
+    chip('Status',String(p.status||'Active')==='Inactive'?'<span class="tag tag-gray">Inactive</span>':'<span class="tag tag-green">Active</span>')+
+    chip('Payment Term',p.payment_term?(window.GX&&GX.payterm?GX.payterm(p.payment_term):p.payment_term):'\u2014')+
+    chip('Currency',p.currency||'USD')+
+    chip('Numbers',(p.stats.numbers||0).toLocaleString())+
+    chip('Messages',(p.totals.msgs||0).toLocaleString());
+  const per=[['This Week',p.totals.payout_week],['Previous Week',p.totals.payout_prev_week],['This Month',p.totals.payout_month],['Previous Month',p.totals.payout_prev_month],['Previous 3 Months (excl. this)',p.totals.payout_prev_3m]];
+  const rows=per.filter(x=>Number(x[1])>0).map(x=>'<div class="card" style="min-width:130px;padding:10px 14px"><div class="muted" style="font-size:11px">'+x[0]+'</div><div class="cell-money" style="font-weight:700">$ '+pay3(x[1])+'</div></div>');
+  document.getElementById('provViewPeriods').innerHTML=rows.length?rows.join(''):'<span class="muted">No payout data yet \u2014 jab messages aayenge, period-wise amounts yahan dikhenge.</span>';
+  const badges=[
+    p.connections.api?`<span class="tag tag-blue">API connection \u00d7${p.connections.api}</span>`:'',
+    p.connections.smpp?`<span class="tag tag-agt">SMPP connection \u00d7${p.connections.smpp}</span>`:'',
+    (p.connections.ips&&p.connections.ips.length)?`<span class="tag tag-mgr">HTTP IP \u00d7${p.connections.ips.length}</span>`:'',
+    `<span class="tag">${(p.stats.ranges||0)} range(s)</span>`,
+    Number(p.totals.over_limit_msgs_7d||0)>0?`<span class="tag tag-amber">Over-limit msgs (7d): ${p.totals.over_limit_msgs_7d}</span>`:''
+  ].filter(Boolean).join(' ');
+  document.getElementById('provViewConns').innerHTML=badges||'<span class="muted">No connections linked by name.</span>';
+  document.getElementById('provViewHistBtn').onclick=()=>provHistory(p.id,p.name);
+  document.getElementById('provViewPayBtn').onclick=()=>provPayOpen(p.id);
+  document.getElementById('provViewModal').classList.add('show');
+}
+function provPayOpen(id){
+  const p=(provsCache||[]).find(x=>x.id===id); if(!p) return false;
+  payProv=p;
+  const unpaid=Number(p.totals.payout_unpaid||0);
+  document.getElementById('provPayTitle').textContent='Record Payment \u2014 '+p.name;
+  document.getElementById('provPayUnpaid').textContent='$ '+pay3(p.totals.payout_unpaid||0);
+  const inp=document.getElementById('payAmount');
+  inp.value=unpaid>0?String(unpaid):'';
+  document.getElementById('payPeriod').value='';
+  if('provViewModal' && document.getElementById('provViewModal').classList.contains('show')) closeModal('provViewModal');
+  document.getElementById('provPayModal').classList.add('show');
+  return false;
+}
+async function provPaySave(){
+  if(!payProv) return;
+  const amt=(document.getElementById('payAmount').value||'').trim();
+  const period=(document.getElementById('payPeriod').value||'').trim();
+  if(!amt){ alert('Payment amount required.'); return; }
+  if(!confirm('Payment $ '+amt+' record karein for "'+payProv.name+'"?')) return;
+  try{
+    const r=await API.post('/providers-info/'+payProv.id+'/payments',{amount:amt,period});
+    alert('\u2705 Payment $ '+pay3(r.amount)+' recorded.\nPrevious unpaid: $ '+pay3(r.prev_unpaid)+'\nRemaining unpaid: $ '+pay3(r.remaining));
+    closeModal('provPayModal'); loadProviders();
+  }catch(e){ alert('\u274c '+e.message); }
 }
 async function provHistory(id,name){
+  histProv=id;
   try{
     const rows=await API.get('/providers-info/'+id+'/payments');
     document.getElementById('provHistTitle').textContent='Payment History \u2014 '+name;
     document.getElementById('provHistBody').innerHTML=(rows||[]).map(r=>`<tr>
       <td class="muted">${String(r.paid_at||'').slice(0,19)}</td>
       <td class="cell-money">$ ${pay3(r.amount)}</td>
-      <td>${r.currency||'USD'}</td>
+      <td class="muted">$ ${pay3(r.prev_unpaid||0)}</td>
+      <td class="muted">$ ${pay3(r.remaining_unpaid||0)}</td>
+      <td>${r.period||'\u2014'}</td>
       <td>${r.created_by||'\u2014'}</td>
-      <td class="muted">${r.notes||''}</td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="text-align:center;padding:16px">No settlements yet</td></tr>';
+      <td class="muted">${r.notes||''}</td></tr>`).join('')||'<tr><td colspan="7" class="muted" style="text-align:center;padding:16px">No settlements yet</td></tr>';
+    if(document.getElementById('provViewModal').classList.contains('show')) closeModal('provViewModal');
     document.getElementById('provHistModal').classList.add('show');
   }catch(e){ alert('\u274c '+e.message); }
 }
 async function fillImportProviders(){
   try{
-    const rows=await API.get('/providers-info');
+    const rows=await fillProvDatalists();
     const opts='<option value="">\u2014 No Provider \u2014</option>'+((rows||[]).map(p=>`<option>${p.name}</option>`).join(''));
     ['importProvider','bulkImportProvider'].forEach(id=>{ const el=document.getElementById(id); if(el&&!el.dataset.filled){ el.innerHTML=opts; el.dataset.filled='1'; } });
   }catch(e){}
@@ -3107,6 +3181,8 @@ if(typeof applyPanelSplitUi==='function') applyPanelSplitUi();
 // Default Management page is Rate Management. Heavy daily reports/dashboard are not loaded here.
 loadRates();
 setTimeout(()=>{Promise.allSettled([ensureAdminManagers(), loadImportBatches(), refreshNumberDbTools()]);},500);
+/* GALAXY P7: khali .content div flex:1 se bara khali gap banata tha (pages section-level hain) */
+document.querySelectorAll('.content').forEach(c=>{ if(!c.querySelector('*')) c.remove(); });
 </script>
 </body>
 </html>

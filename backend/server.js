@@ -3240,17 +3240,21 @@ app.delete('/api/activity-ips/:id', authRequired, requireRole('admin'), (req,res
 });
 
 /* ===== GALAXY: Provider registry (relationship/payment/reporting) ===== */
-/* ===== GALAXY P6: Provider Management (manual, accounting-level; credentials connections mein hi) ===== */
+/* ===== GALAXY P7: Provider Management (manual-only, accounting + partial settlements) ===== */
 app.get('/api/providers-info', authRequired, requireRole('admin'), (req,res)=>{
   const provs = db.all('SELECT * FROM galaxy_providers ORDER BY name COLLATE NOCASE');
   const names = new Set(provs.map(p => p.name));
-  const discover = (n) => { if (n && !names.has(n)) { names.add(n); provs.push({ id: 'auto:' + n, name: n, payment_term: '', payment_method: '', conn_type: '', currency: 'USD', rate: '', notes: '', auto: true }); } };
-  db.all("SELECT name FROM sync_providers").forEach(r => discover(r.name));
-  db.all("SELECT name FROM smpp_connections").forEach(r => discover(r.name));
-  db.all("SELECT DISTINCT provider_name n FROM activity_ips WHERE provider_name != ''").forEach(r => discover(r.n));
-  db.all("SELECT DISTINCT provider n FROM ranges WHERE provider != ''").forEach(r => discover(r.n));
-  const since7 = db.get(`SELECT datetime('now','-7 days') d`)?.d;
-  const unpaidSinceSql = (name) => `COALESCE((SELECT MAX(paid_at) FROM provider_payments WHERE provider_name = '${String(name).replace(/'/g, "''")}'), '1970-01-01')`;
+  const now = new Date();
+  const dToday = now.toISOString().slice(0,10);
+  const dowMon = (now.getUTCDay() + 6) % 7;
+  const wkStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dowMon)).toISOString().slice(0,10);
+  const pwStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dowMon - 7)).toISOString().slice(0,10);
+  const mThis = dToday.slice(0,7);
+  const pmDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const mPrev = pmDate.toISOString().slice(0,7);
+  const m3 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 3, 1)).toISOString().slice(0,10);
+  const sumRange = (sel, extra="", params=[]) => db.get(`SELECT COALESCE(SUM(CAST(s.payout_amount AS REAL)),0) p FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=? ${extra}`, [sel, ...params])?.p || 0;
+  const cntRange = (sel, extra="", params=[]) => db.get(`SELECT COUNT(*) c FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=? ${extra}`, [sel, ...params])?.c || 0;
   const out = [];
   for (const p of provs) {
     let conns = { api: 0, smpp: 0, ips: [] };
@@ -3259,43 +3263,62 @@ app.get('/api/providers-info', authRequired, requireRole('admin'), (req,res)=>{
       conns.smpp = db.get('SELECT COUNT(*) c FROM smpp_connections WHERE name=?', [p.name])?.c || 0;
       conns.ips = db.all('SELECT provider_name, ip, enabled FROM activity_ips WHERE provider_name=?', [p.name]);
     } catch(e) {}
-    let stats = { msgs_7d: 0, payout_7d: '0', ranges: 0, numbers: 0 };
-    let totals = { msgs: 0, payout_lifetime: '0', payout_unpaid: '0', over_limit_msgs_7d: 0 };
+    let stats = { ranges: 0, numbers: 0 };
+    let totals = { msgs: 0, payout_lifetime: '0', payout_week: '0', payout_prev_week: '0', payout_month: '0', payout_prev_month: '0', payout_prev_3m: '0', paid_total: '0', payout_unpaid: '0', over_limit_msgs_7d: 0 };
     let last_payment = null;
     try {
       stats.ranges = db.get("SELECT COUNT(*) c FROM ranges WHERE provider=? AND COALESCE(deleted_at,'')=''", [p.name])?.c || 0;
       stats.numbers = db.get('SELECT COUNT(*) c FROM numbers n JOIN ranges r ON r.id=n.range_id WHERE r.provider=?', [p.name])?.c || 0;
-      stats.msgs_7d = db.get('SELECT COUNT(*) c FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=? AND s.received_at >= ?', [p.name, since7])?.c || 0;
-      stats.payout_7d = normalizeDecimalString(db.get('SELECT COALESCE(SUM(CAST(s.payout_amount AS REAL)),0) p FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=? AND s.received_at >= ?', [p.name, since7])?.p || 0) || '0';
-      totals.msgs = db.get('SELECT COUNT(*) c FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=?', [p.name])?.c || 0;
-      totals.payout_lifetime = normalizeDecimalString(db.get('SELECT COALESCE(SUM(CAST(s.payout_amount AS REAL)),0) p FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=?', [p.name])?.p || 0) || '0';
-      totals.payout_unpaid = normalizeDecimalString(db.get(`SELECT COALESCE(SUM(CAST(s.payout_amount AS REAL)),0) p FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=? AND s.received_at > ${unpaidSinceSql(p.name)}`, [p.name])?.p || 0) || '0';
+      totals.msgs = cntRange(p.name);
+      totals.payout_lifetime = normalizeDecimalString(sumRange(p.name)) || '0';
+      totals.payout_week = normalizeDecimalString(sumRange(p.name, " AND strftime('%Y-%m-%d', s.received_at) BETWEEN ? AND ?", [wkStart, dToday])) || '0';
+      totals.payout_prev_week = normalizeDecimalString(sumRange(p.name, " AND strftime('%Y-%m-%d', s.received_at) BETWEEN ? AND ?", [pwStart, wkStart])) || '0';
+      totals.payout_month = normalizeDecimalString(sumRange(p.name, " AND strftime('%Y-%m', s.received_at) = ?", [mThis])) || '0';
+      totals.payout_prev_month = normalizeDecimalString(sumRange(p.name, " AND strftime('%Y-%m', s.received_at) = ?", [mPrev])) || '0';
+      totals.payout_prev_3m = normalizeDecimalString(sumRange(p.name, " AND strftime('%Y-%m-%d', s.received_at) >= ? AND strftime('%Y-%m', s.received_at) != ?", [m3, mThis])) || '0';
+      totals.paid_total = normalizeDecimalString(db.get('SELECT COALESCE(SUM(CAST(amount AS REAL)),0) p FROM provider_payments WHERE provider_name=?', [p.name])?.p || 0) || '0';
+      const unpaid = Math.max(0, (parseFloat(totals.payout_lifetime) || 0) - (parseFloat(totals.paid_total) || 0));
+      totals.payout_unpaid = normalizeDecimalString(unpaid) || '0';
       totals.over_limit_msgs_7d = db.get(`SELECT COALESCE(SUM(x.c),0) c FROM (
           SELECT s.number_id nid, COUNT(*) c FROM sms_records s JOIN ranges r ON r.id=s.range_id
-          WHERE s.received_at >= ? AND s.number_id IS NOT NULL AND r.provider=?
+          WHERE s.received_at >= datetime('now','-7 days') AND s.number_id IS NOT NULL AND r.provider=?
           GROUP BY s.number_id
-        ) x JOIN numbers n ON n.id=x.nid WHERE CAST(n.sd_limit AS INTEGER)>0 AND x.c>=CAST(n.sd_limit AS INTEGER)`, [since7, p.name])?.c || 0;
-      last_payment = db.get('SELECT amount, currency, paid_at FROM provider_payments WHERE provider_name=? ORDER BY paid_at DESC, id DESC LIMIT 1', [p.name]) || null;
-    } catch(e) {}
-    out.push({ ...p, connections: conns, stats, totals, last_payment });
+        ) x JOIN numbers n ON n.id=x.nid WHERE CAST(n.sd_limit AS INTEGER)>0 AND x.c>=CAST(n.sd_limit AS INTEGER)`, [p.name])?.c || 0;
+      last_payment = db.get('SELECT amount, currency, paid_at, period FROM provider_payments WHERE provider_name=? ORDER BY paid_at DESC, id DESC LIMIT 1', [p.name]) || null;
+    } catch(e) { console.error('P7 GET totals error:', e.message); }
+    out.push({ id: p.id, name: p.name, conn_type: p.conn_type || '', payment_term: p.payment_term || '', currency: p.currency || 'USD', status: p.status || 'Active', notes: p.notes || '', connections: conns, stats, totals, last_payment });
   }
-  res.json(out);
+  let unlinked = [];
+  try {
+    unlinked = db.all("SELECT provider name, COUNT(*) ranges FROM ranges WHERE provider != '' AND COALESCE(deleted_at,'')='' AND provider NOT IN (SELECT name FROM galaxy_providers) GROUP BY provider ORDER BY ranges DESC LIMIT 10");
+  } catch(e) {}
+  res.json({ providers: out, unlinked });
 });
 app.post('/api/providers-info', authRequired, requireRole('admin'), (req,res)=>{
   const b = req.body || {};
   const name = String(b.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Provider name required' });
   try {
-    db.run('INSERT INTO galaxy_providers (name,conn_type,payment_term,payment_method,currency,notes) VALUES (?,?,?,?,?,?)',
-      [name, String(b.conn_type||''), String(b.payment_term||''), String(b.payment_method||''), String(b.currency||'USD'), String(b.notes||'')]);
-    logAction(req, 'provider_add', 'galaxy_providers', { name, conn_type: b.conn_type||'', payment_term: b.payment_term||'', payment_method: b.payment_method||'' });
+    db.run('INSERT INTO galaxy_providers (name,conn_type,payment_term,currency,status,notes) VALUES (?,?,?,?,?,?)',
+      [name, String(b.conn_type||''), String(b.payment_term||''), String(b.currency||'USD'), (String(b.status||'Active')==='Inactive'?'Inactive':'Active'), String(b.notes||'')]);
+    logAction(req, 'provider_add', 'galaxy_providers', { name, conn_type: b.conn_type||'', payment_term: b.payment_term||'' });
     res.json({ ok: true });
   } catch(e) { res.status(400).json({ error: /UNIQUE/.test(e.message) ? 'Provider already exists' : e.message }); }
 });
 app.put('/api/providers-info/:id', authRequired, requireRole('admin'), (req,res)=>{
   const b = req.body || {};
-  db.run("UPDATE galaxy_providers SET name=?,conn_type=?,payment_term=?,payment_method=?,currency=?,notes=?,updated_at=datetime('now') WHERE id=?",
-    [String(b.name||'').trim(), String(b.conn_type||''), String(b.payment_term||''), String(b.payment_method||''), String(b.currency||'USD'), String(b.notes||''), +req.params.id]);
+  const old = db.get('SELECT * FROM galaxy_providers WHERE id=?', [+req.params.id]);
+  if (!old) return res.status(404).json({ error: 'Provider not found' });
+  const name = String(b.name!==undefined ? b.name : old.name).trim();
+  if (!name) return res.status(400).json({ error: 'Provider name required' });
+  db.run("UPDATE galaxy_providers SET name=?,conn_type=?,payment_term=?,currency=?,status=?,notes=?,updated_at=datetime('now') WHERE id=?",
+    [name,
+     String(b.conn_type!==undefined ? b.conn_type : (old.conn_type||'')),
+     String(b.payment_term!==undefined ? b.payment_term : (old.payment_term||'')),
+     String(b.currency!==undefined ? b.currency : (old.currency||'USD')),
+     (String(b.status!==undefined ? b.status : (old.status||'Active'))==='Inactive'?'Inactive':'Active'),
+     String(b.notes!==undefined ? b.notes : (old.notes||'')),
+     +req.params.id]);
   logAction(req, 'provider_update', 'galaxy_providers', { id: +req.params.id });
   res.json({ ok: true });
 });
@@ -3303,25 +3326,44 @@ app.delete('/api/providers-info/:id', authRequired, requireRole('admin'), (req,r
   const row = db.get('SELECT name FROM galaxy_providers WHERE id=?', [+req.params.id]);
   db.run('DELETE FROM galaxy_providers WHERE id=?', [+req.params.id]);
   if (row) logAction(req, 'provider_delete', 'galaxy_providers', { id: +req.params.id, name: row.name });
-  res.json({ ok: true }); /* payment history rows jaan-bujh kar rakhi rehti hain */
+  res.json({ ok: true });
 });
-/* Clear Pay: current unpaid = settled amount record; history preserved; accumulation 0 se restart */
-app.post('/api/providers-info/:id/clear-pay', authRequired, requireRole('admin'), (req,res)=>{
+/* Settlement: full ya PARTIAL payment; unpaid = lifetime - paid (accrual hamesha sahi) */
+app.post('/api/providers-info/:id/payments', authRequired, requireRole('admin'), (req,res)=>{
   const p = db.get('SELECT * FROM galaxy_providers WHERE id=?', [+req.params.id]);
   if (!p) return res.status(404).json({ error: 'Provider not found' });
-  const unpaid = db.get(`SELECT COALESCE(SUM(CAST(s.payout_amount AS REAL)),0) p FROM sms_records s JOIN ranges r ON r.id=s.range_id
-    WHERE r.provider=? AND s.received_at > COALESCE((SELECT MAX(paid_at) FROM provider_payments WHERE provider_name=?), '1970-01-01')`, [p.name, p.name])?.p || 0;
-  if (!(unpaid > 0)) return res.status(400).json({ error: 'Nothing to clear — current unpaid payout is 0' });
-  db.run('INSERT INTO provider_payments (provider_id,provider_name,amount,currency,paid_at,created_by,notes) VALUES (?,?,?,?,datetime(\'now\',\'localtime\'),?,?)',
-    [p.id, p.name, normalizeDecimalString(unpaid) || '0', String(p.currency||'USD'), String(req.user?.username||'admin'), String((req.body||{}).notes||'')]);
-  logAction(req, 'provider_clear_pay', 'provider_payments', { provider: p.name, amount: normalizeDecimalString(unpaid) });
-  res.json({ ok: true, amount: normalizeDecimalString(unpaid) || '0', provider: p.name });
+  const lifetime = parseFloat(db.get(`SELECT COALESCE(SUM(CAST(s.payout_amount AS REAL)),0) p FROM sms_records s JOIN ranges r ON r.id=s.range_id WHERE r.provider=?`, [p.name])?.p || 0) || 0;
+  const paid = parseFloat(db.get('SELECT COALESCE(SUM(CAST(amount AS REAL)),0) p FROM provider_payments WHERE provider_name=?', [p.name])?.p || 0) || 0;
+  const unpaid = Math.max(0, lifetime - paid);
+  const amtRaw = String((req.body||{}).amount ?? '').replace(/[$,\s]/g,'');
+  const mm = amtRaw.match(/-?\d+(?:\.\d+)?/);
+  if (!mm) return res.status(400).json({ error: 'Valid payment amount required' });
+  const amount = parseFloat(mm[0]);
+  if (!(amount > 0)) return res.status(400).json({ error: 'Payment amount must be > 0' });
+  if (amount > unpaid + 0.0001) return res.status(400).json({ error: 'Amount exceeds unpaid payout ($ ' + (normalizeDecimalString(unpaid) || '0') + ')' });
+  const remaining = Math.max(0, unpaid - amount);
+  db.run('INSERT INTO provider_payments (provider_id,provider_name,amount,currency,paid_at,created_by,notes,prev_unpaid,remaining_unpaid,period) VALUES (?,?,?,?,datetime(\'now\'),?,?,?,?,?)',
+    [p.id, p.name, normalizeDecimalString(amount) || '0', String(p.currency||'USD'), String(req.user?.username||'admin'), String((req.body||{}).notes||''), normalizeDecimalString(unpaid) || '0', normalizeDecimalString(remaining) || '0', String((req.body||{}).period||'')]);
+  logAction(req, 'provider_payment', 'provider_payments', { provider: p.name, amount: normalizeDecimalString(amount), remaining: normalizeDecimalString(remaining) });
+  res.json({ ok: true, amount: normalizeDecimalString(amount), prev_unpaid: normalizeDecimalString(unpaid), remaining: normalizeDecimalString(remaining), provider: p.name });
 });
 app.get('/api/providers-info/:id/payments', authRequired, requireRole('admin'), (req,res)=>{
   const p = db.get('SELECT name FROM galaxy_providers WHERE id=?', [+req.params.id]);
   if (!p) return res.status(404).json({ error: 'Provider not found' });
-  res.json(db.all('SELECT id, amount, currency, paid_at, created_by, notes FROM provider_payments WHERE provider_name=? ORDER BY paid_at DESC, id DESC LIMIT 200', [p.name]));
+  res.json(db.all('SELECT id, amount, currency, paid_at, created_by, notes, prev_unpaid, remaining_unpaid, period FROM provider_payments WHERE provider_name=? ORDER BY paid_at DESC, id DESC LIMIT 200', [p.name]));
 });
+app.post('/api/providers-info/assign-range', authRequired, requireRole('admin'), (req,res)=>{
+  const b = req.body || {};
+  const provider = String(b.provider || '').trim();
+  let range = null;
+  if (b.range_id) range = db.get('SELECT id, name FROM ranges WHERE id=?', [+b.range_id]);
+  else if (b.range_name) range = db.get('SELECT id, name FROM ranges WHERE name=?', [String(b.range_name)]);
+  if (!range) return res.status(404).json({ error: 'Range not found' });
+  db.run('UPDATE ranges SET provider=? WHERE id=?', [provider, range.id]);
+  logAction(req, 'assign_range_provider', 'ranges', { range: range.name, provider });
+  res.json({ ok: true, range: range.name, provider });
+});
+
 /* Import-time provider association (range-level link; number rows duplicate nahi hote) */
 app.post('/api/providers-info/assign-range', authRequired, requireRole('admin'), (req,res)=>{
   const b = req.body || {};

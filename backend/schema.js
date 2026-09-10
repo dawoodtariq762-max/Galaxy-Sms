@@ -336,6 +336,7 @@ function createTables() {
   )`);
   /* GALAXY P6: provider accounting (additive, non-destructive) */
   ensureColumn('galaxy_providers', 'payment_method', "TEXT DEFAULT ''");
+  ensureColumn('galaxy_providers', 'status', "TEXT DEFAULT 'Active'");
   ensureColumn('galaxy_providers', 'conn_type', "TEXT DEFAULT ''");
   db.run(`CREATE TABLE IF NOT EXISTS provider_payments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -345,8 +346,14 @@ function createTables() {
     currency TEXT DEFAULT 'USD',
     paid_at TEXT DEFAULT (datetime('now')),
     created_by TEXT DEFAULT '',
-    notes TEXT DEFAULT ''
+    notes TEXT DEFAULT '',
+    prev_unpaid TEXT DEFAULT '0',
+    remaining_unpaid TEXT DEFAULT '0',
+    period TEXT DEFAULT ''
   )`);
+  ensureColumn('provider_payments', 'prev_unpaid', "TEXT DEFAULT '0'");
+  ensureColumn('provider_payments', 'remaining_unpaid', "TEXT DEFAULT '0'");
+  ensureColumn('provider_payments', 'period', "TEXT DEFAULT ''");
   db.run(`CREATE INDEX IF NOT EXISTS idx_provider_payments_name ON provider_payments(provider_name)`);
   ensureColumn('sms_records', 'is_test', 'INTEGER DEFAULT 0');
   ensureColumn('sms_records', 'test_batch_id', "TEXT DEFAULT ''");

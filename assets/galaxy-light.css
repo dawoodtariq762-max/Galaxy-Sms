@@ -118,3 +118,10 @@ body.gx-light .gx-btn.gx-violet{color:#7c3aed!important;background:rgba(124,58,2
 body.gx-light .gx-btn.gx-violet:hover{background:rgba(124,58,237,.18)!important;color:#5b21b6!important}
 body.gx-light .gx-btn.danger{color:#d64545!important;background:rgba(220,38,38,.08)!important;border-color:rgba(220,38,38,.32)!important;box-shadow:0 1px 6px rgba(220,38,38,.12)}
 body.gx-light .gx-btn.danger:hover{background:rgba(220,38,38,.15)!important;color:#a82f2f!important}
+body.gx-light .gx-pay-chip .v{color:#16264f!important}
+body.gx-light .gx-pay-chip .t{color:#5c6a8a!important}
+body.gx-light tbody tr td,body.gx-light tbody td{color:#16264f!important}
+body.gx-light tbody tr td b{color:#0f2454!important}
+body.gx-light .page-head h2,body.gx-light .breadcrumb,body.gx-light .sub{color:#16264f!important}
+body.gx-light .breadcrumb,body.gx-light .sub,body.gx-light .hint,body.gx-light .muted{color:#5c6a8a!important}
+body.gx-light .gx-pay-chip .v{color:#16264f!important}
