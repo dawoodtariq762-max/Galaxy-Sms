@@ -240,6 +240,37 @@
     });
   }
   window.drawServerPagination = window.drawServerPagination || drawServerPagination;
+
+  /* ===== P11: ROLE-BASED PAGE-SIZE OPTIONS =====
+     UI options per role (backend ROLE_PAGE_MAX independently enforces the real ceiling).
+     Previous options (recorded): static <option> lists in HTML (mostly 25..1000/All). */
+  var GX_ROLE_PAGE_OPTIONS = {
+    client:  ['25', '50', '100', '500'],
+    test:    ['25', '50', '100', '500'],
+    agent:   ['25', '50', '100', '250', '500', '1000'],
+    manager: ['25', '50', '100', '250', '500', '1000', '2500', '5000'],
+    admin:   ['25', '50', '100', '250', '500', '1000', '2500', '5000', '10000', '20000', '30000', '50000', '100000', 'All']
+  };
+  function gxApplyRolePageOptions() {
+    try {
+      var role = (localStorage.getItem('ms_role') || '').toLowerCase();
+      var opts = GX_ROLE_PAGE_OPTIONS[role];
+      if (!opts) return;
+      var want = '|' + opts.join('|') + '|';
+      document.querySelectorAll('select[id$="Len"]').forEach(function(sel) {
+        var curVals = '|' + Array.prototype.map.call(sel.options, function(o) { return o.value; }).join('|') + '|';
+        if (curVals === want) return; /* already correct — idempotent */
+        var cur = sel.value;
+        sel.innerHTML = opts.map(function(o) { return '<option value="' + o + '"' + (cur === o ? ' selected' : '') + '>' + o + '</option>'; }).join('');
+        if (opts.indexOf(cur) === -1) sel.value = '25';
+      });
+    } catch (e) { console.warn('role page options failed', e); }
+  }
+  window.gxApplyRolePageOptions = gxApplyRolePageOptions;
+  /* re-apply twice: immediately + delayed (panel late-renders can rewrite selects) */
+  gxApplyRolePageOptions();
+  setTimeout(gxApplyRolePageOptions, 1500);
+  document.addEventListener('DOMContentLoaded', function() { gxApplyRolePageOptions(); setTimeout(gxApplyRolePageOptions, 1500); });
   function paginateRows(key, rows, len, infoId, rerender) {
     rows = rows || [];
     const state = window.__pagerState || (window.__pagerState = {});

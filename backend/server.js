@@ -1864,10 +1864,71 @@ const NUMBER_PAGE_DEFAULT = 25;
 // Admin "All" views may use up to NUMBER_PAGE_MAX_ADMIN (default 5,000).
 const NUMBER_PAGE_MAX = Math.max(100, parseInt(process.env.NUMBER_PAGE_MAX || '1000', 10) || 1000);
 const NUMBER_PAGE_MAX_ADMIN = Math.max(NUMBER_PAGE_MAX, parseInt(process.env.NUMBER_PAGE_MAX_ADMIN || '5000', 10) || 5000);
+/* P11: ROLE-BASED PAGE CEILINGS — backend-enforced (frontend options per role are cosmetic; THIS is the law).
+   A lower-role user cannot get a bigger page by tampering with limit/all params: values are clamped here.
+   Previous behaviour (recorded for rollback): every role capped at NUMBER_PAGE_MAX (1000);
+   admin 'all' capped at NUMBER_PAGE_MAX_ADMIN (5000). */
+const ROLE_PAGE_MAX = { admin: 100000, manager: 5000, agent: 1000, client: 500, test: 500 };
+const ROLE_ALL_MAX  = { admin: 200000 }; /* 'All' page-size allowed for admin only; others fall back to their role cap */
+function rolePageMax(role) { return ROLE_PAGE_MAX[role] || 500; }
+/* P11: memory-safe big-page responses. Pages <= STREAM_JSON_MAX_ROWS are built
+   normally (and cached); larger pages stream row-by-row from the SQLite cursor so
+   peak memory stays flat (a 100k-row res.json() triple-copies ~60MB+ and can OOM).
+   Response JSON shape is IDENTICAL to the cached path. */
+const STREAM_JSON_MAX_ROWS = 5000;
+function sendPagedStreaming(res, tailFields, sql, params, mapRow) {
+  res.status(200).setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.write('{"rows":[');
+  let first = true, buf = [], n = 0, lastRow = null;
+  const PUSH = (row) => {
+    if (mapRow) { const m = mapRow(row); if (m) row = m; }
+    lastRow = row;
+    buf.push(JSON.stringify(row));
+    if (buf.length >= 500) { res.write((first ? '' : ',') + buf.join(',')); first = false; buf = []; }
+  };
+  for (const row of db.iterate(sql, params)) { PUSH(row); n++; }
+  if (buf.length) res.write((first ? '' : ',') + buf.join(','));
+  let out = '';
+  out += '],"rows_count":' + n;
+  for (const [k, v] of Object.entries(tailFields || {})) out += ',' + JSON.stringify(k) + ':' + JSON.stringify(v === undefined ? null : v);
+  res.end(out + '}');
+}
 function parsePositiveInt(v, fallback) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
+/* P11: streaming big-page route (must stay registered ABOVE the cached small-page route).
+   Pages > STREAM_JSON_MAX_ROWS stream row-by-row (flat memory, identical JSON shape). */
+app.get('/api/numbers', authRequired, (req, res, next) => {
+  const q = req.query || {};
+  const paged = q.paged || q.page || q.limit;
+  if (!paged) return next();
+  const limitRaw = String(q.limit || NUMBER_PAGE_DEFAULT);
+  const isAllReq = limitRaw.toLowerCase() === 'all';
+  const numericReq = parsePositiveInt(limitRaw, 0);
+  const roleCap = rolePageMax(req.user.role);
+  const bigLimit = isAllReq ? (ROLE_ALL_MAX[req.user.role] || roleCap)
+                 : (numericReq > STREAM_JSON_MAX_ROWS ? Math.min(numericReq, roleCap) : 0);
+  if (!bigLimit) return next();
+  try {
+    const query = buildNumberQuery(req.user, q);
+    const countFrom = numberFromSql(query.where, query.need);
+    const total = +(db.get(`SELECT COUNT(*) AS c ${countFrom}`, query.params)?.c || 0);
+    const limit = isAllReq ? Math.min(bigLimit, Math.max(1, total || 1)) : bigLimit;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const page = Math.min(Math.max(1, parsePositiveInt(q.page || '1', 1)), totalPages);
+    const offset = (page - 1) * limit;
+    const sortMap = { range:'r.name COLLATE NOCASE', prefix:'n.prefix COLLATE NOCASE', number:'n.number', myVal:"CAST(COALESCE(NULLIF(n.rate,''),'0') AS REAL)", payVal:"CAST(COALESCE(NULLIF(n.payout,''),'0') AS REAL)", manager:'mu.username COLLATE NOCASE', agent:'au.username COLLATE NOCASE', client:'cu.username COLLATE NOCASE', owner:"COALESCE(mu.username,au.username,cu.username,'') COLLATE NOCASE" };
+    const sortCol = sortMap[q.sort] || 'n.number';
+    const dir = String(q.dir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+    sendPagedStreaming(res,
+      { total, page, limit, totalPages, role_max: roleCap, count_source: 'fast_database_count' },
+      `${numberSelectSql(query.where)} ORDER BY ${sortCol} ${dir}, n.id ASC LIMIT ? OFFSET ?`,
+      [...query.params, limit, offset], null);
+  } catch (e) { console.warn('numbers stream failed', e.message); if (res.headersSent) { try { res.end(); } catch (_) {} } else res.status(500).json({ error: 'Query failed' }); }
+});
+
 app.get('/api/numbers', authRequired, (req, res) => cachedJson(req, res, 60000, () => {
   const query = buildNumberQuery(req.user, req.query || {});
 
@@ -1878,10 +1939,11 @@ app.get('/api/numbers', authRequired, (req, res) => cachedJson(req, res, 60000, 
   const total = +(db.get(`SELECT COUNT(*) AS c ${countFrom}`, query.params)?.c || 0);
 
   const paged = req.query.paged || req.query.page || req.query.limit;
+  const roleCap = rolePageMax(req.user.role); /* P11: per-role ceiling, clamped below */
   if (paged) {
     const requestedLimitRaw = String(req.query.limit || NUMBER_PAGE_DEFAULT);
     const isAll = requestedLimitRaw.toLowerCase() === 'all';
-    const hardCap = (isAll && req.user.role === 'admin') ? NUMBER_PAGE_MAX_ADMIN : NUMBER_PAGE_MAX;
+    const hardCap = isAll ? (ROLE_ALL_MAX[req.user.role] || roleCap) : roleCap;
     const requestedLimit = isAll ? Math.max(1, Math.min(total || 1, hardCap)) : parsePositiveInt(requestedLimitRaw, NUMBER_PAGE_DEFAULT);
     const limit = Math.min(hardCap, Math.max(1, requestedLimit));
     const totalPages = isAll ? 1 : Math.max(1, Math.ceil(total / limit));
@@ -1893,10 +1955,12 @@ app.get('/api/numbers', authRequired, (req, res) => cachedJson(req, res, 60000, 
     const dir = String(req.query.dir||'asc').toLowerCase()==='desc'?'DESC':'ASC';
     const withLastSms = String(req.query.last_sms || req.query.include_last_sms || '') === '1';
     const rows = db.all(`${numberSelectSql(query.where, { lastSms: withLastSms })} ORDER BY ${sortCol} ${dir}, n.id ASC LIMIT ? OFFSET ?`, [...query.params, limit, offset]);
-    return { rows, total, page, limit, totalPages, count_source: 'fast_database_count', capped: total > limit * totalPages && total > hardCap ? hardCap : undefined };
+    return { rows, total, page, limit, totalPages, role_max: roleCap, count_source: 'fast_database_count', capped: total > limit * totalPages && total > hardCap ? hardCap : undefined };
   }
 
-  const rows = db.all(`${numberSelectSql(query.where)} ORDER BY n.number ASC`, query.params);
+  let rows = db.all(`${numberSelectSql(query.where)} ORDER BY n.number ASC`, query.params);
+  /* P11: legacy full-list path capped for non-admin roles (admin keeps legacy full dump for exports) */
+  if (req.user.role !== 'admin' && rows.length > roleCap) rows = rows.slice(0, roleCap);
   return rows;
 }, 'numbers_ver'));
 
@@ -2393,13 +2457,49 @@ function buildSmsPagedQuery(user, q = {}) {
     WHERE ${where.join(' AND ')}`;
   return { baseSql, params };
 }
+/* P11: streaming big-page route (must stay registered ABOVE the cached small-page route). */
+app.get('/api/sms/paged', authRequired, (req, res, next) => {
+  const q = req.query || {};
+  const limitRaw0 = String(q.limit || '25');
+  const isAllReq = limitRaw0.toLowerCase() === 'all';
+  const numericReq = parseInt(limitRaw0, 10) || 0;
+  const smsRoleCap = rolePageMax(req.user.role);
+  const bigLimit = isAllReq ? (ROLE_ALL_MAX[req.user.role] || smsRoleCap)
+                 : (numericReq > STREAM_JSON_MAX_ROWS ? Math.min(numericReq, smsRoleCap) : 0);
+  if (!bigLimit) return next();
+  try {
+    const built = buildSmsPagedQuery(req.user, q);
+    /* one combined scan for COUNT + totalPayment (was two identical scans per page) */
+    const agg = db.get(`SELECT COUNT(*) c, COALESCE(SUM(CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL)),0) p ${built.baseSql}`, built.params) || {};
+    const total = +(agg.c || 0);
+    const totalPayment = normalizeDecimalString(agg.p || '0') || '0';
+    const limit = isAllReq ? Math.min(bigLimit, Math.max(1, total || 1)) : bigLimit;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const page = Math.min(Math.max(1, parseInt(q.page || '1', 10) || 1), totalPages);
+    const offset = (page - 1) * limit;
+    const sortMap = { date:'s.received_at', number:'s.number', cli:'s.cli', range:'r.name', manager:'mu.username', agent:'au.username', client:'cu.username', payout:"CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL)" };
+    const sortCol = sortMap[q.sort] || 's.received_at';
+    const dir = String(q.dir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    sendPagedStreaming(res,
+      { total, page, limit, totalPages, totalPayment },
+      `SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
+          n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
+          cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
+        ${built.baseSql}
+        ORDER BY ${sortCol} ${dir}, s.id DESC LIMIT ? OFFSET ?`,
+      [...built.params, limit, offset], (row) => attachSmsPayoutFields([row])[0]);
+  } catch (e) { console.warn('sms stream failed', e.message); if (res.headersSent) { try { res.end(); } catch (_) {} } else res.status(500).json({ error: 'Query failed' }); }
+});
+
 app.get('/api/sms/paged', authRequired, (req, res) => cachedJson(req, res, 1200, () => {
   const q = req.query || {};
   const built = buildSmsPagedQuery(req.user, q);
   const total = +(db.get(`SELECT COUNT(*) c ${built.baseSql}`, built.params)?.c || 0);
   const totalPayment = normalizeDecimalString(db.get(`SELECT COALESCE(SUM(CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL)),0) p ${built.baseSql}`, built.params)?.p || '0') || '0';
   const limitRaw = String(q.limit || '25');
-  const limit = limitRaw.toLowerCase() === 'all' ? Math.max(1, Math.min(total || 1, 10000)) : Math.max(1, Math.min(parseInt(limitRaw || '25', 10) || 25, 1000));
+  /* P11: role-based ceiling (was: numeric<=1000, all<=10000 for every role) */
+  const smsRoleCap = rolePageMax(req.user.role);
+  const limit = limitRaw.toLowerCase() === 'all' ? Math.max(1, Math.min(total || 1, ROLE_ALL_MAX[req.user.role] || smsRoleCap)) : Math.max(1, Math.min(parseInt(limitRaw || '25', 10) || 25, smsRoleCap));
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const page = Math.min(Math.max(1, parseInt(q.page || '1', 10) || 1), totalPages);
   const offset = (page - 1) * limit;

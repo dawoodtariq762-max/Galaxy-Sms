@@ -343,8 +343,15 @@ process.on('exit', closeDb);
 process.once('SIGINT', () => { closeDb(); process.exit(0); });
 process.once('SIGTERM', () => { closeDb(); process.exit(0); });
 
+/* P11: cursor-based row iteration for memory-safe streaming of very large pages.
+   Returns a generator; rows are pulled one-by-one (no full materialization). */
+function* iterate(sql, params = []) {
+  const stmt = db.prepare(sql);
+  for (const row of stmt.iterate(...params)) yield row;
+}
+
 module.exports = {
-  init, run, runNoSave, exec, execNoSave, get, all, save,
+  init, run, runNoSave, exec, execNoSave, get, all, save, iterate,
   beginBatch, endBatch, endBatchNoSave, vacuum,
   exportBuffer, getDbFile, replaceWithFile,
   slowQueryStats, runAnalyze, inTransaction,
