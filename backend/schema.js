@@ -228,6 +228,36 @@ function createTables() {
     created_at TEXT DEFAULT (datetime('now'))
   )`);
 
+/* ============ P12: AI ASSISTANT TABLES (additive) ============ */
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT DEFAULT 'general',
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_assistant_kb_cat ON assistant_knowledge(category, enabled)`);
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT DEFAULT '',
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  /* Payment knowledge section: DISABLED by default (Admin enable kare ga) */
+  if (!db.get("SELECT value FROM assistant_settings WHERE key='payment_enabled'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('payment_enabled','0')");
+  if (!db.get("SELECT value FROM assistant_settings WHERE key='general_enabled'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('general_enabled','1')");
+  if (!db.get('SELECT id FROM assistant_knowledge LIMIT 1')) {
+    const insKb = (c,q,a,e,so) => db.run('INSERT INTO assistant_knowledge (category,question,answer,enabled,sort_order) VALUES (?,?,?,?,?)',[c,q,a,e,so]);
+    insKb('general', 'What is Galaxy SMS?', 'Galaxy SMS ek SMS management platform hai — panels, numbers, allocation, traffic aur rates manage karne ke liye.', 1, 1);
+    insKb('general', 'How can I get numbers?', 'Numbers page se ranges select kar ke allocate karein, ya mujhe likhen "I need numbers" — main guided allocation karwa dunga.', 1, 2);
+    insKb('payment', 'When are payments made?', 'Payments aap ke payment cycle ke mutabiq process hote hain. Exact schedule Admin panel ke payment settings me configured hai.', 0, 1);
+    insKb('payment', 'What does weekly mean?', 'Weekly cycle har Tuesday se shuru hone wale 7-din ke cycle par payments calculate hoti hain.', 0, 2);
+    insKb('payment', 'What does daily mean?', 'Daily cycle par har din ki earning agle din eligible hoti hai.', 0, 3);
+    insKb('payment', 'What does monthly mean?', 'Monthly (30x45) cycle me 30-din ka work cycle hota hai jo 30+45 din baad eligible hota hai.', 0, 4);
+  }
+
   db.run(`CREATE TABLE IF NOT EXISTS payment_notifications_v2 (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id INTEGER NOT NULL,

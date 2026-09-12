@@ -1154,7 +1154,12 @@ function normalizePaymentCycle(v){
   return 'weekly_7_1';
 }
 function paymentTypeLabel(t){ return ({daily:'Daily',weekly:'Weekly',weekly_7_1:'Weekly (7/1)',weekly_7_7:'Weekly (7/7)',monthly_30x45:'Monthly (30x45)'})[t] || ({daily:'Daily',weekly:'Weekly',monthly_30x45:'Monthly (30x45)'})[normalizePaymentType(t)] || 'Weekly'; }
-function assignedPaymentCycleForNumber(n, rangeRow={}){ const u=n?.agent_id?db.get('SELECT payment_type FROM users WHERE id=?',[n.agent_id]):null; return normalizePaymentCycle(u?.payment_type || n?.payterm || rangeRow?.payment_type || 'weekly_7_1'); }
+/* P12 PAYMENT FIX: per-allocation cycle is the law.
+   Priority: 1) numbers.payterm (set on THIS allocation) 2) users.payment_type (agent DEFAULT only)
+   3) ranges.payment_type (rate-card fallback) 4) weekly_7_1.
+   Previous order (recorded for rollback): users.payment_type || n.payterm || range.payment_type || weekly_7_1 —
+   agent-level default used to override the allocation and every allocation overwrote the agent default. */
+function assignedPaymentCycleForNumber(n, rangeRow={}){ const u=n?.agent_id?db.get('SELECT payment_type FROM users WHERE id=?',[n.agent_id]):null; return normalizePaymentCycle(n?.payterm || u?.payment_type || rangeRow?.payment_type || 'weekly_7_1'); }
 function assignedPaymentTypeForNumber(n, rangeRow={}){ return normalizePaymentType(assignedPaymentCycleForNumber(n, rangeRow)); }
 function payoutRateForPaymentCycle(row, cycle){
   cycle=normalizePaymentCycle(cycle);
@@ -1260,6 +1265,7 @@ app.post('/api/ranges', authRequired, requireRole('admin'), (req, res) => {
   const newRange = db.get('SELECT id FROM ranges WHERE name=? ORDER BY id DESC LIMIT 1', [b.name]);
   syncRangeTestNumbers(newRange ? newRange.id : ins.lastInsertRowid, b.test_numbers || b.test_number || '');
   logAction(req,'create_range','ranges',b.name);
+    try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
   res.json({ ok: true });
 });
 
@@ -1316,6 +1322,7 @@ app.post('/api/ranges/bulk-create', authRequired, requireRole('admin'), (req, re
   }
   clearApiReadCache();
   logAction(req, 'bulk_create_ranges', 'ranges', { inserted, restored, skipped, total: names.length });
+    try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
   res.json({ ok: true, inserted, restored, skipped, total: names.length, created, existing });
 });
 
@@ -1491,6 +1498,7 @@ app.put('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => {
      b.country || '', b.provider || '', b.currency_rate || '', b.cli_limit || '', b.range_start || '', b.range_end || '', b.status || 'Active', +req.params.id]);
   syncRangeTestNumbers(+req.params.id, b.test_numbers || b.test_number || '');
   logAction(req,'update_range','ranges',{id:+req.params.id});
+  try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
   res.json({ ok: true });
 });
 app.delete('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => {
@@ -1511,6 +1519,7 @@ app.delete('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => 
   // Soft-delete the range so historical SMS reports can still show the old range name via joins.
   db.run("UPDATE ranges SET deleted_at=datetime('now') WHERE id=?", [rangeId]);
   logAction(req,'delete_range','ranges',{id:rangeId,range:range.name,deleteSms,numberResult,rangeSmsDeleted,rangeSmsPreserved});
+  try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
   res.json({ ok: true, deleted_range: 1, deleted_numbers: numberResult.deleted || 0, deleted_sms: (numberResult.deleted_sms || 0) + rangeSmsDeleted, preserved_sms: (numberResult.preserved_sms || 0) + rangeSmsPreserved });
 });
 
@@ -2011,7 +2020,11 @@ app.post('/api/numbers/allocate', authRequired, (req, res) => {
     sets = 'client_id=?, agent_id=?, manager_id=?';
     vals = [target.id, agentId, mgrId];
   }
-  if (target.role === 'agent' && payterm) { const pt=normalizePaymentCycle(payterm); sets += ', payterm=?'; vals.push(pt); try{ db.run('UPDATE users SET payment_type=? WHERE id=? AND role=\'agent\'',[pt,target.id]); }catch(e){} }
+  /* P12 PAYMENT FIX: cycle sirf IS allocation par (numbers.payterm). Agent ka global
+     users.payment_type default ab allocation se OVERWRITE NAHI hota — wo sirf Agent
+     settings (PUT /api/users/:id) se badalta hai. Purana line (rollback):
+     try{ db.run('UPDATE users SET payment_type=? WHERE id=? AND role=\'agent\'',[pt,target.id]); }catch(e){} */
+  if (target.role === 'agent' && payterm) { const pt=normalizePaymentCycle(payterm); sets += ', payterm=?'; vals.push(pt); }
   // Rate lock rule: Admin->Manager and Manager->Agent must keep the existing/Admin rate.
   // Only Agent->Client can set/change client payout.
   if (req.user.role === 'agent' && payout !== undefined && payout !== '') { sets += ', payout=?'; vals.push(String(payout)); }
@@ -2318,10 +2331,11 @@ async function performSmartDivideJob(job){
   let ownerCond = '1=1', ownerParams = [];
   if (user.role === 'manager') { ownerCond = 'manager_id=?'; ownerParams = [user.id]; }
   else if (user.role === 'agent') { ownerCond = 'agent_id=?'; ownerParams = [user.id]; }
-  const smartType = normalizePaymentType(payterm || 'weekly');
+  /* P12 PAYMENT FIX: normalizePaymentCycle (pehle normalizePaymentType tha jo weekly_7_7 ko 'weekly' collapse kar deta tha — rollback: normalizePaymentType(payterm || 'weekly')) */
+  const smartType = normalizePaymentCycle(payterm || 'weekly_7_1');
   setJob(job,{status:'processing',started_at:new Date().toISOString(),progress:0,processed:0,total:0,message:'Selecting numbers'});
   try{
-    if(wantRole==='agent') target_ids.forEach(tid=>db.runNoSave('UPDATE users SET payment_type=? WHERE id=?',[smartType,tid]));
+    /* P12 PAYMENT FIX: users.payment_type overwrite removed — smart-divide cycle ab sirf allocated numbers ke payterm par (rollback: upar wala line). */
     const report=[]; let total=0; let planned=0;
     // First pass counts selected IDs and keeps pools in memory; avoids DB save per number.
     const rangePools=[];
@@ -4263,5 +4277,7 @@ const PORT = process.env.PORT || 4000;
     console.log('• Payment ledger startup backfill disabled (new OTPs are recorded normally)');
   }
   console.log('• API Integration poller disabled (HTTP incoming only)');
+  /* P12: AI Assistant (independent limits, ASSISTANT_ENABLED kill-switch) */
+  try { require('./assistant').register(app); console.log('• AI Assistant registered'); } catch (e) { console.error('[ASSISTANT] register failed:', e.message); }
   app.listen(PORT, () => console.log(`\n✅ Galaxy SMS backend running: http://localhost:${PORT}\n`));
 })();

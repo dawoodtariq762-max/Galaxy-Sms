@@ -660,4 +660,37 @@
     mo.observe(document.body,{childList:true,subtree:true});
   }
   document.addEventListener('DOMContentLoaded', ()=>{ initExportButtons(); initActionFeedback(); initPanelHistory(); initIdleLogout(); initTopbarControls(); initRoutePersistence(); initTimeLocalization(); initLengthSelectObserver(); });
+
+  /* ============ P12: AI ASSISTANT WIDGET (admin/manager/agent; client par status 403 -> render nahi) ============ */
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(async () => {
+      if (document.getElementById('gxAssistantBtn')) return;
+      try {
+        const st = await req('GET', '/assistant/status');
+        if (!st || !st.enabled || !st.can_use) return;
+        const css = document.createElement('style');
+        css.textContent = '#gxAssistantBtn{position:fixed;right:18px;bottom:18px;z-index:9999;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#6d5efc,#3ec6ff);color:#fff;font-size:22px;box-shadow:0 6px 18px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}#gxAssistantWin{position:fixed;right:18px;bottom:80px;z-index:9999;width:min(92vw,350px);max-height:min(70vh,520px);display:none;flex-direction:column;background:#101733;color:#e8ecff;border:1px solid rgba(255,255,255,.14);border-radius:14px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.45);font-family:inherit}#gxAssistantWin.open{display:flex}#gxHead{padding:10px 14px;background:rgba(255,255,255,.06);font-weight:600;font-size:14px;display:flex;justify-content:space-between;align-items:center}#gxHead button{background:none;border:none;color:#9fb0e8;font-size:18px;cursor:pointer}#gxMsgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.45}.gxA{align-self:flex-start;background:rgba(110,94,252,.18);border:1px solid rgba(110,94,252,.35);padding:8px 11px;border-radius:10px 10px 10px 3px;max-width:85%;white-space:pre-wrap;word-wrap:break-word}.gxU{align-self:flex-end;background:linear-gradient(135deg,#6d5efc,#3ec6ff);padding:8px 11px;border-radius:10px 10px 3px 10px;max-width:85%;white-space:pre-wrap;word-wrap:break-word}#gxForm{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(255,255,255,.1)}#gxIn{flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#e8ecff;padding:8px 10px;font-size:13.5px;outline:none}#gxSend{background:linear-gradient(135deg,#6d5efc,#3ec6ff);border:none;border-radius:8px;color:#fff;padding:8px 14px;cursor:pointer;font-weight:600}@media(max-width:480px){#gxAssistantWin{right:10px;bottom:74px}}';
+        document.head.appendChild(css);
+        const btn = document.createElement('button');
+        btn.id = 'gxAssistantBtn'; btn.type = 'button'; btn.title = 'Galaxy SMS Assistant'; btn.textContent = '\u{1F916}';
+        const win = document.createElement('div'); win.id = 'gxAssistantWin';
+        win.innerHTML = '<div id="gxHead"><span>Galaxy SMS Assistant</span><button type="button" id="gxClose">\u2715</button></div><div id="gxMsgs"></div><form id="gxForm"><input id="gxIn" autocomplete="off" placeholder="Message likhen..."><button type="submit" id="gxSend">Send</button></form>';
+        document.body.appendChild(btn); document.body.appendChild(win);
+        const msgs = win.querySelector('#gxMsgs');
+        const add = (t, who) => { const d = document.createElement('div'); d.className = who === 'u' ? 'gxU' : 'gxA'; d.textContent = t; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; };
+        btn.onclick = () => { win.classList.toggle('open'); if (win.classList.contains('open') && !msgs.children.length) add('Hello! How can I help you? Main Galaxy SMS assistant hoon \u2014 rates, ranges, ya numbers ke liye poochein.', 'a'); };
+        win.querySelector('#gxClose').onclick = () => win.classList.remove('open');
+        let busy = false;
+        win.querySelector('#gxForm').onsubmit = async (e) => {
+          e.preventDefault(); if (busy) return;
+          const inp = win.querySelector('#gxIn'); const text = inp.value.trim(); if (!text) return;
+          inp.value = ''; add(text, 'u'); busy = true;
+          try { const r = await req('POST', '/assistant/message', { text }); add(r.reply || '...', 'a'); }
+          catch (err) { add('\u26A0 ' + err.message, 'a'); }
+          busy = false; msgs.scrollTop = msgs.scrollHeight;
+        };
+      } catch (_) { /* client role ya disabled \u2014 koi widget nahi */ }
+    }, 400);
+  });
+
 })();
