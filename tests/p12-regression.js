@@ -32,21 +32,30 @@ async function sms(number, id) {
   t('setup: all 4 logins', !!(adm && mgr && agt && cli));
   dbo.prepare("UPDATE users SET payment_type='weekly' WHERE username='demo_agt'").run();
 
-  /* ================= AI PERMISSIONS ================= */
+  /* ================= AI PERMISSIONS (P13: agent-only assistant) ================= */
   const st = await api('/api/assistant/status', 'GET', null, adm);
-  t('AI status admin: 200 can_use', st.status === 200 && st.j.can_use === true && st.j.enabled === true, JSON.stringify(st.j));
-  const stC = await api('/api/assistant/status', 'GET', null, cli);
-  t('AI status client: can_use=false (widget hidden)', stC.status === 200 && stC.j.can_use === false, JSON.stringify(stC.j));
+  t('AI status admin: can_use=false (widget sirf agent)', st.status === 200 && st.j.can_use === false && st.j.enabled === true, JSON.stringify(st.j));
+  const stA = await api('/api/assistant/status', 'GET', null, agt);
+  t('AI status agent: can_use=true', stA.status === 200 && stA.j.can_use === true, JSON.stringify(stA.j));
+  t('AI status client: can_use=false', (await api('/api/assistant/status', 'GET', null, cli)).j.can_use === false);
+  t('AI message manager: 403 (agent-only)', (await api('/api/assistant/message', 'POST', { text: 'hi' }, mgr)).status === 403);
+  t('AI message admin: 403 (agent-only)', (await api('/api/assistant/message', 'POST', { text: 'hi' }, adm)).status === 403);
   t('AI message client: 403', (await api('/api/assistant/message', 'POST', { text: 'hi' }, cli)).status === 403);
   t('AI message unauthenticated: denied', (await api('/api/assistant/message', 'POST', { text: 'hi' })).status >= 400);
 
-  /* ================= TIER-1 KNOWLEDGE ================= */
-  const hello = await api('/api/assistant/message', 'POST', { text: 'What is Galaxy SMS?' }, agt);
-  t('Tier1: knowledge answer', hello.status === 200 && hello.j.source === 'knowledge' && (hello.j.reply || '').length > 10, (hello.j.reply || '').slice(0, 50));
+  /* ================= TIER-1: greeting/rates/availability/knowledge ================= */
+  const hello = await api('/api/assistant/message', 'POST', { text: 'hi' }, agt);
+  t('#1 greeting: username recognized', hello.status === 200 && /demo_agt|demo agent/i.test(hello.j.reply || ''), (hello.j.reply || '').slice(0, 70));
+  const rates = await api('/api/assistant/message', 'POST', { text: 'rate' }, agt);
+  t('#4 rates: "rate" -> configured rates', rates.status === 200 && /Daily/i.test(rates.j.reply || '') && /Weekly/i.test(rates.j.reply || ''), (rates.j.reply || '').slice(0, 60));
+  const avail = await api('/api/assistant/message', 'POST', { text: 'kitne numbers available hain?' }, agt);
+  t('#5 availability: pool answer', avail.status === 200 && /available/i.test(avail.j.reply || '') && (/Total|\d|se contact karein/.test(avail.j.reply || '')), (avail.j.reply || '').slice(0, 60));
+  const kb1 = await api('/api/assistant/message', 'POST', { text: 'What is Galaxy SMS?' }, agt);
+  t('Tier1: knowledge answer', kb1.status === 200 && kb1.j.source === 'knowledge', (kb1.j.reply || '').slice(0, 50));
   const kbList = await api('/api/assistant/knowledge', 'GET', null, adm);
-  const seedRange = kbList.status === 200;
-  t('knowledge GET (admin)', seedRange, 'rows ' + (kbList.j.rows || []).length);
+  t('knowledge GET (admin)', kbList.status === 200, 'rows ' + (kbList.j.rows || []).length);
   t('payment knowledge DISABLED by default', kbList.j.settings && kbList.j.settings.payment_enabled === '0', JSON.stringify(kbList.j.settings));
+  t('knowledge GET agent DENIED', (await api('/api/assistant/knowledge', 'GET', null, agt)).status === 403);
   const payQ = await api('/api/assistant/message', 'POST', { text: 'payment kab milte hain?' }, agt);
   t('payment schedule -> guard, no invented dates', payQ.status === 200 && /confirm nahi|team/i.test(payQ.j.reply || ''), (payQ.j.reply || '').slice(0, 60));
   const kbAdd = await api('/api/assistant/knowledge', 'POST', { category: 'general', question: 'Refund kaise milega?', answer: 'Refund ke liye team se rabta karein.' }, adm);
@@ -58,27 +67,9 @@ async function sms(number, id) {
   const kbQ2 = await api('/api/assistant/message', 'POST', { text: 'Refund kaise milega?' }, agt);
   t('disabled knowledge NOT served', kbQ2.j.source !== 'knowledge', 'src ' + kbQ2.j.source);
   await api('/api/assistant/knowledge/' + kbAdd.j.id, 'DELETE', null, adm);
-  const exp = await fetch(BASE + '/api/assistant/knowledge/export.txt', { headers: { Authorization: 'Bearer ' + agt } });
+  const exp = await fetch(BASE + '/api/assistant/knowledge/export.txt', { headers: { Authorization: 'Bearer ' + adm } });
   const expTxt = await exp.text();
-  t('export.txt agent-downloadable', exp.status === 200 && /GALAXY SMS/.test(expTxt) && (exp.headers.get('content-disposition') || '').includes('.txt'), expTxt.split('\n')[0]);
-
-  /* ================= AI ALLOCATION FLOW (agent: 10-msg budget) ================= */
-  const rangesJ = await api('/api/ranges', 'GET', null, adm);
-  const r0 = (Array.isArray(rangesJ.j) ? rangesJ.j : rangesJ.j.ranges || [])[0];
-  t('ranges exist', !!r0, r0 ? r0.name : 'NONE');
-  t('flow: intent', /range/i.test((await api('/api/assistant/message', 'POST', { text: 'I need numbers' }, agt)).j.reply || ''));
-  t('flow: wrong range rejected', /wrong range/i.test((await api('/api/assistant/message', 'POST', { text: 'zzz-nonexistent-xyz' }, agt)).j.reply || ''));
-  t('flow: valid range -> qty', /kitne numbers/i.test((await api('/api/assistant/message', 'POST', { text: r0.name }, agt)).j.reply || ''));
-  t('flow: 700 -> 500-cap', /maximum I can provide is 500/i.test((await api('/api/assistant/message', 'POST', { text: '700' }, agt)).j.reply || ''));
-  t('flow: cancel branch works', /cancel/i.test((await api('/api/assistant/message', 'POST', { text: 'cancel karo' }, agt)).j.reply || ''));
-  await api('/api/assistant/message', 'POST', { text: 'mujhe numbers chahiye' }, agt);    /* pending intent for steal-test */
-  await api('/api/assistant/message', 'POST', { text: r0.name }, agt);                    /* (agent budget: 7/10 used) */
-  const steal = await api('/api/assistant/message', 'POST', { text: 'yes' }, mgr);
-  t('intent bound to user: mgr cannot confirm agent intent', steal.status === 200 && !steal.j.done && !/✅/.test(steal.j.reply || ''), (steal.j.reply || '').slice(0, 50));
-  /* rate limit: mgr ko loop me 429 chahiye */
-  let capped = false;
-  for (let i = 0; i < 14 && !capped; i++) if ((await api('/api/assistant/message', 'POST', { text: 'rate? ' + i }, mgr)).status === 429) capped = true;
-  t('assistant per-user limit -> 429', capped);
+  t('export.txt admin-downloadable', exp.status === 200 && /GALAXY SMS/.test(expTxt) && (exp.headers.get('content-disposition') || '').includes('.txt'), expTxt.split('\n')[0]);
 
   /* ================= PAYMENT: setup ================= */
   /* carrier lock-password feature API PUT ko lock rakhta hai — test harness direct DB enable karta hai (ingest getCarrierSettings() DB se parhta hai) */
@@ -102,17 +93,12 @@ async function sms(number, id) {
   const a1 = await api('/api/numbers/allocate', 'POST', { ids: all.slice(2, 8), target_id: mg.id }, adm, ik());
   t('setup: admin->manager allocate', a1.status === 200 && a1.j.allocated === 6, JSON.stringify(a1.j).slice(0, 60));
 
-  /* TEST 5: ADMIN AI-guided allocation (Daily) — full flow through existing business logic */
-  await api('/api/assistant/message', 'POST', { text: 'I need numbers' }, adm);
-  await api('/api/assistant/message', 'POST', { text: 'P12T' }, adm);
-  t('flow(admin): qty -> cycle', /daily|weekly|monthly/i.test((await api('/api/assistant/message', 'POST', { text: '2' }, adm)).j.reply || ''));
-  t('flow(admin): cycle -> confirm', /confirm/i.test((await api('/api/assistant/message', 'POST', { text: 'daily' }, adm)).j.reply || ''));
-  const t5 = await api('/api/assistant/message', 'POST', { text: 'yes' }, adm);
-  t('T5: AI allocation executed (explicit Yes)', t5.status === 200 && /✅/i.test(t5.j.reply || ''), (t5.j.reply || '').slice(0, 90));
+  /* TEST 5: ADMIN direct allocation (Daily) on unallocated numbers */
+  const t5 = await api('/api/numbers/allocate', 'POST', { ids: all.slice(0, 2), target_id: ag.id, payterm: 'daily' }, adm, ik());
+  t('T5: admin allocate Daily OK', t5.status === 200 && t5.j.allocated === 2, JSON.stringify(t5.j).slice(0, 60));
   t('T5: numbers.payterm=daily', dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE id IN (?,?) AND payterm='daily'").get(all[0], all[1]).c === 2);
   t('T5: allocated to demo_agt', dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE id IN (?,?) AND agent_id=?").get(all[0], all[1], ag.id).c === 2);
   t('T5: agent users.payment_type UNTOUCHED (weekly)', dbo.prepare("SELECT payment_type FROM users WHERE id=?").get(ag.id).payment_type === 'weekly');
-  t('T5: audit log contains ai-forced allocate', dbo.prepare("SELECT COUNT(*) c FROM audit_logs WHERE action='allocate_numbers' AND username='vibepk'").get().c >= 1);
 
   /* TEST 6: manager->agent (manager-owned numbers => force:true, audited) with Monthly */
   const t6 = await api('/api/numbers/allocate', 'POST', { ids: all.slice(2, 4), target_id: ag.id, payterm: 'monthly_30x45', force: true }, mgr, fk());
@@ -176,6 +162,57 @@ async function sms(number, id) {
   const dash = await api('/api/stats-summary/manager', 'GET', null, adm);
   const numsPg = await api('/api/numbers?paged=1&page=1&limit=25', 'GET', null, adm);
   t('panel smoke: stats + numbers page 200', dash.status === 200 && numsPg.status === 200 && Array.isArray(numsPg.j.rows));
+
+  /* ================= AI GUIDED ALLOCATION (P13: agent self, manager/admin pool) ================= */
+  await api('/api/ranges', 'POST', { name: 'P12C', prefix: '92155', currency: 'USD', rate_1_1: '0.11', rate_7_1: '0.22', rate_7_7: '0.33', rate_30_45: '0.55', payment_type: 'weekly', status: 'Active' }, adm);
+  const cNums = Array.from({ length: 6 }, (_, i) => '92155500' + String(i + 1).padStart(2, '0'));
+  await api('/api/numbers/import', 'POST', { range_name: 'P12C', prefix: '92155', numbers: cNums, payterm: 'weekly_7_1', payout: '0' }, adm);
+  await new Promise(r => setTimeout(r, 700));
+  const rC = dbo.prepare("SELECT id FROM ranges WHERE name='P12C'").get();
+  const cAll = dbo.prepare('SELECT id FROM numbers WHERE range_id=? ORDER BY id').all(rC.id).map(r => r.id);
+  await api('/api/numbers/allocate', 'POST', { ids: cAll, target_id: mg.id }, adm, ik());
+  t('AI-alloc setup: P12C 6 numbers manager pool me', dbo.prepare('SELECT COUNT(*) c FROM numbers WHERE range_id=? AND manager_id=? AND agent_id IS NULL').get(rC.id, mg.id).c === 6);
+
+  const A = (text) => api('/api/assistant/message', 'POST', { text }, agt);
+  t('#3 flow: intent', /range/i.test((await A('I need numbers')).j.reply || ''));
+  t('#3 flow: wrong range rejected', /wrong range/i.test((await A('zzz-nonexistent-xyz')).j.reply || ''));
+  t('#3 flow: valid range -> qty', /kitne numbers/i.test((await A('P12C')).j.reply || ''));
+  t('#3 flow: 700 -> 500-cap', /maximum I can provide is 500/i.test((await A('700')).j.reply || ''));
+  t('#3 flow: over-pool -> manager contact', /manager.*contact|contact.*manager/i.test((await A('500')).j.reply || ''));
+  t('#3 flow: qty 2 -> cycle', /daily|weekly|monthly/i.test((await A('2')).j.reply || ''));
+  const conf = await A('daily');
+  t('#1 flow: confirmation self-target + cycle', /Aap khud \(demo_agt\)/.test(conf.j.reply || '') && /Daily/.test(conf.j.reply || ''), (conf.j.reply || '').slice(0, 90));
+  const yes = await A('haan');
+  t('#2/#3 AI alloc: executed (existing logic, no fetch-fail)', yes.status === 200 && /✅/.test(yes.j.reply || ''), (yes.j.reply || '').slice(0, 90));
+  t('#3 AI alloc: agent_id + manager chain + payterm daily', dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE range_id=? AND agent_id=? AND manager_id=? AND payterm='daily'").get(rC.id, ag.id, mg.id).c === 2);
+  t('#3 AI alloc: users.payment_type untouched', dbo.prepare("SELECT payment_type FROM users WHERE id=?").get(ag.id).payment_type === 'monthly_30x45');
+  t('#3 AI alloc: audit trail', dbo.prepare("SELECT COUNT(*) c FROM audit_logs WHERE action='ai_assistant_allocation'").get().c >= 1);
+
+  await A('I need numbers'); await A('P12C'); await A('1'); await A('weekly');
+  t('#3 flow: explicit No cancels', /cancel/i.test((await A('nahi')).j.reply || ''));
+
+  /* #4: admin-child agent (kisi manager ke niche nahi) */
+  await api('/api/users', 'POST', { username: 'p13agt2', password: 'Test123!', role: 'agent', name: 'P13 Agent Two' }, adm);
+  const ag2row = dbo.prepare("SELECT id,parent_id FROM users WHERE username='p13agt2'").get();
+  t('#4 admin-child agent created', !!ag2row, 'parent ' + (ag2row && ag2row.parent_id));
+  const ag2ptBefore = dbo.prepare('SELECT payment_type FROM users WHERE id=?').get(ag2row.id).payment_type;
+  const ag2 = await login('p13agt2', 'Test123!');
+  const B = (text) => api('/api/assistant/message', 'POST', { text }, ag2);
+  await api('/api/ranges', 'POST', { name: 'P12B', prefix: '92166', currency: 'USD', rate_1_1: '0.10', rate_7_1: '0.20', rate_7_7: '0.30', rate_30_45: '0.50', payment_type: 'weekly', status: 'Active' }, adm);
+  await api('/api/numbers/import', 'POST', { range_name: 'P12B', prefix: '92166', numbers: ['921666001', '921666002', '921666003'], payterm: 'weekly_7_1', payout: '0' }, adm);
+  await new Promise(r => setTimeout(r, 700));
+  const rB = dbo.prepare("SELECT id FROM ranges WHERE name='P12B'").get();
+  t('#4 setup: P12B fully unallocated (admin pool)', dbo.prepare('SELECT COUNT(*) c FROM numbers WHERE range_id=? AND manager_id IS NULL AND agent_id IS NULL').get(rB.id).c === 3);
+  await B('I need numbers'); await B('P12B'); await B('1'); await B('monthly');
+  const by2 = await B('yes');
+  t('#4 admin-child agent: admin pool se allocate', by2.status === 200 && /✅/.test(by2.j.reply || ''), (by2.j.reply || '').slice(0, 90));
+  t('#4 admin-child: manager_id NULL + payterm monthly', dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE range_id=? AND agent_id=? AND manager_id IS NULL AND payterm='monthly_30x45'").get(rB.id, ag2row.id).c === 1);
+  t('#4 admin-child: users.payment_type untouched', dbo.prepare("SELECT payment_type FROM users WHERE id=?").get(ag2row.id).payment_type === ag2ptBefore, 'before ' + ag2ptBefore);
+
+  /* #2 binding/limits: per-user 429 */
+  let capped = false;
+  for (let i = 0; i < 45 && !capped; i++) if ((await B('rate ' + i)).status === 429) capped = true;
+  t('assistant per-user limit -> 429', capped);
 
   console.log(results.join('\n'));
   console.log('\n==== PASS ' + PASS + ' / FAIL ' + FAIL + ' ====');

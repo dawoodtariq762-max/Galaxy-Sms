@@ -403,6 +403,7 @@
         <div class="sub-item" data-page="systemLogs"><span class="dot"></span> System Logs</div>
         <div class="sub-item" data-page="backupManagement"><span class="dot"></span> Backups</div>
       </div>
+      <div class="nav-item" data-page="aiKnowledge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/><path d="M9 17h6"/></svg><span>AI Assistant</span></div>
     </nav>
   </aside>
   <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
@@ -504,6 +505,25 @@
       <section class="page" id="page-clients"></section>
 
       <!-- ========== RATE MANAGEMENT ========== -->
+      <!-- ========== AI ASSISTANT KNOWLEDGE (P12/P13) ========== -->
+      <section class="page" id="page-aiKnowledge">
+        <div class="page-head"><div><h2>AI Assistant Knowledge</h2><div class="breadcrumb"><b>Management</b> › AI Assistant</div></div>
+          <div class="head-actions"><button type="button" class="gx-btn gx-blue" onclick="exportAiKbTxt()" data-tip="Download TXT" title="Download TXT">⬇ Export TXT</button></div></div>
+        <div class="card" style="padding:16px;margin-bottom:16px">
+          <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+            <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="aiPayEnabled" onchange="toggleAiPay(this.checked)"> Payment knowledge enabled</label>
+            <span class="muted" id="aiKbInfo" style="font-size:12.5px"></span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
+            <select id="aiKbCat" style="padding:9px 10px"><option value="general">Category: General</option><option value="payment">Category: Payment</option></select>
+            <input id="aiKbQ" placeholder="Question (e.g. What are payment dates?)" style="padding:9px 10px">
+            <input id="aiKbA" placeholder="Answer (jo assistant bolega)" style="padding:9px 10px">
+            <button type="button" class="gx-btn gx-green" onclick="addAiKb()">+ Add Question</button>
+          </div>
+          <div style="overflow-x:auto"><table class="table"><thead><tr><th>On</th><th>Category</th><th>Question</th><th>Answer</th><th style="width:120px">Actions</th></tr></thead><tbody id="aiKbBody"></tbody></table></div>
+        </div>
+      </section>
+
       <section class="page active" id="page-rates">
         <div class="page-head"><div><h2>Rate Management</h2><div class="breadcrumb"><b>Pricing</b> › Ranges &amp; Rates</div></div>
           <div class="head-actions"><!-- GALAXY: Import Ranges button removed per spec (import page remains via sidebar) --><button class="btn btn-purple" onclick="openRateModal(-1)">+ Add Range</button></div>
@@ -1115,7 +1135,7 @@ Nigeria"></textarea><div class="hint">Default rates will be NA. You can edit pay
 /* auth guard — management uses admin credentials */
 if(window.API){ API.guard('admin'); }
 window.PX_PANEL_MODE='management';
-const MANAGEMENT_ALLOWED_PAGES=new Set(['import','testImport','rates','cliLimit','limitManagement','carrierIntegration','apiProviders','smppConnections','systemLogs','backupManagement','providers']);
+const MANAGEMENT_ALLOWED_PAGES=new Set(['import','testImport','rates','cliLimit','limitManagement','carrierIntegration','apiProviders','smppConnections','systemLogs','backupManagement','providers','aiKnowledge']);
 function normalizePanelPage(id){ id=String(id||'rates'); return MANAGEMENT_ALLOWED_PAGES.has(id)?id:'rates'; }
 function applyPanelSplitUi(){ /* Management Panel keeps maintenance/config modules only. */ }
 /* =============== NAV =============== */
@@ -2658,11 +2678,53 @@ async function fillSmsDetailLiteFilters(){
   if(rangeSel && (!rangeSel.options || rangeSel.options.length<=1)) rangeSel.innerHTML='<option value="">All Ranges</option>'+((ratesData||[]).map(r=>`<option value="${r.name}">${r.name}</option>`).join(''));
   if(userSel && (!userSel.options || userSel.options.length<=1)) userSel.innerHTML='<option value="">All Managers</option>'+((usersData.manager||[]).map(m=>`<option value="${m.username}">${m.username}</option>`).join(''));
 }
+/* =============== P13: AI KNOWLEDGE MANAGEMENT =============== */
+let aiKbData={rows:[],settings:{}};
+function aiEsc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+async function loadAiKnowledge(){
+  try{ aiKbData=await API.get('/assistant/knowledge'); }catch(e){ aiKbData={rows:[],settings:{}}; }
+  const pay=document.getElementById('aiPayEnabled'); if(pay) pay.checked=aiKbData.settings.payment_enabled==='1';
+  const tb=document.getElementById('aiKbBody'); if(!tb) return;
+  tb.innerHTML=(aiKbData.rows||[]).map(r=>`<tr>
+    <td><input type="checkbox" ${r.enabled?'checked':''} onchange="toggleAiKb(${r.id},this.checked)" aria-label="Enable"></td>
+    <td><span class="tag ${r.category==='payment'?'tag-gold':'tag-blue'}">${aiEsc(r.category)}</span></td>
+    <td style="max-width:280px"><b>${aiEsc(r.question)}</b></td>
+    <td class="muted" style="max-width:340px">${aiEsc(r.answer)}</td>
+    <td><button type="button" class="gx-btn gx-blue" onclick="editAiKb(${r.id})" data-tip="Edit" title="Edit">✎</button>
+        <button type="button" class="gx-btn gx-red" onclick="delAiKb(${r.id})" data-tip="Delete" title="Delete">🗑</button></td>
+  </tr>`).join('')||`<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">No knowledge yet — upar se add karein</td></tr>`;
+  const info=document.getElementById('aiKbInfo');
+  if(info) info.textContent=`${(aiKbData.rows||[]).length} questions · payment answers ${aiKbData.settings.payment_enabled==='1'?'ENABLED (assistant bata sakta hai)':'DISABLED (assistant payment dates nahi batayega)'}`;
+}
+async function addAiKb(){
+  const category=document.getElementById('aiKbCat').value,q=document.getElementById('aiKbQ').value.trim(),a=document.getElementById('aiKbA').value.trim();
+  if(!q||!a){alert('Question aur answer dono likhen.');return;}
+  try{ await API.post('/assistant/knowledge',{category,question:q,answer:a,enabled:true}); document.getElementById('aiKbQ').value=''; document.getElementById('aiKbA').value=''; alert('✅ Question added'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);}
+}
+async function toggleAiKb(id,on){ try{ await API.put('/assistant/knowledge/'+id,{enabled:on}); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
+async function toggleAiPay(on){ try{ await API.put('/assistant/knowledge-settings',{payment_enabled:on}); alert(on?'✅ Payment knowledge ENABLED':'Payment knowledge DISABLED'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
+async function delAiKb(id){ if(!confirm('Delete this question?'))return; try{ await API.del('/assistant/knowledge/'+id); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
+async function editAiKb(id){
+  const r=(aiKbData.rows||[]).find(x=>x.id===id); if(!r)return;
+  const q=prompt('Question:',r.question); if(q===null)return;
+  const a=prompt('Answer:',r.answer); if(a===null)return;
+  try{ await API.put('/assistant/knowledge/'+id,{question:q,answer:a}); alert('✅ Updated'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);}
+}
+async function exportAiKbTxt(){
+  try{
+    const t=sessionStorage.getItem('ms_token')||localStorage.getItem('ms_token');
+    const r=await fetch('/api/assistant/knowledge/export.txt',{headers:{Authorization:'Bearer '+t}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const b=await r.blob(); const u=URL.createObjectURL(b);
+    const el=document.createElement('a'); el.href=u; el.download='galaxy-ranges-rates.txt'; document.body.appendChild(el); el.click(); el.remove(); URL.revokeObjectURL(u);
+  }catch(e){alert('❌ '+e.message);}
+}
 async function loadAdminPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
     if(page==='numbers'){ await ensureAdminRates(); await ensureAdminManagers(); return loadNumbers(); }
     if(page==='allocation'){ await ensureAdminRates(); await ensureAdminManagers(); return loadNumberSummary(); }
+    if(page==='aiKnowledge') return loadAiKnowledge();
     if(page==='rates') return loadRates();
     if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return renderSmsReport(); }
     if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); await fillSmsDetailLiteFilters(); return renderSmsDetail(); }

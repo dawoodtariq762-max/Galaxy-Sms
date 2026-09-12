@@ -1974,7 +1974,7 @@ app.get('/api/numbers', authRequired, (req, res) => cachedJson(req, res, 60000, 
 }, 'numbers_ver'));
 
 // allocate selected numbers to a target user (one level down)
-app.post('/api/numbers/allocate', authRequired, (req, res) => {
+function handleAllocate(req, res) {
   const { ids, target_id, payterm, payout } = req.body || {};
   if (!Array.isArray(ids) || !ids.length || !target_id)
     return res.status(400).json({ error: 'ids[] and target_id are required' });
@@ -2103,9 +2103,10 @@ app.post('/api/numbers/allocate', authRequired, (req, res) => {
     console.error('[ALLOCATE] failed:', e.message);
     return res.status(500).json({ error: 'Allocation failed: ' + e.message });
   }
-});
+}
 
 // unallocate selected numbers (clear the caller's ownership level downward, without changing old SMS snapshots)
+app.post('/api/numbers/allocate', authRequired, (req, res) => { handleAllocate(req, res); });
 app.post('/api/numbers/unallocate', authRequired, (req, res) => {
   const { ids } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids[] required' });
@@ -4278,6 +4279,6 @@ const PORT = process.env.PORT || 4000;
   }
   console.log('• API Integration poller disabled (HTTP incoming only)');
   /* P12: AI Assistant (independent limits, ASSISTANT_ENABLED kill-switch) */
-  try { require('./assistant').register(app); console.log('• AI Assistant registered'); } catch (e) { console.error('[ASSISTANT] register failed:', e.message); }
+  try { require('./assistant').register(app, { allocate: handleAllocate }); console.log('• AI Assistant registered (agent panel)'); } catch (e) { console.error('[ASSISTANT] register failed:', e.message); }
   app.listen(PORT, () => console.log(`\n✅ Galaxy SMS backend running: http://localhost:${PORT}\n`));
 })();
