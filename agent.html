@@ -737,8 +737,8 @@ function tIcon(c,s){return`<div class="si ${c}">${s}</div>`;}
 function buildSmsReport(){document.getElementById('page-smsReport').innerHTML=`
   <div class="page-head"><div><h2>SMS Report</h2><div class="breadcrumb"><b>CDR Stats</b> › SMS Report</div></div></div>
   <div class="toolbar"><div class="filter-row">
-    <label>From</label><input type="date" id="srFrom" onchange="renderSmsReport()"/>
-    <label>To</label><input type="date" id="srTo" onchange="renderSmsReport()"/>
+    <label>From</label><input type="date" id="srFrom" onchange="renderSmsReport();gxPopSmsFilterLists()"/>
+    <label>To</label><input type="date" id="srTo" onchange="renderSmsReport();gxPopSmsFilterLists()"/>
     <label>Time</label><input type="time" id="srTFrom" onchange="renderSmsReport()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="srTTo" onchange="renderSmsReport()"/>
     <label>Range</label><select id="srRange" onchange="renderSmsReport()"><option value="">All Ranges</option></select>
     <label>CLI</label><select id="srCli" onchange="renderSmsReport()"><option value="">All CLIs</option></select>
@@ -765,9 +765,12 @@ async function gxPopSmsFilterLists(){
     const opt=(arr,all)=>all+arr.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join('');
     if(rs&&rs.options.length<=1) rs.innerHTML=opt(names,'<option value="">All Ranges</option>');
     if(ns&&ns.options.length<=1) ns.innerHTML=opt(names,'<option value="">All Ranges</option>');
-    const clis=await API.smsClis();
-    if(cs&&cs.options.length<=1) cs.innerHTML=opt(clis,'<option value="">All CLIs</option>');
-    if(cs2&&cs2.options.length<=1) cs2.innerHTML=opt(clis,'<option value="">All CLIs</option>');
+const _rf=(document.getElementById('srFrom')?.value)||'', _rt=(document.getElementById('srTo')?.value)||'';
+    const clis=await API.smsClis(_rf,_rt);
+    if(cs) cs.innerHTML='<option value="">All CLIs</option>'+clis.map(c=>`<option>${String(c).replace(/</g,'&lt;')}</option>`).join('');
+    const _df=(document.getElementById('sdDateFrom')?.value)||'', _dt=(document.getElementById('sdDateTo')?.value)||'';
+    const clis2=await API.smsClis(_df,_dt);
+    if(cs2) cs2.innerHTML='<option value="">All CLIs</option>'+clis2.map(c=>`<option>${String(c).replace(/</g,'&lt;')}</option>`).join('');
   }catch(e){}
 }
 function srResetFilters(){ ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srCli'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srFrom','srTo'].forEach(id=>{const e=document.getElementById(id); if(e){e.value='';e.dataset.gxAuto='';}}); renderSmsReport(); }
@@ -785,7 +788,7 @@ function renderSmsReport(){const len=document.getElementById('srLen').value,q=(d
 function buildSmsDetail(){document.getElementById('page-smsDetail').innerHTML=`
   <div class="page-head"><div><h2>SMS Detailed Report</h2><div class="breadcrumb"><b>CDR Stats</b> › Detailed</div></div></div>
   <div class="toolbar">
-    <div class="filter-row"><label><input type="checkbox" id="sdUseDate" checked style="width:auto" onchange="renderSmsDetail()"> Date</label><input type="date" id="sdDateFrom" title="From date" onchange="renderSmsDetail()" /> <span class="muted" style="align-self:center">to</span> <input type="date" id="sdDateTo" title="To date" onchange="renderSmsDetail()" />
+    <div class="filter-row"><label><input type="checkbox" id="sdUseDate" checked style="width:auto" onchange="renderSmsDetail()"> Date</label><input type="date" id="sdDateFrom" title="From date" onchange="renderSmsDetail();gxPopSmsFilterLists()" /> <span class="muted" style="align-self:center">to</span> <input type="date" id="sdDateTo" title="To date" onchange="renderSmsDetail();gxPopSmsFilterLists()" />
     <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="toggleDetailFilters()"> Time</label><input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
     <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label><select id="sdRange" disabled onchange="renderSmsDetail()"><option value="">All Ranges</option></select>
     <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters()"> CLI</label><select id="sdCli" disabled onchange="renderSmsDetail()"><option value="">All CLIs</option></select>
@@ -956,9 +959,10 @@ async function loadAgentPayment(){
   const data=await API.get('/payment-v2/agent/summary');
   if(document.getElementById('agtWallet')) agtWallet.value=data.wallet?.wallet_address||'';
   const d=payBal(data.balances,'daily'), w=payBal(data.balances,'weekly'), m=payBal(data.balances,'monthly_30x45');
-  agtDailyBal.textContent='$'+d.available_balance;agtDailyMin.textContent='Minimum: $'+d.minimum;
-  agtWeeklyBal.textContent='$'+w.available_balance;agtWeeklyMin.textContent='Minimum: $'+w.minimum;
-  agtMonthlyBal.textContent='$'+m.available_balance;agtMonthlyMin.textContent='Minimum: $'+m.minimum;
+  const _earn=(x)=>{ const v=parseFloat(x.earned_amount)||0; return v>0?' · Earned $'+x.earned_amount+(x.next_eligible_at?' (eligible '+String(x.next_eligible_at).slice(0,10)+')':''):''; };
+  agtDailyBal.textContent='$'+d.available_balance;agtDailyMin.textContent='Minimum: $'+d.minimum+_earn(d);
+  agtWeeklyBal.textContent='$'+w.available_balance;agtWeeklyMin.textContent='Minimum: $'+w.minimum+_earn(w);
+  agtMonthlyBal.textContent='$'+m.available_balance;agtMonthlyMin.textContent='Minimum: $'+m.minimum+_earn(m);
   agtRequestButtons.innerHTML=[d,w,m].map(x=>`<button class="btn ${x.can_request?'btn-green':'btn-ghost'}" ${x.can_request?'':'disabled'} onclick="requestPayment('${x.payment_type}')">Request ${x.label}</button>`).join(' ');
   const rows=await API.get('/payment-v2/agent/requests');
   agtPayBody.innerHTML=rows.map(r=>`<tr><td>#${r.id}</td><td>${r.payment_type}</td><td class="cell-money">$${r.amount}</td><td class="mono">${r.wallet_address}</td><td>${r.status}</td><td>${(r.requested_at||'').slice(0,19)}</td><td>${r.txid||'—'}</td><td>${r.screenshot_url?`<a href="${r.screenshot_url}" target="_blank">View</a>`:'—'}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:20px">No payment history</td></tr>`;agtPayInfo.textContent=`${rows.length} request(s)`;

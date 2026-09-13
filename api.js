@@ -643,7 +643,7 @@
     ukDate: ukDateString,
     ukToday: () => ukDateString(new Date()),
     /* P14: role-scoped distinct CLI list for report C-Level filters */
-    smsClis: async () => { try { const d = await req('GET', '/sms/clis'); return d.clis || []; } catch (_) { return []; } },
+    smsClis: async (from, to) => { try { const p = new URLSearchParams(); if (from) p.set('from', from); if (to) p.set('to', to); const r = await API.get('/sms/clis' + (p.toString() ? '?' + p.toString() : '')); return r.clis || []; } catch (e) { return []; } },
     /* P14: fires cb once when the UK report-day rolls over (60s check, no requests) */
     onUkDayChange: (cb) => {
       if (typeof cb !== 'function') return;

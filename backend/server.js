@@ -1214,7 +1214,9 @@ function paymentCycleInfo(type, earnedAt){
 function walletValid(v){ return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(v||'').trim()); }
 function agentManagerId(agentId){ return db.get("SELECT parent_id FROM users WHERE id=? AND role='agent'",[agentId])?.parent_id || null; }
 function recordPaymentLedgerForSms(smsId, persist=true){
-  const srow=db.get(`SELECT s.id,s.agent_id,s.manager_id,s.range_id,s.payout_amount,s.received_at,COALESCE(NULLIF(s.payment_type,''), r.payment_type) AS payment_type FROM sms_records s LEFT JOIN ranges r ON r.id=s.range_id WHERE s.id=?`,[smsId]);
+  /* P16: priority 1) sms.payment_type (ingestion snapshot) 2) numbers.payterm (allocation)
+     3) users.payment_type (agent default) 4) ranges.payment_type 5) weekly — backfill rows ke liye bhi sahi cycle */
+  const srow=db.get(`SELECT s.id,s.agent_id,s.manager_id,s.range_id,s.payout_amount,s.received_at,COALESCE(NULLIF(s.payment_type,''), NULLIF(n.payterm,''), u.payment_type, r.payment_type, 'weekly') AS payment_type FROM sms_records s LEFT JOIN numbers n ON n.id=s.number_id LEFT JOIN users u ON u.id=s.agent_id LEFT JOIN ranges r ON r.id=s.range_id WHERE s.id=?`,[smsId]);
   if(!srow || !srow.agent_id || cents(srow.payout_amount)<=0) return;
   if(db.get('SELECT id FROM payment_ledger WHERE sms_record_id=?',[smsId])) return;
   const type=normalizePaymentType(srow.payment_type||'weekly'); const cyc=paymentCycleInfo(type,srow.received_at);
@@ -2621,8 +2623,15 @@ app.get('/api/sms', authRequired, (req, res) => cachedJson(req, res, 2500, () =>
 /* P14: distinct CLI (C-Level) list for report filters — role-scoped, cheap, cached */
 app.get('/api/sms/clis', authRequired, (req, res) => cachedJson(req, res, 30000, () => {
   const scope = smsScopeWhere(req.user, 's');
-  const rows = db.all(`SELECT DISTINCT s.cli AS cli FROM sms_records s WHERE s.cli IS NOT NULL AND s.cli<>'' AND ${scope.where} ORDER BY s.cli LIMIT 300`, scope.params);
-  return { clis: rows.map(r => r.cli) };
+  /* P16: CLI options sirf US din ke report data se (default = UK aaj), user ke authorized scope me.
+     Number/Range filters jaisa: jo CLIs aaj actually use huay. from/to optional override. */
+  const dq = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+  let from = dq(req.query.from) || ukTodayDateStr(0);
+  let to = dq(req.query.to) || from;
+  if (from > to) { const t = from; from = to; to = t; }
+  const start = ukLocalDateToUtcSql(from, 0), end = ukLocalDateToUtcSql(to, 1);
+  const rows = db.all(`SELECT DISTINCT s.cli AS cli FROM sms_records s WHERE s.cli IS NOT NULL AND s.cli<>'' AND s.received_at>=? AND s.received_at<? AND ${scope.where} ORDER BY s.cli LIMIT 300`, [start, end, ...scope.params]);
+  return { clis: rows.map(r => r.cli), from, to };
 }));
 
 // aggregated stats by dimension
@@ -3075,8 +3084,11 @@ app.delete('/api/numbers/imported-all', authRequired, requireRole('admin'), (req
 function paymentTypesSettings(){ return db.all('SELECT * FROM payment_v2_settings WHERE active=1 ORDER BY sort_order ASC').map(r=>({payment_type:r.payment_type,label:r.label,min_withdrawal:normalizeDecimalString(r.min_withdrawal)||'0'})); }
 function agentPaymentSummary(agentId){
   return paymentTypesSettings().map(t=>{
-    const available=paymentOpenBalance(agentId,t.payment_type,true), pending=paymentPendingAmount(agentId,t.payment_type), minimum=t.min_withdrawal;
-    return {...t, available_balance:available, pending_amount:pending, minimum, can_request:cents(available)>=cents(minimum) && cents(available)>0 && cents(pending)===0};
+    /* P16: earned-but-not-yet-eligible ledger bhi report karo (warna agent ko sab $0 nazar aata tha) */
+    const openAll=paymentOpenBalance(agentId,t.payment_type,false), available=paymentOpenBalance(agentId,t.payment_type,true), pending=paymentPendingAmount(agentId,t.payment_type), minimum=t.min_withdrawal;
+    const earnedPending=moneyFromCents(Math.max(0,cents(openAll)-cents(available)));
+    const nextEligible=(db.get(`SELECT MIN(eligible_at) AS d FROM payment_ledger WHERE agent_id=? AND payment_type=? AND status='open' AND eligible_at>?`,[agentId,normalizePaymentType(t.payment_type),utcSqlFromMs(Date.now())])||{}).d||'';
+    return {...t, available_balance:available, earned_amount:earnedPending, next_eligible_at:nextEligible, pending_amount:pending, minimum, can_request:cents(available)>=cents(minimum) && cents(available)>0 && cents(pending)===0};
   });
 }
 app.get('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res)=>res.json(paymentTypesSettings()));

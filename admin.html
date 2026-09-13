@@ -1186,8 +1186,8 @@ function buildSmsReport(){
   document.getElementById('page-smsReport').innerHTML=`
   <div class="page-head"><div><h2>SMS Report</h2><div class="breadcrumb"><b>CDR Stats</b> › SMS Report</div></div></div>
   <div class="toolbar"><div class="filter-row">
-    <label>From</label><input type="date" id="srFrom" onchange="renderSmsReport()"/>
-    <label>To</label><input type="date" id="srTo" onchange="renderSmsReport()"/>
+    <label>From</label><input type="date" id="srFrom" onchange="renderSmsReport();populateSmsReportFilterLists()"/>
+    <label>To</label><input type="date" id="srTo" onchange="renderSmsReport();populateSmsReportFilterLists()"/>
     <label>Time</label><input type="time" id="srTFrom" onchange="renderSmsReport()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="srTTo" onchange="renderSmsReport()"/>
     <label>Range</label><select id="srRange" onchange="renderSmsReport()"><option value="">All Ranges</option></select>
     <label>CLI</label><select id="srCli" onchange="renderSmsReport()"><option value="">All CLIs</option></select>
@@ -1213,7 +1213,8 @@ async function populateSmsReportFilterLists(){
     const rs=document.getElementById('srRange'), ms=document.getElementById('srManager'), cs=document.getElementById('srCli');
     if(rs && rs.options.length<=1){ let names=(typeof rangeNames!=='undefined'&&rangeNames.length)?rangeNames.slice():[]; if(!names.length){ try{ const rj=await API.get('/ranges'); const arr=Array.isArray(rj)?rj:(rj.ranges||[]); names=arr.map(x=>x.name).filter(Boolean);}catch(e){} } rs.innerHTML='<option value="">All Ranges</option>'+names.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
     if(ms && ms.options.length<=1){ const ms2=(typeof usersData!=='undefined'&&(usersData.manager||[]).length)?usersData.manager.map(x=>x.username||x.name).filter(Boolean):[]; ms.innerHTML='<option value="">All Managers</option>'+ms2.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
-    if(cs && cs.options.length<=1){ const clis=await API.smsClis(); cs.innerHTML='<option value="">All CLIs</option>'+clis.map(c=>`<option>${String(c).replace(/</g,'&lt;')}</option>`).join(''); }
+    /* P16: CLI list = current report dates (default UK aaj) ke scoped data se — har date-change par refresh */
+    if(cs){ const _f=(document.getElementById('srFrom')?.value)||'', _t=(document.getElementById('srTo')?.value)||''; const clis=await API.smsClis(_f,_t); cs.innerHTML='<option value="">All CLIs</option>'+clis.map(c=>`<option>${String(c).replace(/</g,'&lt;')}</option>`).join(''); }
   }catch(e){}
 }
 function srResetFilters(){ ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srCli','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); renderSmsReport(); }
