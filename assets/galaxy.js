@@ -214,7 +214,7 @@ try{
 }catch(e){}
 /* ---------------- LIGHT/DARK THEME TOGGLE (visual only, localStorage) ---------------- */
 GX.theme = {
-  apply(t){ document.body.classList.toggle('gx-light', t==='light'); },
+  apply(t){ document.body.classList.toggle('gx-light', t==='light'); try{ document.documentElement.classList.toggle('gx-light', t==='light'); }catch(e){} },
   current(){ try{ return localStorage.getItem('gx-theme')||'dark'; }catch(e){ return 'dark'; } },
   init(){
     this.apply(this.current());
@@ -240,6 +240,7 @@ GX.theme = {
   }
 };
 try{ GX.theme.init(); }catch(e){}
+try{ document.documentElement.classList.toggle('gx-light', (document.body.classList.contains('gx-light'))); }catch(e){}
 try{ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>GX.iconifyActions()); else GX.iconifyActions(); }catch(e){}
 GX.pay3=(v)=>{let s=String(v??'').replace(/[$,\s]/g,'');const m=s.match(/-?\d+(?:\.\d+)?/);if(!m)return '0';const p=m[0].split('.');if(p.length<2)return p[0];const d=p[1].slice(0,3).replace(/0+$/,'');return d?p[0]+'.'+d:p[0];};
 GX.moneyShort=(v)=>{const n=Number(v)||0;const a=Math.abs(n);if(a>=1e9)return (n/1e9).toFixed(a%1e9?2:0)+'B';if(a>=1e6)return (n/1e6).toFixed(a%1e6?2:0)+'M';if(a>=1e4)return (n/1e3).toFixed(a%1e3?1:0)+'K';let s=String(n);if(s.includes('.'))s=s.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');return s;};
