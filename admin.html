@@ -1201,7 +1201,7 @@ function buildSmsReport(){
     <select id="srLen" onchange="renderSmsReport()"><option>10</option><option selected>25</option><option>50</option><option value="All">All</option></select>${expBtns()}</div>
     <div class="tc-right"><label>Search:</label><input type="text" id="srSearch" oninput="renderSmsReport()" placeholder="Search..."/></div></div></div>
   <div class="table-wrap"><div class="tscroll"><table>
-    <thead><tr><th>Date</th><th>Manager</th><th>Range</th><th>Number</th><th>CLI</th><th>Payout Rate</th><th>SMS (Message Body)</th></tr></thead><tbody id="srBody"></tbody></table></div>
+    <thead><tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSrSort('range')">Range <span class="sort" id="srSort_range">\u21C5</span></th><th class="sortable" onclick="gxSrSort('number')">Number <span class="sort" id="srSort_number">\u21C5</span></th><th class="sortable" onclick="gxSrSort('cli')">CLI <span class="sort" id="srSort_cli">\u21C5</span></th><th class="sortable" onclick="gxSrSort('payout')">Payout Rate <span class="sort" id="srSort_payout">\u21C5</span></th><th>SMS (Message Body)</th></tr></thead><tbody id="srBody"></tbody></table></div>
     <div class="table-foot"><div class="info" id="srInfo"></div><div class="info" id="srPayoutInfo"></div></div></div>`;
   setDefaultDates('srFrom','srTo');
   populateSmsReportFilterLists();
@@ -1213,11 +1213,11 @@ async function populateSmsReportFilterLists(){
     const rs=document.getElementById('srRange'), ms=document.getElementById('srManager'), cs=document.getElementById('srCli');
     if(rs && rs.options.length<=1){ let names=(typeof rangeNames!=='undefined'&&rangeNames.length)?rangeNames.slice():[]; if(!names.length){ try{ const rj=await API.get('/ranges'); const arr=Array.isArray(rj)?rj:(rj.ranges||[]); names=arr.map(x=>x.name).filter(Boolean);}catch(e){} } rs.innerHTML='<option value="">All Ranges</option>'+names.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
     if(ms && ms.options.length<=1){ const ms2=(typeof usersData!=='undefined'&&(usersData.manager||[]).length)?usersData.manager.map(x=>x.username||x.name).filter(Boolean):[]; ms.innerHTML='<option value="">All Managers</option>'+ms2.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
-    /* P16: CLI list = current report dates (default UK aaj) ke scoped data se — har date-change par refresh */
-    if(cs){ const _f=(document.getElementById('srFrom')?.value)||'', _t=(document.getElementById('srTo')?.value)||''; const clis=await API.smsClis(_f,_t); cs.innerHTML='<option value="">All CLIs</option>'+clis.map(c=>`<option>${String(c).replace(/</g,'&lt;')}</option>`).join(''); }
+    /* P17: CLI list = CURRENT filtered dataset (dates+time+range+number+search+manager), counts ke saath */
+    if(cs){ const kv=cs.value; const rj=await API.smsClis(srListArgs()); cs.innerHTML=gxOptList(rj.items); if(kv){ cs.value=kv; if(cs.value!==kv) cs.value=''; } }
   }catch(e){}
 }
-function srResetFilters(){ ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srCli','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); renderSmsReport(); }
+function srResetFilters(){window.__srSort={k:'',d:''};gxResetSortHeads('srSort_'); ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srCli','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); renderSmsReport(); }
 async function loadSmsRecords(){
   try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; }
   // manager summary from real data
@@ -1293,9 +1293,11 @@ async function populateSmsDetailProviderList(){
   sel.innerHTML='<option value="">All Providers</option>'+provs.sort().map(p=>`<option>${String(p).replace(/</g,'&lt;')}</option>`).join('');
 }
 async function populateSmsDetailCliList(){
-  const sel=document.getElementById('sdCli'); if(!sel||sel.options.length>1) return;
-  const clis=await API.smsClis();
-  sel.innerHTML='<option value="">All CLIs</option>'+clis.map(c=>`<option>${String(c).replace(/</g,'&lt;')}</option>`).join('');
+  const sel=document.getElementById('sdCli'); if(!sel) return;
+  const kv=sel.value;
+  const rj=await API.smsClis(sdListArgs());
+  sel.innerHTML=gxOptList(rj.items);
+  if(kv){ sel.value=kv; if(sel.value!==kv) sel.value=''; }
 }
 function populateSmsDetailFilterLists(base){
   const rangeSel=document.getElementById('sdRange'), numberSel=document.getElementById('sdNumber'), userSel=document.getElementById('sdUser');
@@ -1309,7 +1311,7 @@ function populateSmsDetailFilterLists(base){
   userSel.innerHTML='<option value="">All Managers</option>'+users.map(v=>`<option value="${v}">${v}</option>`).join('');
   if(ranges.includes(cr))rangeSel.value=cr;if(nums.includes(cn))numberSel.value=cn;if(users.includes(cu))userSel.value=cu;
 }
-function sdReset(){sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseProvider.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _p2=document.getElementById('sdProvider'),_c2=document.getElementById('sdCli'),_tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_p2)_p2.value='';if(_c2)_c2.value='';if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
+function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseProvider.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _p2=document.getElementById('sdProvider'),_c2=document.getElementById('sdCli'),_tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_p2)_p2.value='';if(_c2)_c2.value='';if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
 function buildSummaryRows(rows){
   const dims=[];
   if(sdUseDate.checked) dims.push({key:'_date',label:'Date',cls:'tag-gray'});
@@ -2210,8 +2212,20 @@ async function loadAdminPageData(page){
 function smsShownCount(page, limit, rowsLen, total){ return total===0?0:Math.min(total, ((page-1)*Number(limit||25))+rowsLen); }
 function setServerFoot(infoEl, state, rerender){ const pag=infoEl?.closest('.table-foot')?.querySelector('.pagination'); if(pag && typeof drawServerPagination==='function') drawServerPagination(pag,state,rerender); }
 function smsReportSignature(obj){ try{return JSON.stringify(obj);}catch(e){return String(Date.now())} }
+/* P17: 3-state server-side sorting + dataset-scoped CLI list helpers */
+function gxSortCycle(st,col,first){ if(st.k!==col){st.k=col;st.d=first;} else if(st.d===first){ st.d=(first==='asc'?'desc':'asc'); } else { st.k=''; st.d=''; } }
+function gxArr(st,k){ return st.k===k ? (st.d==='asc'?'\u2191':'\u2193') : '\u21C5'; }
+function gxResetSortHeads(pfx){ ['range','number','cli','payout'].forEach(x=>{const el=document.getElementById(pfx+x); if(el) el.textContent='\u21C5';}); }
+function gxOptList(items){ return '<option value="">All CLIs</option>' + (items||[]).map(x => (typeof x === 'string' ? { cli: x } : x)).map(x => `<option value="${String(x.cli).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}">${String(x.cli).replace(/&/g,'&amp;').replace(/</g,'&lt;')}${x.count != null ? ' (' + x.count + ')' : ''}</option>`).join(''); }
+function gxSortParams(st){ return st.k ? 'sort='+encodeURIComponent(st.k)+'&dir='+encodeURIComponent(st.d) : 'sort=date&dir=desc'; }
+function gxSrSort(col){ const st=(window.__srSort=window.__srSort||{k:'',d:''}); gxSortCycle(st,col,col==='payout'?'desc':'asc'); ['range','number','cli','payout'].forEach(x=>{const el=document.getElementById('srSort_'+x); if(el) el.textContent=gxArr(st,x);}); if(document.getElementById('srBody')) renderSmsReport(); }
+function gxSdSort(col){ const st=(window.__sdSort=window.__sdSort||{k:'',d:''}); gxSortCycle(st,col,col==='payout'?'desc':'asc'); ['range','number','cli','payout'].forEach(x=>{const el=document.getElementById('sdSort_'+x); if(el) el.textContent=gxArr(st,x);}); if(document.getElementById('sdBody')) renderSmsDetail(); }
+function gxSdSumSort(col){ const st=(window.__sdSumSort=window.__sdSumSort||{k:'',d:''}); gxSortCycle(st,col,'desc'); ['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x); if(el) el.textContent=gxArr(st,x);}); if(document.getElementById('sdBody')) renderSmsDetail(); }
+function srListArgs(){ const g=(id)=>{const e=document.getElementById(id);return (e&&e.value)?String(e.value).trim():'';}; const o={from:g('srFrom'),to:g('srTo'),tfrom:g('srTFrom'),tto:g('srTTo'),range:g('srRange'),number:g('srNumber'),search:g('srSearch'),manager:g('srManager')}; Object.keys(o).forEach(k=>{if(!o[k])delete o[k];}); return o; }
+function sdListArgs(){ const g=(id)=>{const e=document.getElementById(id);return (e&&e.value)?String(e.value).trim():'';}; const o={from:g('sdDateFrom'),to:g('sdDateTo'),range:g('sdRange'),number:g('sdNumber'),search:g('sdSearch'),manager:g('sdUser'),provider:(document.getElementById('sdUseProvider')&&document.getElementById('sdUseProvider').checked)?g('sdProvider'):''}; Object.keys(o).forEach(k=>{if(!o[k])delete o[k];}); return o; }
 async function renderSmsReport(){
   if(!document.getElementById('srBody')) return;
+  populateSmsReportFilterLists();
   setDefaultDates('srFrom','srTo');
   const state=pagerState('adminSmsReportServer');
   const len=document.getElementById('srLen')?.value||'25';
@@ -2221,8 +2235,9 @@ async function renderSmsReport(){
   const tfrom=(document.getElementById('srTFrom')?.value)||''; const tto=(document.getElementById('srTTo')?.value)||'';
   const rangeVal=(document.getElementById('srRange')?.value)||''; const cliVal=(document.getElementById('srCli')?.value)||'';
   const numberVal=(document.getElementById('srNumber')?.value||'').trim(); const mgrVal=(document.getElementById('srManager')?.value)||'';
-  const sig=smsReportSignature({len,search,from,to,tfrom,tto,rangeVal,cliVal,numberVal,mgrVal}); if(state.signature!==sig){state.page=1;state.signature=sig;}
-  const params=new URLSearchParams({page:String(state.page||1),limit:len,sort:'date',dir:'desc'}); if(from)params.set('from',from); if(to)params.set('to',to); if(search)params.set('search',search);
+  const _sst=(window.__srSort=window.__srSort||{k:'',d:''});
+  const sig=smsReportSignature({len,search,from,to,tfrom,tto,rangeVal,cliVal,numberVal,mgrVal,sk:_sst.k,sd:_sst.d}); if(state.signature!==sig){state.page=1;state.signature=sig;}
+  const params=new URLSearchParams({page:String(state.page||1),limit:len,sort:(_sst.k||'date'),dir:(_sst.k?_sst.d:'desc')}); if(from)params.set('from',from); if(to)params.set('to',to); if(search)params.set('search',search);
   if(tfrom)params.set('tfrom',tfrom); if(tto)params.set('tto',tto); if(rangeVal)params.set('range',rangeVal); if(cliVal)params.set('cli',cliVal); if(numberVal)params.set('number',numberVal); if(mgrVal)params.set('manager',mgrVal);
   let data={rows:[],total:0,page:1,limit:25,totalPages:1,totalPayment:'0'};
   try{ data=await API.get('/sms/paged?'+params.toString()); }catch(e){ console.warn('sms report load failed',e); }
@@ -2260,19 +2275,21 @@ async function renderSmsDetail(){
   const summaryMode=sdUseRange?.checked||sdUseNumber?.checked||sdUseUser?.checked;
   if(summaryMode){
     const by=sdUseNumber?.checked?'number':(sdUseRange?.checked?'range':'manager');
-    const params=new URLSearchParams({from:dateFrom,to:dateTo}); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal); if(userVal)params.set('manager',userVal); if(search)params.set('search',search); if(provVal)params.set('provider',provVal); if(cliVal)params.set('cli',cliVal); if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);
+    const params=new URLSearchParams({from:dateFrom,to:dateTo}); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal); if(userVal)params.set('manager',userVal); if(search)params.set('search',search); if(provVal)params.set('provider',provVal); if(cliVal)params.set('cli',cliVal);
+    const _su=(window.__sdSumSort=window.__sdSumSort||{k:'',d:''}); if(_su.k){params.set('sort',_su.k);params.set('dir',_su.d);} if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);
     let data={rows:[]}; try{data=await API.get('/stats-summary/'+by+'?'+params.toString());}catch(e){console.warn(e)}
-    sdHead.innerHTML=`<tr><th>${by}</th><th>Total OTPs</th><th>Total Payout</th></tr>`;
+    sdHead.innerHTML=`<tr><th>${by}</th><th class="sortable" onclick="gxSdSumSort('sms')">Total OTPs <span class="sort">${gxArr(_su,'sms')}</span></th><th class="sortable" onclick="gxSdSumSort('payment')">Total Payout <span class="sort">${gxArr(_su,'payment')}</span></th></tr>`;
     const body=(data.rows||[]).map(x=>`<tr><td><span class="tag tag-blue">${x.key||'—'}</span></td><td class="cell-money">${x.sms||0}</td><td class="cell-money">${money(x.payment||'0')}</td></tr>`);
     sdBody.innerHTML=body.join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
     sdInfo.textContent=`Showing ${body.length} summary rows`; sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`; return;
   }
   const state=pagerState('adminSmsDetailServer');
-  const sig=smsReportSignature({dateVal,rangeVal,numberVal,userVal,provVal,cliVal,tfVal,ttVal,search,len}); if(state.signature!==sig){state.page=1;state.signature=sig;}
-  const params=new URLSearchParams({page:String(state.page||1),limit:len,from:dateFrom,to:dateTo,sort:'date',dir:'desc'}); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal); if(userVal)params.set('manager',userVal); if(provVal)params.set('provider',provVal); if(cliVal)params.set('cli',cliVal); if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal); if(search)params.set('search',search);
+  const _sdst=(window.__sdSort=window.__sdSort||{k:'',d:''});
+  const sig=smsReportSignature({dateVal,rangeVal,numberVal,userVal,provVal,cliVal,tfVal,ttVal,search,len,sk:_sdst.k,sd:_sdst.d}); if(state.signature!==sig){state.page=1;state.signature=sig;}
+  const params=new URLSearchParams({page:String(state.page||1),limit:len,from:dateFrom,to:dateTo,sort:(_sdst.k||'date'),dir:(_sdst.k?_sdst.d:'desc')}); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal); if(userVal)params.set('manager',userVal); if(provVal)params.set('provider',provVal); if(cliVal)params.set('cli',cliVal); if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal); if(search)params.set('search',search);
   let data={rows:[],total:0,page:1,limit:25,totalPages:1,totalPayment:'0'}; try{data=await API.get('/sms/paged?'+params.toString());}catch(e){console.warn(e)}
   state.page=data.page||1; state.totalPages=data.totalPages||1;
-  sdHead.innerHTML='<tr><th>Date</th><th>Manager</th><th>Range</th><th>Number</th><th>CLI</th><th>Payout Rate</th><th>SMS (Message Body)</th></tr>';
+  sdHead.innerHTML=`<tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSdSort('range')">Range <span class="sort">${gxArr(_sdst,'range')}</span></th><th class="sortable" onclick="gxSdSort('number')">Number <span class="sort">${gxArr(_sdst,'number')}</span></th><th class="sortable" onclick="gxSdSort('cli')">CLI <span class="sort">${gxArr(_sdst,'cli')}</span></th><th class="sortable" onclick="gxSdSort('payout')">Payout Rate <span class="sort">${gxArr(_sdst,'payout')}</span></th><th>SMS (Message Body)</th></tr>`;
   const rows=data.rows||[];
   sdBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-mgr">${r.manager_name||'—'}</span></td><td><span class="tag tag-blue">${r.range_name||'—'}</span></td><td><span class="tag tag-gray mono">${r.number||''}</span></td><td class="mono">${r.cli||''}</td><td class="cell-money payout-rate">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
   sdInfo.textContent=`Showing ${smsShownCount(data.page, data.limit, rows.length, data.total)} of ${data.total||0} rows`; sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`;

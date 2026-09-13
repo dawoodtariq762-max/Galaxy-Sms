@@ -2522,6 +2522,20 @@ function buildSmsPagedQuery(user, q = {}) {
   return { baseSql, params };
 }
 /* P11: streaming big-page route (must stay registered ABOVE the cached small-page route). */
+/* P17: 3-state column sort — server-side, full filtered set, stable id tiebreaker.
+   Default (no sort param) = time-based report order (received_at DESC) — UNCHANGED. */
+function smsPagedOrderSql(q){
+  const D = String(q.dir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const k = String(q.sort || 'date');
+  if (k === 'payout') return `CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL) ${D}, s.id DESC`;
+  if (k === 'number') return `(CASE WHEN TRIM(COALESCE(s.number,'')) GLOB '[0-9]*' THEN 0 ELSE 1 END) ${D}, CAST(COALESCE(NULLIF(s.number,''),'0') AS REAL) ${D}, COALESCE(s.number,'') ${D}, s.id DESC`;
+  if (k === 'cli') return `(CASE WHEN TRIM(COALESCE(s.cli,'')) GLOB '[0-9]*' THEN 0 ELSE 1 END) ${D}, (CASE WHEN TRIM(COALESCE(s.cli,'')) GLOB '[0-9]*' THEN CAST(TRIM(COALESCE(s.cli,'0')) AS REAL) ELSE 0 END) ${D}, COALESCE(s.cli,'') COLLATE NOCASE ${D}, s.id DESC`;
+  if (k === 'range') return `COALESCE(r.name,'') COLLATE NOCASE ${D}, s.id DESC`;
+  if (k === 'manager') return `COALESCE(mu.username,'') COLLATE NOCASE ${D}, s.id DESC`;
+  if (k === 'agent') return `COALESCE(au.username,'') COLLATE NOCASE ${D}, s.id DESC`;
+  if (k === 'client') return `COALESCE(cu.username,'') COLLATE NOCASE ${D}, s.id DESC`;
+  return `s.received_at ${D}, s.id DESC`;
+}
 app.get('/api/sms/paged', authRequired, (req, res, next) => {
   const q = req.query || {};
   const limitRaw0 = String(q.limit || '25');
@@ -2541,16 +2555,14 @@ app.get('/api/sms/paged', authRequired, (req, res, next) => {
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const page = Math.min(Math.max(1, parseInt(q.page || '1', 10) || 1), totalPages);
     const offset = (page - 1) * limit;
-    const sortMap = { date:'s.received_at', number:'s.number', cli:'s.cli', range:'r.name', manager:'mu.username', agent:'au.username', client:'cu.username', payout:"CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL)" };
-    const sortCol = sortMap[q.sort] || 's.received_at';
-    const dir = String(q.dir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    const orderSql = smsPagedOrderSql(q);
     sendPagedStreaming(res,
       { total, page, limit, totalPages, totalPayment },
       `SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
           n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
           cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
         ${built.baseSql}
-        ORDER BY ${sortCol} ${dir}, s.id DESC LIMIT ? OFFSET ?`,
+        ORDER BY ${orderSql} LIMIT ? OFFSET ?`,
       [...built.params, limit, offset], (row) => attachSmsPayoutFields([row])[0]);
   } catch (e) { console.warn('sms stream failed', e.message); if (res.headersSent) { try { res.end(); } catch (_) {} } else res.status(500).json({ error: 'Query failed' }); }
 });
@@ -2567,9 +2579,7 @@ app.get('/api/sms/paged', authRequired, (req, res) => cachedJson(req, res, 1200,
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const page = Math.min(Math.max(1, parseInt(q.page || '1', 10) || 1), totalPages);
   const offset = (page - 1) * limit;
-  const sortMap = { date:'s.received_at', number:'s.number', cli:'s.cli', range:'r.name', manager:'mu.username', agent:'au.username', client:'cu.username', payout:'CAST(COALESCE(NULLIF(s.payout_amount,\'\'),\'0\') AS REAL)' };
-  const sortCol = sortMap[q.sort] || 's.received_at';
-  const dir = String(q.dir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const orderSql = smsPagedOrderSql(q);
   // PHASE-2: additive keyset mode — pass &cursor=<lastRowId> to walk deep SMS
   // history in constant time (OFFSET on 10M+ rows is O(offset); cursor is O(1)
   // per page). Without cursor, behaviour is unchanged (page/offset as before).
@@ -2587,7 +2597,7 @@ app.get('/api/sms/paged', authRequired, (req, res) => cachedJson(req, res, 1200,
       n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
       cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
     ${built.baseSql}
-    ORDER BY ${sortCol} ${dir}, s.id DESC LIMIT ? OFFSET ?`, [...built.params, limit, offset]);
+    ORDER BY ${orderSql} LIMIT ? OFFSET ?`, [...built.params, limit, offset]);
   return { rows: attachSmsPayoutFields(rows), total, page, limit, totalPages, totalPayment };
 }));
 app.get('/api/stats-summary/:by', authRequired, (req, res) => cachedJson(req, res, 1500, () => {
@@ -2604,12 +2614,15 @@ app.get('/api/stats-summary/:by', authRequired, (req, res) => cachedJson(req, re
   const g = groupMap[by];
   if (!g) { res.status(400); return { error: 'Invalid stats dimension' }; }
   const extra = ['client','agent','manager'].includes(by) ? ` AND ${g.expr} IS NOT NULL AND ${g.expr}<>''` : '';
+  /* P17: optional 3-state sort (sms | payment | key). Default order UNCHANGED (sms DESC, key ASC). */
+  const sK = String(req.query.sort || '').toLowerCase();
+  const sD = String(req.query.dir || '').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const sumOrderSql = sK === 'sms' ? `sms ${sD}, key ASC` : sK === 'payment' ? `CAST(payment AS REAL) ${sD}, key ASC` : sK === 'key' ? `key COLLATE NOCASE ${sD}` : '';
   const rows = db.all(`SELECT ${g.expr} AS key, COUNT(*) AS sms,
       COALESCE(SUM(CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL)),0) AS payment
     ${built.baseSql}${extra}
     GROUP BY ${g.expr}
-    HAVING key IS NOT NULL AND key<>''
-    ORDER BY sms DESC, key ASC`, built.params).map(r => ({...r, payment: normalizeDecimalString(r.payment)||'0'}));
+    HAVING key IS NOT NULL AND key<>''${sumOrderSql ? `\n    ORDER BY ${sumOrderSql}` : '\n    ORDER BY sms DESC, key ASC'}`, built.params).map(r => ({...r, payment: normalizeDecimalString(r.payment)||'0'}));
   const totalSms = rows.reduce((a,r)=>a+(+r.sms||0),0);
   const totalPayment = rows.reduce((a,r)=>decimalAdd(a,r.payment||'0'),'0');
   return { rows, totalSms, totalPayment, by };
@@ -2622,16 +2635,19 @@ app.get('/api/sms', authRequired, (req, res) => cachedJson(req, res, 2500, () =>
 
 /* P14: distinct CLI (C-Level) list for report filters — role-scoped, cheap, cached */
 app.get('/api/sms/clis', authRequired, (req, res) => cachedJson(req, res, 30000, () => {
-  const scope = smsScopeWhere(req.user, 's');
-  /* P16: CLI options sirf US din ke report data se (default = UK aaj), user ke authorized scope me.
-     Number/Range filters jaisa: jo CLIs aaj actually use huay. from/to optional override. */
+  /* P17: CLI list = EXACT current report dataset (buildSmsPagedQuery = wahi scope + saare report filters
+     jo /api/sms/paged use karta hai). Default = UK aaj. Har CLI ka count bhi (drill-style summary). */
+  const q = { ...(req.query || {}) };
   const dq = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
-  let from = dq(req.query.from) || ukTodayDateStr(0);
-  let to = dq(req.query.to) || from;
-  if (from > to) { const t = from; from = to; to = t; }
-  const start = ukLocalDateToUtcSql(from, 0), end = ukLocalDateToUtcSql(to, 1);
-  const rows = db.all(`SELECT DISTINCT s.cli AS cli FROM sms_records s WHERE s.cli IS NOT NULL AND s.cli<>'' AND s.received_at>=? AND s.received_at<? AND ${scope.where} ORDER BY s.cli LIMIT 300`, [start, end, ...scope.params]);
-  return { clis: rows.map(r => r.cli), from, to };
+  if (!dq(q.from)) delete q.from;
+  if (!dq(q.to)) delete q.to;
+  if (!q.from && !q.to) { q.from = ukTodayDateStr(0); q.to = q.from; }
+  else if (q.from && !q.to) q.to = q.from;
+  else if (!q.from && q.to) q.from = q.to;
+  if (q.from > q.to) { const t = q.from; q.from = q.to; q.to = t; }
+  const built = buildSmsPagedQuery(req.user, q);
+  const rows = db.all(`SELECT s.cli AS cli, COUNT(*) AS c ${built.baseSql} AND s.cli IS NOT NULL AND TRIM(s.cli)<>'' GROUP BY s.cli ORDER BY s.cli LIMIT 300`, built.params);
+  return { clis: rows.map(r => r.cli), items: rows.map(r => ({ cli: r.cli, count: r.c })), from: q.from, to: q.to };
 }));
 
 // aggregated stats by dimension
