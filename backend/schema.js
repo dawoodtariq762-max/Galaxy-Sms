@@ -335,6 +335,23 @@ function createTables() {
   )`);
 
   ensureColumn('webhook_logs', 'source_ip', "TEXT DEFAULT ''");
+  /* P18: legal acceptance per user (policy version => re-accept on update) */
+  ensureColumn('users', 'legal_version', "TEXT DEFAULT ''");
+  ensureColumn('users', 'legal_accepted_at', "TEXT DEFAULT ''");
+  /* P18: configurable payment schedule (work period + payment day) */
+  db.run(`CREATE TABLE IF NOT EXISTS payment_schedule (
+    payment_type TEXT PRIMARY KEY,
+    weekly_start_dow INTEGER DEFAULT 1,
+    weekly_pay_dow INTEGER DEFAULT 3,
+    monthly_start_day INTEGER DEFAULT 1,
+    monthly_delay_days INTEGER DEFAULT 45,
+    updated_at TEXT DEFAULT (datetime('now')),
+    updated_by INTEGER
+  )`);
+  ['daily','weekly','monthly_30x45'].forEach(t => {
+    const ex = db.get('SELECT payment_type FROM payment_schedule WHERE payment_type=?', [t]);
+    if (!ex) db.run('INSERT INTO payment_schedule (payment_type) VALUES (?)', [t]);
+  });
   ensureColumn('carrier_settings', 'retention_days', 'INTEGER DEFAULT 30');
   // GALAXY: Range/Rate Management fields (additive, all optional)
   ensureColumn('ranges', 'country', "TEXT DEFAULT ''");

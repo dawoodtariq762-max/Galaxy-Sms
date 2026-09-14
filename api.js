@@ -635,6 +635,39 @@
     document.querySelectorAll('[title="Fullscreen"]').forEach(b=>{if(!b.dataset.msFull){b.dataset.msFull='1';b.addEventListener('click',(e)=>{if(!document.fullscreenElement){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}else{document.exitFullscreen&&document.exitFullscreen();}});}});
     document.querySelectorAll('[title="Logout"]').forEach(b=>{if(!b.dataset.msLogout){b.dataset.msLogout='1';/* GX fix: button ka apna confirm-wala logout() ho to doosra auto-logout handler NAHI lagana (warna Cancel par bhi logout ho jata tha) */const own=b.getAttribute('onclick')&&/logout\s*\(/i.test(b.getAttribute('onclick'));if(!own){b.addEventListener('click',()=>{window.API&&API.logout?API.logout():(clearAuthStorage(),location.href='/panel-login');});}}});
   }
+  /* ===== P18: Legal / Acceptable-Use gate (sab panels, logged-in users) ===== */
+  async function gxLegalGate(){
+    try{
+      if(!TOKEN()) return;
+      if(/panel-login/.test(location.pathname||'')) return;
+      const st = await req('GET','/legal/status');
+      if(!st.required) return;
+      const ov=document.createElement('div');
+      ov.id='gxLegalGate';
+      ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+      ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(5,7,12,.82);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:14px;';
+      ov.innerHTML = '<div style="background:#14161d;color:#eef1f7;max-width:620px;width:100%;max-height:94vh;overflow:auto;border-radius:18px;border:1px solid rgba(190,195,205,.22);box-shadow:0 30px 90px rgba(0,0,0,.6);padding:24px 22px;font-family:inherit">'
+        + '<h2 style="margin:0 0 4px;font-size:19px;line-height:1.3">Galaxy SMS &mdash; Legal Use &amp; Acceptable Use</h2>'
+        + '<p style="margin:12px 0;color:#c9ccd2;font-size:13.5px;line-height:1.65"><b style="color:#eef1f7">About Galaxy SMS:</b> Galaxy SMS is an SMS management platform where authorized users can manage numbers, SMS activity, reports, allocations and related services.</p>'
+        + '<p style="margin:10px 0;color:#c9ccd2;font-size:13.5px;line-height:1.65">By continuing, you confirm that you will use the numbers and SMS services provided through Galaxy SMS only for lawful and legitimate purposes.</p>'
+        + '<p style="margin:10px 0;color:#c9ccd2;font-size:13.5px;line-height:1.65">You must not use these numbers for fake accounts, fraud, scams, abuse, spam, impersonation, unauthorized access, or any other illegal activity. You are responsible for ensuring that your use complies with applicable laws and the rules of the services you use.</p>'
+        + '<p style="margin:10px 0 14px;color:#c9ccd2;font-size:13.5px;line-height:1.65">By clicking Accept, you agree to these terms.</p>'
+        + '<label style="display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:#eef1f7;cursor:pointer;padding:11px;border:1px solid rgba(190,195,205,.28);border-radius:12px"><input type="checkbox" id="gxLegalChk" style="width:18px;height:18px;accent-color:#30ABED;margin-top:1px;flex:none"><span>I agree to use Galaxy SMS services only for lawful and legitimate purposes.</span></label>'
+        + '<div style="display:flex;justify-content:flex-end;margin-top:16px"><button id="gxLegalBtn" disabled style="opacity:.45;pointer-events:none;background:linear-gradient(96deg,#30ABED,#7F18B3);color:#fff;border:0;border-radius:12px;padding:11px 24px;font-weight:700;font-size:14px;cursor:pointer">Accept &amp; Continue</button></div>'
+        + '<div id="gxLegalErr" style="color:#ffb0bf;font-size:12.5px;margin-top:8px;display:none"></div>'
+        + '</div>';
+      document.body.appendChild(ov);
+      try{ document.body.style.overflow='hidden'; }catch(e){}
+      const chk=ov.querySelector('#gxLegalChk'), btn=ov.querySelector('#gxLegalBtn'), err=ov.querySelector('#gxLegalErr');
+      chk.addEventListener('change',()=>{ const on=chk.checked; btn.disabled=!on; btn.style.opacity=on?'1':'.45'; btn.style.pointerEvents=on?'auto':'none'; });
+      btn.addEventListener('click', async ()=>{
+        try{ await req('POST','/legal/accept',{version:st.version}); ov.remove(); try{ document.body.style.overflow=''; }catch(e){} }
+        catch(e){ err.style.display='block'; err.textContent='Accept failed: '+e.message; }
+      });
+    }catch(e){ /* gate must never break the panel */ }
+  }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', gxLegalGate); } else { gxLegalGate(); }
+
   window.API = {
     guard,
     role: ROLE,
@@ -644,6 +677,8 @@
     ukToday: () => ukDateString(new Date()),
     /* P14: role-scoped distinct CLI list for report C-Level filters */
     smsClis: async (a, b) => { try { const p = new URLSearchParams(); if (a && typeof a === 'object') { Object.entries(a).forEach(([k, v]) => { if (v) p.set(k, String(v)); }); } else { if (a) p.set('from', a); if (b) p.set('to', b); } const r = await API.get('/sms/clis' + (p.toString() ? '?' + p.toString() : '')); return { clis: r.clis || [], items: r.items || [], from: r.from, to: r.to }; } catch (e) { return { clis: [], items: [] }; } },
+    /* P18: role-scoped Number list for report datalist (same dataset as /sms/paged) */
+    smsNumbers: async (a, b) => { try { const p = new URLSearchParams(); if (a && typeof a === 'object') { Object.entries(a).forEach(([k, v]) => { if (v) p.set(k, String(v)); }); } else { if (a) p.set('from', a); if (b) p.set('to', b); } const r = await API.get('/sms/numbers' + (p.toString() ? '?' + p.toString() : '')); return { numbers: r.numbers || [], items: r.items || [], from: r.from, to: r.to }; } catch (e) { return { numbers: [], items: [] }; } },
     /* P14: fires cb once when the UK report-day rolls over (60s check, no requests) */
     onUkDayChange: (cb) => {
       if (typeof cb !== 'function') return;

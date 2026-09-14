@@ -394,6 +394,7 @@
         <div class="sub-item" data-page="numbers"><span class="dot"></span> SMS Numbers</div>
       </div>
       <div class="nav-item" data-page="test"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 6 0v6"/><rect x="4" y="18" width="16" height="3"/><path d="M12 3v3"/></svg><span>SMS Test Panel</span></div>
+      <div class="nav-item" data-page="payMgmt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span>Payment Mgmt</span></div>
 
       <div class="sb-section">Users</div>
       <div class="nav-item" id="userParent" onclick="toggleSub('userSub','userParent')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>User Management</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
@@ -593,6 +594,11 @@
       <!-- ========== PAYMENTS ========== -->
 
       <!-- ========== SMS TEST PANEL ========== -->
+      <section class="page" id="page-payMgmt">
+        <div class="page-head"><div><h2>Payment Management</h2><div class="breadcrumb"><b>Payments</b> › Schedule &amp; Settings</div></div></div>
+        <div id="payMgmtWrap" style="display:grid;gap:16px"></div>
+      </section>
+
       <section class="page" id="page-test">
         <div class="page-head"><div><h2>SMS Test Panel</h2><div class="breadcrumb"><b>Home</b> › SMS Test Panel</div></div>
           <div class="head-actions">
@@ -721,12 +727,12 @@
 </div></div>
 
 
-<script src="/api.js?v=20260728-agent-manager-allocation-final"></script>
+<script src="/api.js?v=20260914-agent-manager-allocation-final"></script>
 <script>
 /* auth guard — admin only */
 if(window.API){ API.guard('admin'); }
 window.PX_PANEL_MODE='admin_ops';
-const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','aiKnowledge']);
+const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','aiKnowledge','payMgmt']);
 function normalizePanelPage(id){ id=String(id||'dashboard'); return ADMIN_ALLOWED_PAGES.has(id)?id:'dashboard'; }
 function applyPanelSplitUi(){
   if(window.PX_PANEL_MODE!=='admin_light') return;
@@ -986,8 +992,11 @@ function deleteResultText(r){
 async function deleteSelectedNumbers(){
   const ids=getSelectedIds();
   if(!ids.length){alert('Please select numbers first.');return;}
-  if(!confirm(`Delete ${ids.length} selected number(s)?`))return;
-  const delete_sms=askDeleteSmsHistory();
+  /* P18: ek clear confirmation modal — number only vs number + SMS/OTP history */
+  const mode=await gxDeleteModal('Delete Number', ids.length+' number(s) selected.', '');
+  if(!mode) return;
+  const delete_sms=(mode==='sms');
+  if(delete_sms && !confirm('PERMANENT DELETE: '+ids.length+' number(s) and ALL their SMS/OTP history will be removed from dashboard, reports and stats. This cannot be undone. Continue?')) return;
   try{
     const r=await API.post('/numbers/delete',{ids,delete_sms});
     alert(deleteResultText(r));
@@ -1191,7 +1200,7 @@ function buildSmsReport(){
     <label>Time</label><input type="time" id="srTFrom" onchange="renderSmsReport()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="srTTo" onchange="renderSmsReport()"/>
     <label>Range</label><select id="srRange" onchange="renderSmsReport()"><option value="">All Ranges</option></select>
     <label>CLI</label><select id="srCli" onchange="renderSmsReport()"><option value="">All CLIs</option></select>
-    <label>Number</label><input type="text" id="srNumber" placeholder="92300…" style="min-width:150px" oninput="clearTimeout(window.__srNT);window.__srNT=setTimeout(renderSmsReport,450)"/>
+    <label>Number</label><input type="text" id="srNumber" list="srNumDl" placeholder="92300…" style="min-width:150px" oninput="clearTimeout(window.__srNT);window.__srNT=setTimeout(renderSmsReport,450)"/>
     <label>Manager</label><select id="srManager" onchange="renderSmsReport()"><option value="">All Managers</option></select>
     <button type="button" class="gx-btn gx-blue"  onclick="renderSmsReport()" data-tip="Apply filters" title="Apply" aria-label="Apply"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
     <button type="button" class="gx-btn"  onclick="srFrom.value=todayStr();srTo.value=todayStr();renderSmsReport()" data-tip="Today" title="Today" aria-label="Today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
@@ -1215,6 +1224,10 @@ async function populateSmsReportFilterLists(){
     if(ms && ms.options.length<=1){ const ms2=(typeof usersData!=='undefined'&&(usersData.manager||[]).length)?usersData.manager.map(x=>x.username||x.name).filter(Boolean):[]; ms.innerHTML='<option value="">All Managers</option>'+ms2.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
     /* P17: CLI list = CURRENT filtered dataset (dates+time+range+number+search+manager), counts ke saath */
     if(cs){ const kv=cs.value; const rj=await API.smsClis(srListArgs()); cs.innerHTML=gxOptList(rj.items); if(kv){ cs.value=kv; if(cs.value!==kv) cs.value=''; } }
+    /* P18: Number input par click => available numbers (current dataset, counts) */
+    let dl=document.getElementById('srNumDl');
+    if(!dl){ dl=document.createElement('datalist'); dl.id='srNumDl'; const inp=document.getElementById('srNumber'); if(inp&&inp.parentNode) inp.parentNode.appendChild(dl); }
+    if(dl){ const rn=await API.smsNumbers(srListArgs()); dl.innerHTML=(rn.items||[]).map(x=>`<option value="${String(x.number).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${x.count!=null?x.count+' OTPs':''}</option>`).join(''); }
   }catch(e){}
 }
 function srResetFilters(){window.__srSort={k:'',d:''};gxResetSortHeads('srSort_'); ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srCli','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); renderSmsReport(); }
@@ -1250,15 +1263,15 @@ function buildSmsDetail(){
       <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="toggleDetailFilters()"> Time</label>
       <input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
       <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
-      <select id="sdRange" disabled onchange="renderSmsDetail()"><option value="">All Ranges</option></select>
+      <select id="sdRange" onchange="renderSmsDetail()"><option value="">All Ranges</option></select>
       <label><input type="checkbox" id="sdUseProvider" style="width:auto" onchange="toggleDetailFilters()"> Provider</label>
-      <select id="sdProvider" disabled onchange="renderSmsDetail()"><option value="">All Providers</option></select>
+      <select id="sdProvider" onchange="renderSmsDetail()"><option value="">All Providers</option></select>
       <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters()"> Number</label>
-      <select id="sdNumber" disabled onchange="renderSmsDetail()"><option value="">All Numbers</option></select>
+      <select id="sdNumber" onchange="renderSmsDetail()"><option value="">All Numbers</option></select>
       <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters()"> CLI</label>
-      <select id="sdCli" disabled onchange="renderSmsDetail()"><option value="">All CLIs</option></select>
+      <select id="sdCli" onchange="renderSmsDetail()"><option value="">All CLIs</option></select>
       <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters()"> Manager</label>
-      <select id="sdUser" disabled onchange="renderSmsDetail()"><option value="">All Managers</option></select>
+      <select id="sdUser" onchange="renderSmsDetail()"><option value="">All Managers</option></select>
       <button class="btn btn-red" onclick="renderSmsDetail()">Apply Filter</button>
       <button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
     </div>
@@ -1274,11 +1287,8 @@ function buildSmsDetail(){
   renderSmsDetail();
 }
 function toggleDetailFilters(){
-  document.getElementById('sdRange').disabled=!document.getElementById('sdUseRange').checked;
-  document.getElementById('sdProvider').disabled=!document.getElementById('sdUseProvider').checked;
-  document.getElementById('sdNumber').disabled=!document.getElementById('sdUseNumber').checked;
-  document.getElementById('sdCli').disabled=!document.getElementById('sdUseCli').checked;
-  document.getElementById('sdUser').disabled=!document.getElementById('sdUseUser').checked;
+  /* P18: Manager/Range/Provider/Number/CLI selects ab HAMESHA enabled — click par list foran khulti hai
+     (koi extra 'All/Select/Apply' intermediate step nahi). Checkbox sirf Time inputs gate karta hai. */
   const tOn=document.getElementById('sdUseTime').checked;
   document.getElementById('sdTimeFrom').disabled=!tOn;
   document.getElementById('sdTimeTo').disabled=!tOn;
@@ -1302,14 +1312,21 @@ async function populateSmsDetailCliList(){
 function populateSmsDetailFilterLists(base){
   const rangeSel=document.getElementById('sdRange'), numberSel=document.getElementById('sdNumber'), userSel=document.getElementById('sdUser');
   if(!rangeSel||!numberSel||!userSel)return;
-  const cr=rangeSel.value, cn=numberSel.value, cu=userSel.value;
+  const cr=rangeSel.value, cu=userSel.value;
   const ranges=uniqueVals(base.map(r=>r.range_name)).sort();
-  const nums=uniqueVals(base.map(r=>r.number)).sort();
   const users=uniqueVals(base.map(r=>r.manager_name)).sort();
   rangeSel.innerHTML='<option value="">All Ranges</option>'+ranges.map(v=>`<option value="${v}">${v}</option>`).join('');
-  numberSel.innerHTML='<option value="">All Numbers</option>'+nums.map(v=>`<option value="${v}">${v}</option>`).join('');
+  /* P18: Number list ab CURRENT report dataset se server-side aati hai (populateSmsDetailNumberList) */
   userSel.innerHTML='<option value="">All Managers</option>'+users.map(v=>`<option value="${v}">${v}</option>`).join('');
-  if(ranges.includes(cr))rangeSel.value=cr;if(nums.includes(cn))numberSel.value=cn;if(users.includes(cu))userSel.value=cu;
+  if(ranges.includes(cr))rangeSel.value=cr;if(users.includes(cu))userSel.value=cu;
+}
+async function populateSmsDetailNumberList(){
+  const sel=document.getElementById('sdNumber'); if(!sel) return;
+  const kv=sel.value;
+  try{ const rj=await API.smsNumbers(sdListArgs());
+    sel.innerHTML='<option value="">All Numbers</option>'+(rj.items||[]).map(x=>`<option value="${String(x.number).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${String(x.number).replace(/&/g,'&amp;').replace(/</g,'&lt;')}${x.count!=null?' ('+x.count+')':''}</option>`).join('');
+    if(kv){ sel.value=kv.replace(/\s*\(\d+\)$/,''); if(sel.value!==kv.replace(/\s*\(\d+\)$/,'')) sel.value=''; }
+  }catch(e){}
 }
 function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseProvider.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _p2=document.getElementById('sdProvider'),_c2=document.getElementById('sdCli'),_tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_p2)_p2.value='';if(_c2)_c2.value='';if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
 function buildSummaryRows(rows){
@@ -2182,6 +2199,86 @@ async function fillSmsDetailLiteFilters(){
   if(rangeSel && (!rangeSel.options || rangeSel.options.length<=1)) rangeSel.innerHTML='<option value="">All Ranges</option>'+((ratesData||[]).map(r=>`<option value="${r.name}">${r.name}</option>`).join(''));
   if(userSel && (!userSel.options || userSel.options.length<=1)) userSel.innerHTML='<option value="">All Managers</option>'+((usersData.manager||[]).map(m=>`<option value="${m.username}">${m.username}</option>`).join(''));
 }
+/* ===== P18: Payment Management (schedule + min-withdrawal settings) ===== */
+const GX_DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let __payMgmtLoaded=false;
+async function loadPayMgmt(force){
+  if(__payMgmtLoaded && !force) return;
+  const w=document.getElementById('payMgmtWrap'); if(!w) return;
+  w.innerHTML='<div class="muted" style="padding:18px">Loading…</div>';
+  let sch={schedule:[],preview:[]}, st=[];
+  try{ sch=await API.get('/payment-v2/schedule'); }catch(e){}
+  try{ st=await API.get('/payment-v2/settings'); }catch(e){}
+  const row=t=>sch.schedule.find(x=>x.payment_type===t)||{};
+  const pv=t=>sch.preview.find(x=>x.payment_type===t)||{};
+  const sett=t=>(st||[]).find(x=>x.payment_type===t)||{};
+  const card=(t,label,inner)=>`<div class="card" style="padding:18px"><h3 style="margin:0 0 10px;font-size:15px">${label}</h3>${inner}</div>`;
+  const daily=card('daily','Daily',`
+    <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Work period: har UK din (00:00 → 23:59). Payment/eligible: agle din midnight (fixed rule).</p>
+    <p style="margin:0;font-size:13px"><b>Current period:</b> ${pv('daily').period_start||''} &nbsp;·&nbsp; <b>Expected payment:</b> ${pv('daily').payment_date||''}</p>`);
+  const wk=row('weekly');
+  const weekly=card('weekly','Weekly',`
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <label style="font-size:13px">Work period start: <select id="pmWsStart" style="margin-left:6px">${GX_DOW.map((d,i)=>`<option value="${i}" ${+wk.weekly_start_dow===i?'selected':''}>${d}</option>`).join('')}</select></label>
+      <label style="font-size:13px">Work period end: agla ${GX_DOW[+wk.weekly_start_dow||1]?'':''}start − 1 din (auto)</label>
+      <label style="font-size:13px">Payment day: <select id="pmWsPay" style="margin-left:6px">${GX_DOW.map((d,i)=>`<option value="${i}" ${+wk.weekly_pay_dow===i?'selected':''}>${d}</option>`).join('')}</select></label>
+    </div>
+    <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Cycle: work start din se agle start se pehle din tak. Payment us cycle ke baad pehle payment-day par.</p>
+    <p style="margin:0;font-size:13px"><b>Current period:</b> ${pv('weekly').period_start||''} → ${pv('weekly').period_end||''} &nbsp;·&nbsp; <b>Expected payment:</b> ${pv('weekly').payment_date||''}</p>`);
+  const mo=row('monthly_30x45');
+  const monthly=card('monthly','Monthly',`
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <label style="font-size:13px">Work period start (date of month): <input id="pmMoStart" type="number" min="1" max="28" value="${+mo.monthly_start_day||1}" style="width:70px;margin-left:6px"/></label>
+      <label style="font-size:13px">Period end: next start − 1 din (auto)</label>
+      <label style="font-size:13px">Payment delay (days after period end): <input id="pmMoDelay" type="number" min="0" max="180" value="${+mo.monthly_delay_days||45}" style="width:70px;margin-left:6px"/></label>
+    </div>
+    <p style="margin:0;font-size:13px"><b>Current period:</b> ${pv('monthly_30x45').period_start||''} → ${pv('monthly_30x45').period_end||''} &nbsp;·&nbsp; <b>Expected payment:</b> ${pv('monthly_30x45').payment_date||''}</p>`);
+  const mins=card('settings','Withdrawal Minimums (existing rules unchanged)',`
+    <div style="display:grid;gap:8px">
+      ${(st||[]).map(x=>`<label style="font-size:13px;display:flex;gap:8px;align-items:center">${x.label||x.payment_type}: $<input id="pmMin_${x.payment_type}" value="${x.min_withdrawal||'0'}" style="width:90px;margin-left:4px"/></label>`).join('')}
+    </div>
+    <button class="btn btn-blue" style="margin-top:10px" onclick="savePayMgmtMins()">Save Minimums</button>`);
+  const savebar=`<div style="display:flex;gap:10px"><button class="btn btn-green" onclick="savePayMgmt()">Save Schedule</button><button class="gx-btn" onclick="loadPayMgmt(true)">Reload</button></div>`;
+  w.innerHTML=[savebar,daily,weekly,monthly,mins].join('<div style="height:4px"></div>');
+  __payMgmtLoaded=true;
+}
+async function savePayMgmt(){
+  try{
+    const ws=document.getElementById('pmWsStart'), wp=document.getElementById('pmWsPay'), ms=document.getElementById('pmMoStart'), md=document.getElementById('pmMoDelay');
+    await API.put('/payment-v2/schedule',{payment_type:'weekly',weekly_start_dow:+ws.value,weekly_pay_dow:+wp.value});
+    await API.put('/payment-v2/schedule',{payment_type:'monthly_30x45',monthly_start_day:+ms.value,monthly_delay_days:+md.value});
+    __payMgmtLoaded=false; await loadPayMgmt(true);
+    alert('✅ Payment schedule saved. Naya sirf FUTURE periods par lagu hoga — historical ledger unchanged.');
+  }catch(e){ alert('❌ '+e.message); }
+}
+async function savePayMgmtMins(){
+  try{
+    const inputs=[...document.querySelectorAll('[id^=pmMin_]')];
+    await API.put('/payment-v2/settings',{settings:inputs.map(i=>({payment_type:i.id.replace('pmMin_',''),min_withdrawal:i.value}))});
+    alert('✅ Minimums saved.');
+  }catch(e){ alert('❌ '+e.message); }
+}
+/* ===== P18: Number-delete confirmation modal (radio: number only | number + SMS/OTP history) ===== */
+function gxDeleteModal(title,line1,line2){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div'); ov.id='gxDelModal';
+    ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(5,7,12,.78);display:flex;align-items:center;justify-content:center;padding:14px;';
+    ov.innerHTML='<div style="background:#161922;color:#eef1f7;max-width:480px;width:100%;border-radius:16px;border:1px solid rgba(190,195,205,.22);padding:20px;max-height:94vh;overflow:auto">'
+      +'<h3 style="margin:0 0 8px;font-size:16.5px">⚠ '+title+'</h3>'
+      +'<p style="margin:4px 0 12px;color:#c9ccd2;font-size:13px;line-height:1.55">'+line1+'</p>'
+      +(line2?('<p style="margin:0 0 12px;color:#93979e;font-size:12.5px">'+line2+'</p>'):'')
+      +'<label style="display:flex;gap:9px;padding:10px;border:1px solid rgba(190,195,205,.22);border-radius:10px;margin-bottom:8px;cursor:pointer;font-size:13.5px;align-items:flex-start"><input type="radio" name="gxdel" value="only" checked style="margin-top:2px"><span>Delete number only<br><span style="color:#93979e;font-size:12px">Historical SMS/OTP data is kept (existing behaviour).</span></span></label>'
+      +'<label style="display:flex;gap:9px;padding:10px;border:1px solid rgba(255,120,120,.4);border-radius:10px;cursor:pointer;font-size:13.5px;align-items:flex-start"><input type="radio" name="gxdel" value="sms" style="margin-top:2px"><span>Delete number and all SMS/OTP history<br><span style="color:#ffb0bf;font-size:12px">PERMANENT. In ka data Dashboard totals, SMS statistics, CVR, SMS/Detailed reports aur number/range stats se bhi hat jayega. Payment ledger entries account-integrity ke liye rakhi jati hain.</span></span></label>'
+      +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button id="gxDelC" style="background:transparent;color:#c9ccd2;border:1px solid rgba(190,195,205,.3);border-radius:10px;padding:9px 16px;cursor:pointer">Cancel</button><button id="gxDelOk" style="background:#e5484d;color:#fff;border:0;border-radius:10px;padding:9px 18px;font-weight:700;cursor:pointer">Confirm Delete</button></div>'
+      +'</div>';
+    document.body.appendChild(ov);
+    try{ document.body.style.overflow='hidden'; }catch(e){}
+    const close=v=>{ ov.remove(); try{ document.body.style.overflow=''; }catch(e){} resolve(v); };
+    ov.querySelector('#gxDelC').onclick=()=>close(null);
+    ov.querySelector('#gxDelOk').onclick=()=>close(ov.querySelector('input[name=gxdel]:checked').value);
+    ov.addEventListener('click',e=>{ if(e.target===ov) close(null); });
+  });
+}
 async function loadAdminPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
@@ -2193,6 +2290,7 @@ async function loadAdminPageData(page){
     if(['clientStats','agentStats','managerStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'SBody')) buildEntityStats(k); await ensureAdminManagers(); return renderEntityStats(k); }
     if(['rangeStats','numberStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'SBody')) buildDrillStats(k); await ensureAdminManagers(); return renderDrillStats(k); }
     if(page==='test'){ await ensureAdminRates(); await loadTestNumbers(); return renderTest(); }
+    if(page==='payMgmt') return loadPayMgmt();
     if(page==='managers') return buildUserPage('manager');
     if(page==='agents') return buildUserPage('agent');
     if(page==='clients') return buildUserPage('client');
@@ -2222,7 +2320,7 @@ function gxSrSort(col){ const st=(window.__srSort=window.__srSort||{k:'',d:''});
 function gxSdSort(col){ const st=(window.__sdSort=window.__sdSort||{k:'',d:''}); gxSortCycle(st,col,col==='payout'?'desc':'asc'); ['range','number','cli','payout'].forEach(x=>{const el=document.getElementById('sdSort_'+x); if(el) el.textContent=gxArr(st,x);}); if(document.getElementById('sdBody')) renderSmsDetail(); }
 function gxSdSumSort(col){ const st=(window.__sdSumSort=window.__sdSumSort||{k:'',d:''}); gxSortCycle(st,col,'desc'); ['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x); if(el) el.textContent=gxArr(st,x);}); if(document.getElementById('sdBody')) renderSmsDetail(); }
 function srListArgs(){ const g=(id)=>{const e=document.getElementById(id);return (e&&e.value)?String(e.value).trim():'';}; const o={from:g('srFrom'),to:g('srTo'),tfrom:g('srTFrom'),tto:g('srTTo'),range:g('srRange'),number:g('srNumber'),search:g('srSearch'),manager:g('srManager')}; Object.keys(o).forEach(k=>{if(!o[k])delete o[k];}); return o; }
-function sdListArgs(){ const g=(id)=>{const e=document.getElementById(id);return (e&&e.value)?String(e.value).trim():'';}; const o={from:g('sdDateFrom'),to:g('sdDateTo'),range:g('sdRange'),number:g('sdNumber'),search:g('sdSearch'),manager:g('sdUser'),provider:(document.getElementById('sdUseProvider')&&document.getElementById('sdUseProvider').checked)?g('sdProvider'):''}; Object.keys(o).forEach(k=>{if(!o[k])delete o[k];}); return o; }
+function sdListArgs(){ const g=(id)=>{const e=document.getElementById(id);return (e&&e.value)?String(e.value).trim():'';}; const o={from:g('sdDateFrom'),to:g('sdDateTo'),range:g('sdRange'),number:g('sdNumber'),search:g('sdSearch'),manager:g('sdUser'),provider:g('sdProvider')}; Object.keys(o).forEach(k=>{if(!o[k])delete o[k];}); return o; }
 async function renderSmsReport(){
   if(!document.getElementById('srBody')) return;
   populateSmsReportFilterLists();
@@ -2250,7 +2348,7 @@ async function renderSmsReport(){
 }
 async function renderSmsDetail(){
   if(!document.getElementById('sdBody')) return;
-  populateSmsDetailProviderList(); populateSmsDetailCliList();
+  populateSmsDetailProviderList(); populateSmsDetailCliList(); populateSmsDetailNumberList();
   /* BUGFIX: read the From/To range inputs. The old single #sdDate element was
      replaced by #sdDateFrom / #sdDateTo, so this always fell back to today()
      and the Date filter silently did nothing. */
@@ -2265,8 +2363,8 @@ async function renderSmsDetail(){
   const rangeVal=document.getElementById('sdRange')?.value||'';
   const numberVal=document.getElementById('sdNumber')?.value||'';
   const userVal=document.getElementById('sdUser')?.value||'';
-  const provVal=document.getElementById('sdUseProvider')?.checked?(document.getElementById('sdProvider')?.value||''):'';
-  const cliVal=document.getElementById('sdUseCli')?.checked?(document.getElementById('sdCli')?.value||''):'';
+  const provVal=document.getElementById('sdProvider')?.value||''; /* P18: hamesha apply */
+  const cliVal=document.getElementById('sdCli')?.value||''; /* P18: hamesha apply */
   const tfVal=document.getElementById('sdUseTime')?.checked?(document.getElementById('sdTimeFrom')?.value||''):'';
   const ttVal=document.getElementById('sdUseTime')?.checked?(document.getElementById('sdTimeTo')?.value||''):'';
   const search=(document.getElementById('sdSearch')?.value||'').trim();

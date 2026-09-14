@@ -1071,6 +1071,21 @@ app.get('/api/me', authRequired, (req, res) => {
   res.json(u);
 });
 
+/* ============ P18: LEGAL / ACCEPTABLE-USE GATE ============ */
+const LEGAL_POLICY_VERSION = '2026-09-13-v1';
+app.get('/api/legal/status', authRequired, (req, res) => {
+  const u = db.get('SELECT legal_version, legal_accepted_at FROM users WHERE id=?', [req.user.id]) || {};
+  const accepted = u.legal_version === LEGAL_POLICY_VERSION;
+  res.json({ required: !accepted, accepted, version: LEGAL_POLICY_VERSION, accepted_at: u.legal_accepted_at || '' });
+});
+app.post('/api/legal/accept', authRequired, (req, res) => {
+  const v = String((req.body || {}).version || '');
+  if (v !== LEGAL_POLICY_VERSION) return res.status(400).json({ error: 'Policy version mismatch' });
+  db.run('UPDATE users SET legal_version=?, legal_accepted_at=datetime(\'now\') WHERE id=?', [v, req.user.id]);
+  logAction(req, 'legal_use_accept', 'legal', { version: v });
+  res.json({ ok: true, version: v });
+});
+
 /* ============ USERS (managers/agents/clients) ============ */
 // list users of a role within caller's scope
 app.get('/api/users/:role', authRequired, (req, res) => {
@@ -1201,15 +1216,49 @@ function dbDateToDate(ts){
   const m=String(ts||'').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
   if(!m)return null; return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0)));
 }
+/* P18: payment schedule config (per type) — sirf FUTURE ledger rows par asar (eligible_at ingest-time).
+   Historical payment_ledger kabhi rewrite nahi hota. Daily behaviour unchanged. */
+const PAY_SCHEDULE_DEFAULTS = { weekly_start_dow: 1, weekly_pay_dow: 3, monthly_start_day: 1, monthly_delay_days: 45 };
+function paymentScheduleRow(type){
+  type=normalizePaymentType(type);
+  const row=db.get('SELECT * FROM payment_schedule WHERE payment_type=?',[type]);
+  if(!row) return { payment_type:type, ...PAY_SCHEDULE_DEFAULTS };
+  return { ...PAY_SCHEDULE_DEFAULTS, ...row };
+}
+/* UK-date ms helpers for period math (UK midnight anchoring, DST-safe via utcMsFromUkDate). */
+function ukDateStrOfMs(ms){ const p=ukParts(new Date(ms)); return `${p.year}-${p.month}-${p.day}`; }
+function civilAdd(dateStr,n){ const y=+dateStr.slice(0,4), m=+dateStr.slice(5,7), d=+dateStr.slice(8,10); const dt=new Date(Date.UTC(y,m-1,d+n)); return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`; }
+function addUkDays(dateStr,n){ return civilAdd(dateStr,n); }
+function ukDow(dateStr){ return ({Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6})[ukParts(new Date(utcMsFromUkDate(dateStr,0))).weekday] ?? 0; }
+function schedulePeriodFor(type, ukDateStr){
+  const sch=paymentScheduleRow(type);
+  if(type==='daily') return { start:ukDateStr, end:ukDateStr, payMs:utcMsFromUkDate(ukDateStr,1) };
+  const nz=(v,d)=>(v===''||v==null)?d:+v;
+  if(type==='weekly'){
+    const startDow=Math.min(6,Math.max(0,nz(sch.weekly_start_dow,1))); const payDow=Math.min(6,Math.max(0,nz(sch.weekly_pay_dow,3)));
+    const dow=ukDow(ukDateStr);
+    const startMs=utcMsFromUkDate(ukDateStr,0)-((dow-startDow+7)%7)*86400000;
+    const endMs=startMs+6*86400000;
+    const endDow=(startDow+6)%7;
+    const delay=((payDow-endDow+6)%7)+1; /* 1..7 din, payment-day par */
+    const endStr=ukDateStrOfMs(endMs);
+    return { start:ukDateStrOfMs(startMs), end:endStr, payMs:utcMsFromUkDate(civilAdd(endStr,delay),0) };
+  }
+  const S=Math.min(28,Math.max(1,nz(sch.monthly_start_day,1))); const delay=Math.min(180,Math.max(0,nz(sch.monthly_delay_days,45)));
+  const Y=+ukDateStr.slice(0,4), M=+ukDateStr.slice(5,7);
+  const mk=(y,m)=>`${y}-${String(m).padStart(2,'0')}-${String(S).padStart(2,'0')}`;
+  let sy=Y, sm=M;
+  if(mk(sy,sm)>ukDateStr){ sm--; if(sm<1){ sm=12; sy--; } }
+  const nextMk=(sm===12)?mk(sy+1,1):mk(sy,sm+1);
+  const endStr=addUkDays(nextMk,-1);
+  const payMs=utcMsFromUkDate(civilAdd(endStr,delay),0);
+  return { start:mk(sy,sm), end:endStr, payMs };
+}
 function paymentCycleInfo(type, earnedAt){
   type=normalizePaymentType(type); const d=dbDateToDate(earnedAt)||new Date(); const uk=ukParts(d); const date=`${uk.year}-${uk.month}-${uk.day}`;
   if(type==='daily') return {cycle_key:date, eligible_at:utcSqlFromMs(utcMsFromUkDate(date,1))};
-  const startMs=utcMsFromUkDate(date,0); const weekdayMap={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}; const dow=weekdayMap[uk.weekday] ?? 0; const daysSinceTue=(dow-2+7)%7;
-  if(type==='weekly'){
-    const start=new Date(startMs-daysSinceTue*86400000); const key=utcSqlFromMs(start.getTime()).slice(0,10); return {cycle_key:key, eligible_at:utcSqlFromMs(start.getTime()+7*86400000)};
-  }
-  // 30-day work cycle anchored at Unix epoch in UK-date days; eligible after 30+45 days.
-  const dayNo=Math.floor(utcMsFromUkDate(date,0)/86400000); const cycleStartDay=dayNo-(dayNo%30); const startDate=utcSqlFromMs(cycleStartDay*86400000).slice(0,10); return {cycle_key:startDate, eligible_at:utcSqlFromMs((cycleStartDay+75)*86400000)};
+  const per=schedulePeriodFor(type, date);
+  return {cycle_key:per.start, eligible_at:utcSqlFromMs(per.payMs)};
 }
 function walletValid(v){ return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(v||'').trim()); }
 function agentManagerId(agentId){ return db.get("SELECT parent_id FROM users WHERE id=? AND role='agent'",[agentId])?.parent_id || null; }
@@ -2203,9 +2252,28 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
       WHERE number_id IN (SELECT id FROM tmp_delete_numbers)
          OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`)?.c || 0;
     if (deleteSms) {
+      /* P18: pre-aggregated dashboard/stats counters bhi isi transaction mein kam karo,
+        taake deleted SMS dashboard totals / CVR / stats se foran gayab ho jayen.
+        Sirf non-test rows (wahi stats mein ginti hoti hai). */
+      const statMods = db.all(`SELECT date(received_at, '${ukSqlModifier()}') AS sd, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
+          COUNT(*) c, COALESCE(SUM(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL)),0) pay
+        FROM sms_records
+        WHERE COALESCE(is_test,0)=0 AND (number_id IN (SELECT id FROM tmp_delete_numbers)
+           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>''))
+        GROUP BY 1,2,3,4,5`);
+      statMods.forEach(m => {
+        db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
+          VALUES (?,?,?,?,?,?,?)
+          ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
+          DO UPDATE SET sms_count = sms_count - excluded.sms_count,
+                        payout_sum = payout_sum - excluded.payout_sum`,
+          [m.sd, m.mgr, m.ag, m.cl, m.cli, m.c, m.pay]);
+      });
       db.runNoSave(`DELETE FROM sms_records
         WHERE number_id IN (SELECT id FROM tmp_delete_numbers)
            OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`);
+      db.runNoSave(`DELETE FROM sms_daily_stats WHERE sms_count <= 0`);
+      /* Note: payment_ledger rows jaan-boojh kar rakhi (historical immutability) — balances Sahi rehte hain */
     }
     db.runNoSave('DELETE FROM numbers WHERE id IN (SELECT id FROM tmp_delete_numbers)');
     db.execNoSave('DROP TABLE IF EXISTS tmp_delete_numbers');
@@ -2648,6 +2716,20 @@ app.get('/api/sms/clis', authRequired, (req, res) => cachedJson(req, res, 30000,
   const built = buildSmsPagedQuery(req.user, q);
   const rows = db.all(`SELECT s.cli AS cli, COUNT(*) AS c ${built.baseSql} AND s.cli IS NOT NULL AND TRIM(s.cli)<>'' GROUP BY s.cli ORDER BY s.cli LIMIT 300`, built.params);
   return { clis: rows.map(r => r.cli), items: rows.map(r => ({ cli: r.cli, count: r.c })), from: q.from, to: q.to };
+}));
+app.get('/api/sms/numbers', authRequired, (req, res) => cachedJson(req, res, 30000, () => {
+  /* P18: Number filter list = current report dataset (same filters/scope as /api/sms/paged) */
+  const q = { ...(req.query || {}) };
+  const dq = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+  if (!dq(q.from)) delete q.from;
+  if (!dq(q.to)) delete q.to;
+  if (!q.from && !q.to) { q.from = ukTodayDateStr(0); q.to = q.from; }
+  else if (q.from && !q.to) q.to = q.from;
+  else if (!q.from && q.to) q.from = q.to;
+  if (q.from > q.to) { const t = q.from; q.from = q.to; q.to = t; }
+  const built = buildSmsPagedQuery(req.user, q);
+  const rows = db.all(`SELECT s.number AS number, COUNT(*) AS c ${built.baseSql} AND s.number IS NOT NULL AND TRIM(s.number)<>'' GROUP BY s.number ORDER BY s.number LIMIT 300`, built.params);
+  return { numbers: rows.map(r => r.number), items: rows.map(r => ({ number: r.number, count: r.c })), from: q.from, to: q.to };
 }));
 
 // aggregated stats by dimension
@@ -3108,6 +3190,35 @@ function agentPaymentSummary(agentId){
   });
 }
 app.get('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res)=>res.json(paymentTypesSettings()));
+
+/* ============ P18: PAYMENT SCHEDULE (admin-only config, future periods only) ============ */
+function schedulePreviewFor(type){
+  const nowUk = (()=>{ const p=ukParts(new Date()); return `${p.year}-${p.month}-${p.day}`; })();
+  const per=schedulePeriodFor(normalizePaymentType(type), nowUk);
+  return { payment_type: normalizePaymentType(type), period_start: per.start, period_end: per.end, payment_date: ukDateStrOfMs(per.payMs), uk_today: nowUk };
+}
+app.get('/api/payment-v2/schedule', authRequired, requireRole('admin'), (req,res)=>{
+  const rows=db.all('SELECT * FROM payment_schedule ORDER BY CASE payment_type WHEN \'daily\' THEN 1 WHEN \'weekly\' THEN 2 ELSE 3 END');
+  const types=['daily','weekly','monthly_30x45'];
+  res.json({ schedule: rows.length?rows:types.map(t=>({payment_type:t,...PAY_SCHEDULE_DEFAULTS})), preview: types.map(schedulePreviewFor) });
+});
+app.put('/api/payment-v2/schedule', authRequired, requireRole('admin'), (req,res)=>{
+  const b=req.body||{}; const type=normalizePaymentType(String(b.payment_type||''));
+  if(!['daily','weekly','monthly_30x45'].includes(type)) return res.status(400).json({error:'Invalid payment_type'});
+  const cl=(v,lo,hi,dflt)=>{ const n=parseInt(v,10); return Number.isFinite(n)?Math.min(hi,Math.max(lo,n)):dflt; };
+  if(type==='weekly'){
+    const s=cl(b.weekly_start_dow,0,6,1), p=cl(b.weekly_pay_dow,0,6,3);
+    db.run('UPDATE payment_schedule SET weekly_start_dow=?, weekly_pay_dow=?, updated_at=datetime(\'now\'), updated_by=? WHERE payment_type=?',[s,p,req.user.id,type]);
+  } else if(type==='monthly_30x45'){
+    const sd=cl(b.monthly_start_day,1,28,1), dl=cl(b.monthly_delay_days,0,180,45);
+    db.run('UPDATE payment_schedule SET monthly_start_day=?, monthly_delay_days=?, updated_at=datetime(\'now\'), updated_by=? WHERE payment_type=?',[sd,dl,req.user.id,type]);
+  } else {
+    return res.status(400).json({error:'Daily schedule fixed (next UK midnight) — nothing to configure'});
+  }
+  logAction(req,'payment_schedule_update','payments',{type, body:b});
+  const rows=db.all('SELECT * FROM payment_schedule ORDER BY CASE payment_type WHEN \'daily\' THEN 1 WHEN \'weekly\' THEN 2 ELSE 3 END');
+  res.json({ ok:true, schedule: rows, preview: ['daily','weekly','monthly_30x45'].map(schedulePreviewFor) });
+});
 app.put('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res)=>{
   const rows=Array.isArray(req.body?.settings)?req.body.settings:[];
   rows.forEach(r=>{ const t=normalizePaymentType(r.payment_type); db.run('UPDATE payment_v2_settings SET min_withdrawal=?, updated_at=datetime(\'now\') WHERE payment_type=?',[normalizeDecimalString(r.min_withdrawal)||'0',t]); paymentAudit(req,'update_minimum',{payment_type:t,amount:r.min_withdrawal,status:'settings'}); });
