@@ -157,9 +157,70 @@ git push origin main
 cd /opt/galaxy
 git fetch && git reset --hard origin/main
 npm install --omit=dev
-pm2 restart Galaxy-Sms
+pm2 restart galaxy
 ```
+> PM2 process name: the current VPS runs the app as **`galaxy`** (per handover). If that errors, run `pm2 list` and use the name shown in the first column. Repo's `ecosystem.config.js` names it `powerx` — only relevant if you ever start fresh via `pm2 start ecosystem.config.js`. **Never start a second copy** — the app must stay a single process (one SQLite writer).
 
 **Smoke test after deploy (2 minutes):** Admin → AI Settings → limit shows 100, set 50, Save, restart pm2, still 50 · SMS Report page has no CLI box · SMS Detail: tick CLI → CLIs listed → click one → filtered · Numbers → select → Allocate → Rate field pre-filled from Rate Management; change it → only that allocation's rate changes · Manager: allocate own-pool numbers to an agent → succeeds (this was the silently-broken flow).
 
 **Rollback:** every changed block carries a rollback comment (`P19`/`P18` style) documenting the previous line; `git revert <commit>` restores previous behaviour. The ownGuard rollback line is in `server.js:2155`'s comment.
+
+---
+---
+
+# P19b ADDENDUM — 2 follow-up fixes reported after first deploy (map + delete leftovers)
+
+**Reported:** "1) Globe map Russia/Afghanistan par bina kisi real message ke counts dikha raha hai. 2) Numbers + unka OTP data delete karne ke baad bhi dashboard par data dikh raha hai — payouts aur OTPs sab sath delete hone chahiye."
+
+## 20. Root cause — map (issue 1): three bugs found in `sms_by_country` (dashboard world map)
+
+1. **TEST/DEMO rows counted as real traffic.** The map queries read `sms_records` **without** the `is_test=0` filter that every other real-stat view uses. The admin Test Panel / demo generator inserts `is_test=1` rows with fake numbers — those fake numbers' prefixes painted **Russia (7…) / Afghanistan (93…) etc. on the map with no real message ever received**. (Dashboard cards excluded them, which is exactly why the map disagreed with everything else.)
+2. **Naive country attribution.** Old logic: take first 2 digits, look up; else first 1 digit if it's 1 or 7. UK numbers stored in **national format (7xxx…)** therefore showed as **Russia**; 3-digit country codes (353 Ireland etc.) never showed at all.
+3. **Wrong "today" window.** The map used `received_at >= today 00:00 UTC` while the cards use the **UK day** — the two disagreed around DST/midnight.
+
+## 21. Map fix — exact behaviour now
+
+- **Test/demo rows are excluded** (`COALESCE(s.is_test,0)=0`) — map shows REAL traffic only, consistent with cards/reports.
+- **"Today" = the same UK-day window the cards use** (`ukDayOffsetSql`).
+- **Attribution is authoritative first:** the number's **Range country** (what you set in Range Management; alias map UK/United Kingdom/England→gb, USA→us, UAE→ae, plus all E.164 names) → **fallback: proper E.164 longest-prefix (3→2→1 digits)**. National-format UK numbers now show under **United Kingdom**, not Russia. Ireland/Portugal etc. (3-digit codes) now work.
+- **Junk guard:** numbers shorter than 7 digits (shortcodes, junk) are attributed to **no country**.
+- Numbers with no range and an unresolvable prefix simply don't appear.
+- Role scoping (admin/manager/agent/client see only their own tree) retained — re-verified.
+
+## 22. Root cause + fix — delete leftovers (issue 2)
+
+Two real gaps found (beyond the P19 fixes, which re-verified green):
+
+1. **Range-delete orphan SMS:** when a range was deleted with "delete SMS", numbers' linked SMS were decremented from stats, but **orphan rows** (SMS of numbers deleted earlier *without* SMS) were raw-deleted **without decrementing stats** → dashboard kept showing them. **Fixed:** the range-delete path now decrements stats for those rows first (shared helper).
+2. **Phantom-row hazard:** the stats decrement used `INSERT … ON CONFLICT DO UPDATE` with **positive** values — if a stats row was ever missing/mismatched, the delete would **insert a positive phantom row** (dashboard *gains* deleted data). **Fixed:** the shared `decrementSmsDailyStats()` now inserts **negative** values with `+` upsert — a missing key nets to zero and is cleaned up; stats can never inflate from a delete.
+3. **Repair tool for already-stale counters:** deletes performed under the OLD code (before the P19 deploy) left stale rows in `sms_daily_stats`. New admin button **"Rebuild Stats"** (Numbers page → DB tools row, 🔄 icon) calls the existing `POST /admin/backfill-stats {reset:true}` — rebuilds all dashboard counters from `sms_records` (test rows excluded automatically). **Click it ONCE after deploying this fix** to repair history.
+
+## 23. Files changed in P19b
+
+| File | Change |
+|---|---|
+| `backend/server.js` | `sms_by_country` block rewritten (is_test filter, UK-day window, range-country + longest-prefix attribution, junk guard); new shared `decrementSmsDailyStats()` (phantom-safe) used by number-delete AND range-delete orphan path; rollback comments inline |
+| `assets/galaxy.js` | `GX.countryOf` (numbers-table Country column): same longest-prefix + min-7-digits rule |
+| `admin.html` | "Rebuild Stats" button + `rebuildDashboardStats()` (confirm-gated, Roman-Urdu messages) |
+| `manager.html`, `agent.html`, `client.html` | `galaxy.js?v=gal-8` → `?v=gal-9` (cache-bust, required) |
+| `tests/p19b-verify.js` | NEW suite (below) |
+
+## 24. P19b tests + results, deploy & verify steps
+
+**Suite:** `node tests/p19b-verify.js` — **35/35 PASS**:
+- Map: E.164 UK → gb ✓ · **no Russia from test rows or national-format numbers** ✓ · national-format 74… → gb via range country ✓ · 3-digit code 353 → Ireland ✓ · shortcodes → no country ✓ · UK-day boundary SMS (yesterday 23:30Z = UK today) counted ✓ · manager/agent scoping ✓ · delete number+SMS → map AND cards drop immediately ✓
+- Delete: range-delete orphans decremented (old code: stuck) ✓ · delete-without-SMS still preserves history ✓ · **no positive phantom row when a stats row is missing** ✓ · payment ledger untouched ✓
+
+**Regression:** full P19 suite re-run after the refactor — **112/112 PASS**; UI suite — **36/36 PASS** (plus 4-panel inline-script checks + `?v=gal-9` present in all four).
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev
+pm2 restart galaxy     # (or the name from: pm2 list)
+```
+
+**After deploy (one time):** Admin panel → **Numbers** page → **Rebuild Stats** (🔄 button next to "Delete by Range") → confirm. This repairs any dashboard counters that went stale from deletes made under the old code. Then hard-refresh the browser (Ctrl+Shift+R) so the new `galaxy.js?v=gal-9` loads.
+
+**Verify (1 minute):** Dashboard map now shows only real countries (no Russia/Afghanistan unless you truly have such numbers — range country wins) · delete a number with OTP data → cards, payouts AND map all drop immediately and stay dropped on refresh.

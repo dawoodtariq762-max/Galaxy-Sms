@@ -1582,6 +1582,11 @@ app.delete('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => 
   let rangeSmsDeleted = 0, rangeSmsPreserved = 0;
   const rangeSmsCount = db.get('SELECT COUNT(*) c FROM sms_records WHERE range_id=?', [rangeId])?.c || 0;
   if (deleteSms) {
+    /* P19b FIX: ye orphan SMS rows (inki numbers pehle delete ho chuki thin, is liye
+       upar wale deleteNumbersWhere ne inhe nahi chhoda) stats me abhi bhi ginti hoti
+       thin — dashboard par deleted data dikhta rehta tha. Ab delete se pehle unka
+       stats-decrement ho jata hai (wahi shared DST-safe helper). */
+    try { decrementSmsDailyStats('range_id=?', [rangeId]); } catch (e) { console.warn('[DELETE-RANGE] stats decrement failed:', e.message); }
     db.run('DELETE FROM sms_records WHERE range_id=?', [rangeId]);
     rangeSmsDeleted = rangeSmsCount;
   } else {
@@ -2290,6 +2295,36 @@ app.post('/api/numbers/unallocate', authRequired, (req, res) => {
 });
 
 function truthy(v) { return v === true || v === 1 || v === '1' || String(v || '').toLowerCase() === 'true' || String(v || '').toLowerCase() === 'yes'; }
+/* P19b: shared stats-decrement for deleted SMS rows (DST-safe, phantom-safe).
+   Rollback note: yeh wahi logic hai jo pehle deleteNumbersFromRows ke andar inline tha.
+   Phantom-safe: VALUES NEGATIVE hain + DO UPDATE '+' — agar koi key stats me exist nahi
+   karti (edge/mismatch), to negative row insert hoti hai aur neeche wali cleanup use hata
+   deti hai — stats KABHI inflate nahi hoti (purana code missing-key par POSITIVE phantom
+   row bana deta tha). */
+function decrementSmsDailyStats(whereSql, params = []) {
+  const statRows = db.all(`SELECT received_at, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
+      COALESCE(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL),0) pay
+    FROM sms_records WHERE COALESCE(is_test,0)=0 AND (${whereSql})`, params);
+  const statAgg = new Map();
+  for (const r of statRows) {
+    const sd = ukStatDate(r.received_at); /* same conversion as recordSmsStats at ingest */
+    const k = sd + '|' + r.mgr + '|' + r.ag + '|' + r.cl + '|' + r.cli;
+    const cur = statAgg.get(k);
+    if (cur) { cur.c += 1; cur.pay += r.pay; }
+    else statAgg.set(k, { sd, mgr: r.mgr, ag: r.ag, cl: r.cl, cli: r.cli, c: 1, pay: r.pay });
+  }
+  statAgg.forEach(m => {
+    db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
+      VALUES (?,?,?,?,?,-?,-?)
+      ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
+      DO UPDATE SET sms_count = sms_count + excluded.sms_count,
+                    payout_sum = payout_sum + excluded.payout_sum`,
+      [m.sd, m.mgr, m.ag, m.cl, m.cli, m.c, m.pay]);
+  });
+  db.runNoSave(`DELETE FROM sms_daily_stats WHERE sms_count <= 0`);
+  return statRows.length;
+}
+
 function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = false) {
   const cleanRows = (rows || [])
     .map(r => ({ id: parseInt(r.id, 10), number: String(r.number || '') }))
@@ -2319,31 +2354,11 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
         me delete), to key mismatch hota tha: decrement naye (galat) key par row banata,
         'sms_count<=0' cleanup usse hata deta, aur ASLI stats row UNCHANGED reh jati —
         deleted SMS dashboard/stats me dikhte rehte the. Rollback: purana GROUP BY SQL. */
-      const statRows = db.all(`SELECT received_at, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
-          COALESCE(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL),0) pay
-        FROM sms_records
-        WHERE COALESCE(is_test,0)=0 AND (number_id IN (SELECT id FROM tmp_delete_numbers)
-           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>''))`);
-      const statAgg = new Map();
-      for (const r of statRows) {
-        const sd = ukStatDate(r.received_at); /* same conversion as recordSmsStats at ingest */
-        const k = sd + '|' + r.mgr + '|' + r.ag + '|' + r.cl + '|' + r.cli;
-        const cur = statAgg.get(k);
-        if (cur) { cur.c += 1; cur.pay += r.pay; }
-        else statAgg.set(k, { sd, mgr: r.mgr, ag: r.ag, cl: r.cl, cli: r.cli, c: 1, pay: r.pay });
-      }
-      statAgg.forEach(m => {
-        db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
-          VALUES (?,?,?,?,?,?,?)
-          ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
-          DO UPDATE SET sms_count = sms_count - excluded.sms_count,
-                        payout_sum = payout_sum - excluded.payout_sum`,
-          [m.sd, m.mgr, m.ag, m.cl, m.cli, m.c, m.pay]);
-      });
+      decrementSmsDailyStats(`number_id IN (SELECT id FROM tmp_delete_numbers)
+           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`);
       db.runNoSave(`DELETE FROM sms_records
         WHERE number_id IN (SELECT id FROM tmp_delete_numbers)
            OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`);
-      db.runNoSave(`DELETE FROM sms_daily_stats WHERE sms_count <= 0`);
       /* Note: payment_ledger rows jaan-boojh kar rakhi (historical immutability) — balances Sahi rehte hain */
     }
     db.runNoSave('DELETE FROM numbers WHERE id IN (SELECT id FROM tmp_delete_numbers)');
@@ -3080,21 +3095,37 @@ app.get('/api/dashboard', authRequired, (req, res) => cachedJson(req, res, 10000
   } catch(e) {}
   try {
     const E164 = require('./e164-country.json');
-    const cleanNum = `REPLACE(REPLACE(REPLACE(REPLACE(s.number,'+',''),' ',''),'-',''),'_','')`;
-    const since = dToday + ' 00:00:00';
+    /* P19b: cleanNum/since ab map query me use nahi hote (UK-day helper + JS-side prefix resolve) */
     /* P14: scope locally derive karo (stCol/stP2 upar wale try ke andar const the — out of scope) */
     const cCol = st.col ? ` AND s.${st.col}=?` : '';
     const cParams = st.params || [];
     const agg = {};
-    const addCount = (code, c) => { const hit = E164[code]; if (!hit) return; const k = hit[0]; agg[k] = agg[k] || { iso: hit[0], name: hit[1], count: 0 }; agg[k].count += c; };
-    // length-2 country codes (no valid code starts with 1 or 7, so safe)
-    /* P14 FIX: these queries were GLOBAL (no role scope) — manager/agent/client dashboards
-       were leaking other roles' country volumes. Now scoped exactly like the other cards. */
-    db.all(`SELECT SUBSTR(${cleanNum},1,2) p, COUNT(*) c FROM sms_records s WHERE s.received_at >= ?${cCol} GROUP BY 1`, cParams.length ? [since, ...cParams] : [since])
-      .forEach(r => addCount(r.p, r.c));
-    // length-1 codes (1 = NANP, 7 = Russia)
-    db.all(`SELECT SUBSTR(${cleanNum},1,1) p, COUNT(*) c FROM sms_records s WHERE s.received_at >= ?${cCol} GROUP BY 1`, cParams.length ? [since, ...cParams] : [since])
-      .forEach(r => { if (r.p === '1' || r.p === '7') addCount(r.p, r.c); });
+    const isoToEntry = {}; for (const k of Object.keys(E164)) isoToEntry[E164[k][0]] = E164[k];
+    const addIso = (iso, c) => { const hit = isoToEntry[iso]; if (!hit) return; agg[iso] = agg[iso] || { iso: hit[0], name: hit[1], count: 0 }; agg[iso].count += c; };
+    /* P19b MAP FIX (3 bugs):
+       (1) TEST/DEMO rows (is_test=1) pehle map par aa rahe the jabki baaki sab real-stats
+           views unhe exclude karte hain — test numbers ke prefix se fake countries
+           (Russia/Afghanistan waghera) map par highlight hoti thi bina koi real message ke.
+       (2) "Today" window ab wahi UK-day hai jo cards use karte hain (ukDayOffsetSql) —
+           pehle UTC-midnight se count hota tha jo UK-day se mismatch tha.
+       (3) Attribution ab AUTHORITATIVE hai: number ke RANGE ka country (jo owner ne
+           Range Management me set kiya) pehle — warna E.164 longest-prefix (3->2->1 digit,
+           min 7 digits). Purana code sirf 2-digit-then-1-digit tha: UK numbers national
+           format (7xxx...) me "Russia" ban jate the, aur 3-digit codes (353 Ireland waghera)
+           kabhi show hi nahi hote the. Rollback: purane do SUBSTR queries + addCount. */
+    const COUNTRY_ALIAS = { uk: 'gb', 'united kingdom': 'gb', england: 'gb', britain: 'gb', 'great britain': 'gb', usa: 'us', 'united states': 'us', uae: 'ae', 'united arab emirates': 'ae', holland: 'nl', sri_lanka: 'lk' };
+    const e164NameToIso = {}; for (const k of Object.keys(E164)) e164NameToIso[E164[k][1].toLowerCase()] = E164[k][0];
+    const isoOfCountryText = (t) => { const k = String(t || '').trim().toLowerCase().replace(/[\s_]+/g, ' '); if (!k) return null; if (COUNTRY_ALIAS[k]) return COUNTRY_ALIAS[k]; return e164NameToIso[k] || null; };
+    const resolveByPrefix = (num) => { const s = String(num || '').replace(/[^\d]/g, ''); if (s.length < 7) return null; for (const L of [3, 2, 1]) { const hit = E164[s.slice(0, L)]; if (hit) return hit[0]; } return null; };
+    /* P14 FIX (retained): role-scoped exactly like the other cards. */
+    db.all(`SELECT s.number num, r.country rc, COUNT(*) c FROM sms_records s
+        LEFT JOIN ranges r ON r.id = s.range_id
+        WHERE ${ukDayOffsetSql('s.received_at', 0)} AND COALESCE(s.is_test,0)=0${cCol}
+        GROUP BY 1, 2`, cParams)
+      .forEach(row => {
+        const iso = isoOfCountryText(row.rc) || resolveByPrefix(row.num);
+        if (iso) addIso(iso, row.c);
+      });
     sms_by_country = Object.values(agg).sort((a,b) => b.count - a.count);
   } catch(e) {}
   /* ===== /GALAXY ===== */
