@@ -443,8 +443,13 @@
         <div class="card" style="padding:16px;margin-bottom:16px">
           <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
             <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="aiPayEnabled" onchange="toggleAiPay(this.checked)"> Payment knowledge enabled</label>
+            <label style="display:flex;gap:8px;align-items:center;font-weight:600">AI Number Allocation Limit
+              <input type="number" id="aiAllocMax" min="1" max="5000" step="1" style="width:90px;padding:7px 9px" title="AI assistant per-range allocation limit (1–5000)">
+              <button type="button" class="gx-btn gx-blue" onclick="saveAiAllocMax()">Save</button>
+            </label>
             <span class="muted" id="aiKbInfo" style="font-size:12.5px"></span>
           </div>
+          <div class="hint" style="margin:-6px 0 12px;color:#5c6a86;font-size:11.5px">AI assistant ek range request par itne se zyada numbers allocate nahi kar sakta (1–5000). Backend enforce karta hai.</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
             <select id="aiKbCat" style="padding:9px 10px"><option value="general">Category: General</option><option value="payment">Category: Payment</option></select>
             <input id="aiKbQ" placeholder="Question (e.g. What are payment dates?)" style="padding:9px 10px">
@@ -473,10 +478,11 @@
         <div class="toolbar">
           <div style="font-weight:600;margin-bottom:12px;color:#c7d2fe">Allocate a Range to a Manager</div>
           <div class="filter-row">
-            <select class="sel-lg" id="allocRange"><option value="">Select Range</option></select>
+            <select class="sel-lg" id="allocRange" onchange="allocRateRefresh()"><option value="">Select Range</option></select>
             <select class="sel-lg" id="allocManager"><option value="">Select User</option></select>
-            <select class="sel-lg" id="allocPayterm" onchange="renderAlloc()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select>
+            <select class="sel-lg" id="allocPayterm" onchange="renderAlloc();allocRateRefresh()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select>
             <input type="number" style="width:130px" placeholder="Qty" id="allocQty" />
+            <input type="number" style="width:130px" placeholder="Rate (default)" id="allocRate" step="0.000001" min="0" title="Allocation rate — default Rate Management se" oninput="this.dataset.dirty='1'"/>
             <button class="btn btn-purple" onclick="doAllocate()">Allocate to Manager</button>
           </div>
           <div class="hint" style="color:#5c6a86;font-size:11.5px">Use SMS Numbers for selected-number allocation to Manager or direct Agent. This page is for range quantity allocation.</div>
@@ -719,7 +725,11 @@
   <div class="modal-head"><h3>Allocate Selected Numbers</h3><button class="modal-close" onclick="closeModal('allocAllModal')">×</button></div>
   <div class="modal-body">
     <div class="form-group"><label>Select Manager / Agent <span class="req">*</span></label><select id="aaClient"><option value="">Please Select</option></select></div>
-    <div class="form-group"><label>Payterm</label><select id="aaPayterm"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
+    <div class="form-group"><label>Payterm</label><select id="aaPayterm" onchange="aaRefreshDefaultRate()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
+    <div class="form-group"><label>Allocation Rate <span class="req">*</span> <span class="muted" style="font-weight:400;font-size:11.5px">(default Rate Management se)</span></label>
+      <input type="number" id="aaRate" step="0.000001" min="0" placeholder="0.010" oninput="this.dataset.dirty='1'"/>
+      <div class="hint" id="aaRateHint" style="font-size:11.5px;margin-top:4px">Default rate Rate Management se aata hai. Value change karne par sirf YEH allocation override hota hai — Rate Management / Agent ka global rate change NAHI hota.</div>
+    </div>
     <div class="form-group" style="display:none"><label>Payout ($) Locked</label><input type="number" id="aaPayout" step="0.001" value="0" placeholder="0" disabled/></div>
     <div class="hint" id="aaCount"></div>
   </div>
@@ -1022,11 +1032,41 @@ async function openAllocAll(){const ids=getSelectedIds();if(!ids.length){alert('
   const agentOpts=(usersData.agent||[]).map(a=>`<option value="${a.id}">Agent: ${a.username}</option>`).join('');
   const sel=document.getElementById('aaClient'); sel.innerHTML='<option value="">Please Select</option>'+managerOpts+agentOpts;
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
+  const rateInput=document.getElementById('aaRate'); if(rateInput){ rateInput.value=''; rateInput.dataset.dirty=''; }
+  aaRefreshDefaultRate();
   document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — Manager ya direct Agent ko allocate honge.`;
   document.getElementById('allocAllModal').classList.add('show');}
+/* P19: selected numbers ke (pehle) range ka Rate Management default aaRate me load karo.
+   Multiple ranges selected hon to hint bata deta hai. Admin value change kar sakta hai —
+   change sirf IS allocation par override lagta hai (numbers.rate). */
+function aaRefreshDefaultRate(){
+  const inp=document.getElementById('aaRate'); const hint=document.getElementById('aaRateHint'); if(!inp) return;
+  if(inp.dataset.dirty==='1') return; /* admin ne khud value likhi — overwrite nahi karo */
+  const ids=getSelectedIds();
+  /* P19 FIX: numbersData me RAW /numbers API rows hain (id, range_name) — table ke
+     mapped rows (_id, range) sirf renderNumbers ke local `rows` me hote hain. Purana
+     code r._id/r.range se filter karta tha => hamesha khaali => default rate kabhi
+     fill nahi hota tha. Ab id + range_name se. */
+  const rows=(numbersData||[]).filter(r=>ids.includes(r.id));
+  const ranges=[...new Set(rows.map(r=>r.range_name).filter(Boolean))];
+  const cycle=document.getElementById('aaPayterm')?.value||'weekly_7_1';
+  let def=''; let mixed=false;
+  if(ranges.length===1){
+    const rd=(typeof allocData!=='undefined'?allocData:[]).find(x=>x.range===ranges[0]);
+    if(rd){ def=adminCycleRate(rd,cycle); if(def==='0'||def==='NA'||def==='') def=''; }
+  } else if(ranges.length>1){ mixed=true; }
+  inp.value=def;
+  if(hint){ hint.textContent = mixed
+    ? 'Selected numbers me multiple ranges hain — default rate khud likhen (Rate Management dekh kar).'
+    : 'Default rate Rate Management se aata hai. Value change karne par sirf YEH allocation override hota hai — Rate Management / Agent ka global rate change NAHI hota.'; }
+}
 async function confirmAllocAll(){const ids=getSelectedIds();const target=document.getElementById('aaClient').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;
   if(!target){alert('Select a manager.');return;}
-  try{ await API.post('/numbers/allocate',{ids,target_id:+target,payterm:pt,payout:po}); closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers(); }catch(e){ alert('❌ '+e.message); }}
+  /* P19: rate override — khali chhoro to Rate Management default lagega */
+  const rv=(document.getElementById('aaRate')?.value||'').trim();
+  if(rv && (isNaN(parseFloat(rv))||parseFloat(rv)<=0)){alert('Rate positive number likhen (e.g. 0.010) — ya khali chhor dein to Rate Management default lagega.');return;}
+  try{ const body={ids,target_id:+target,payterm:pt,payout:po}; if(rv) body.rate=rv;
+    await API.post('/numbers/allocate',body); closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers(); }catch(e){ alert('❌ '+e.message); }}
 
 /* ===== SMART DIVIDE (Admin -> Managers, unallocated auto-divide) ===== */
 async function openSmart(){
@@ -1199,7 +1239,6 @@ function buildSmsReport(){
     <label>To</label><input type="date" id="srTo" onchange="renderSmsReport();populateSmsReportFilterLists()"/>
     <label>Time</label><input type="time" id="srTFrom" onchange="renderSmsReport()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="srTTo" onchange="renderSmsReport()"/>
     <label>Range</label><select id="srRange" onchange="renderSmsReport()"><option value="">All Ranges</option></select>
-    <label>CLI</label><select id="srCli" onchange="renderSmsReport()"><option value="">All CLIs</option></select>
     <label>Number</label><input type="text" id="srNumber" list="srNumDl" placeholder="92300…" style="min-width:150px" oninput="clearTimeout(window.__srNT);window.__srNT=setTimeout(renderSmsReport,450)"/>
     <label>Manager</label><select id="srManager" onchange="renderSmsReport()"><option value="">All Managers</option></select>
     <button type="button" class="gx-btn gx-blue"  onclick="renderSmsReport()" data-tip="Apply filters" title="Apply" aria-label="Apply"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
@@ -1219,18 +1258,18 @@ function buildSmsReport(){
 /* P14: report filter lists (Range/Manager from loaded data, CLI from role-scoped API) */
 async function populateSmsReportFilterLists(){
   try{
-    const rs=document.getElementById('srRange'), ms=document.getElementById('srManager'), cs=document.getElementById('srCli');
+    const rs=document.getElementById('srRange'), ms=document.getElementById('srManager');
     if(rs && rs.options.length<=1){ let names=(typeof rangeNames!=='undefined'&&rangeNames.length)?rangeNames.slice():[]; if(!names.length){ try{ const rj=await API.get('/ranges'); const arr=Array.isArray(rj)?rj:(rj.ranges||[]); names=arr.map(x=>x.name).filter(Boolean);}catch(e){} } rs.innerHTML='<option value="">All Ranges</option>'+names.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
     if(ms && ms.options.length<=1){ const ms2=(typeof usersData!=='undefined'&&(usersData.manager||[]).length)?usersData.manager.map(x=>x.username||x.name).filter(Boolean):[]; ms.innerHTML='<option value="">All Managers</option>'+ms2.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
-    /* P17: CLI list = CURRENT filtered dataset (dates+time+range+number+search+manager), counts ke saath */
-    if(cs){ const kv=cs.value; const rj=await API.smsClis(srListArgs()); cs.innerHTML=gxOptList(rj.items); if(kv){ cs.value=kv; if(cs.value!==kv) cs.value=''; } }
+    /* P19: SMS Report (SMS Support) se CLI filter hata diya — CLI filtering ab sirf SMS Detailed Report me.
+       Rollback: srCli select + API.smsClis(srListArgs()) wala block yahan wapas aa sakta hai. */
     /* P18: Number input par click => available numbers (current dataset, counts) */
     let dl=document.getElementById('srNumDl');
     if(!dl){ dl=document.createElement('datalist'); dl.id='srNumDl'; const inp=document.getElementById('srNumber'); if(inp&&inp.parentNode) inp.parentNode.appendChild(dl); }
     if(dl){ const rn=await API.smsNumbers(srListArgs()); dl.innerHTML=(rn.items||[]).map(x=>`<option value="${String(x.number).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${x.count!=null?x.count+' OTPs':''}</option>`).join(''); }
   }catch(e){}
 }
-function srResetFilters(){window.__srSort={k:'',d:''};gxResetSortHeads('srSort_'); ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srCli','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); renderSmsReport(); }
+function srResetFilters(){window.__srSort={k:'',d:''};gxResetSortHeads('srSort_'); ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); renderSmsReport(); }
 async function loadSmsRecords(){
   try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; }
   // manager summary from real data
@@ -1252,9 +1291,15 @@ function renderSmsReport(){
   const pi=document.getElementById('srPayoutInfo'); if(pi) pi.textContent=`Visible total payout: ${money(sumPay(rows))}`;
 }
 
-/* ---- SMS Detailed Report (combinable advanced filters) ---- */
+/* ---- SMS Detailed Report (combinable advanced filters) ----
+   P19 REDESIGN: dropdown/select filters hata diye. Ab tick karne par results area me
+   us dimension ki ACTUAL values (current report data se — server-side, role-scoped,
+   date/time/filters ke mutabiq) SMS count + payout ke saath list hoti hain. Value par
+   click = usi value ka filter (drill). Chip se hatane par wapas poori list.
+   Rollback: purana tick+select design git history me hai. */
 function buildSmsDetail(){
   document.getElementById('page-smsDetail').innerHTML=`
+  <style>.gx-facet-row{cursor:pointer}.gx-facet-row:hover{background:rgba(99,102,241,.10)}.gx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:rgba(99,102,241,.15);color:#a5b4fc;margin:2px 6px 2px 0}.gx-chip .x{cursor:pointer;font-weight:800;color:#f87c8a}</style>
   <div class="page-head"><div><h2>SMS Detailed Report</h2><div class="breadcrumb"><b>CDR Stats</b> › Detailed Report</div></div></div>
   <div class="toolbar">
     <div class="filter-row">
@@ -1262,20 +1307,16 @@ function buildSmsDetail(){
       <input type="date" id="sdDateFrom" title="From date" onchange="renderSmsDetail()" /> <span class="muted" style="align-self:center">to</span> <input type="date" id="sdDateTo" title="To date" onchange="renderSmsDetail()" />
       <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="toggleDetailFilters()"> Time</label>
       <input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
-      <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
-      <select id="sdRange" onchange="renderSmsDetail()"><option value="">All Ranges</option></select>
-      <label><input type="checkbox" id="sdUseProvider" style="width:auto" onchange="toggleDetailFilters()"> Provider</label>
-      <select id="sdProvider" onchange="renderSmsDetail()"><option value="">All Providers</option></select>
-      <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters()"> Number</label>
-      <select id="sdNumber" onchange="renderSmsDetail()"><option value="">All Numbers</option></select>
       <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters()"> CLI</label>
-      <select id="sdCli" onchange="renderSmsDetail()"><option value="">All CLIs</option></select>
+      <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters()"> Number</label>
+      <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
       <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters()"> Manager</label>
-      <select id="sdUser" onchange="renderSmsDetail()"><option value="">All Managers</option></select>
+      <label><input type="checkbox" id="sdUseProvider" style="width:auto" onchange="toggleDetailFilters()"> Provider</label>
       <button class="btn btn-red" onclick="renderSmsDetail()">Apply Filter</button>
       <button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
     </div>
-    <div class="hint">Filters are combinable. The report uses AND logic across all enabled filters.</div>
+    <div class="hint">Tick karne par results me us dimension ki values (current data se, SMS count + payout) list hoti hain — value par click karo to sirf usi ke results. Filters combinable (AND).</div>
+    <div id="sdChips" style="display:flex;flex-wrap:wrap;align-items:center"></div>
   </div>
   <div class="table-wrap" style="padding:16px 18px;margin-top:0"><div class="table-controls"><div class="tc-left"><label>Show Records:</label>
     <select id="sdLen" onchange="renderSmsDetail()"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option><option>1000</option><option>10000</option><option value="All">All</option></select>${expBtns()}</div>
@@ -1286,49 +1327,21 @@ function buildSmsDetail(){
   var _f=document.getElementById('sdDateFrom'),_t=document.getElementById('sdDateTo');if(_f)_f.value='';if(_t)_t.value='';
   renderSmsDetail();
 }
+/* P19 facet state: __sdSel = picked values per dim; __sdDrill = last clicked dim (detail rows).
+   Tick CHANGE drill reset karta hai (user list dekhna chahta hai); picks filters ban ke rehte hain. */
+function sdActiveTicks(){ const m=[]; if(typeof sdUseCli!=='undefined'&&sdUseCli&&sdUseCli.checked)m.push('cli'); if(typeof sdUseNumber!=='undefined'&&sdUseNumber&&sdUseNumber.checked)m.push('number'); if(typeof sdUseRange!=='undefined'&&sdUseRange&&sdUseRange.checked)m.push('range'); if(typeof sdUseUser!=='undefined'&&sdUseUser&&sdUseUser.checked)m.push('manager'); if(typeof sdUseProvider!=='undefined'&&sdUseProvider&&sdUseProvider.checked)m.push('provider'); return m; }
+function sdSelParams(exclude){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',manager:'',provider:''}); const out={}; for(const k of ['cli','number','range','manager','provider']){ if(k!==exclude&&sel[k]) out[k]=sel[k]; } return out; }
+function sdPick(dim,val){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',manager:'',provider:''}); sel[dim]=val; window.__sdDrill=dim; renderSmsDetail(); }
+function sdUnpick(dim){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',manager:'',provider:''}); sel[dim]=''; if(window.__sdDrill===dim)window.__sdDrill=''; renderSmsDetail(); }
+function sdChipsHtml(){ const sel=window.__sdSel||{}; const lbl={cli:'CLI',number:'Number',range:'Range',manager:'Manager',provider:'Provider'}; const out=[]; for(const k of ['cli','number','range','manager','provider']){ if(sel[k]){ const v=String(sel[k]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); out.push(`<span class="gx-chip">${lbl[k]}: <b>${v}</b> <span class="x" onclick="sdUnpick('${k}')" title="Remove filter">&#10005;</span></span>`); } } return out.join(''); }
 function toggleDetailFilters(){
-  /* P18: Manager/Range/Provider/Number/CLI selects ab HAMESHA enabled — click par list foran khulti hai
-     (koi extra 'All/Select/Apply' intermediate step nahi). Checkbox sirf Time inputs gate karta hai. */
   const tOn=document.getElementById('sdUseTime').checked;
   document.getElementById('sdTimeFrom').disabled=!tOn;
   document.getElementById('sdTimeTo').disabled=!tOn;
+  window.__sdDrill=''; /* P19: tick change => dimension list wapas */
   renderSmsDetail();
 }
-/* P14: Provider select options — real values from ranges.provider (no invented names) */
-async function populateSmsDetailProviderList(){
-  const sel=document.getElementById('sdProvider'); if(!sel||sel.options.length>1) return;
-  let provs=[];
-  try{ if(typeof rateCard!=='undefined'&&rateCard.length){ provs=[...new Set(rateCard.map(r=>r.provider).filter(Boolean))]; } }catch(e){}
-  if(!provs.length){ try{ const rj=await API.get('/ranges'); const arr=Array.isArray(rj)?rj:(rj.ranges||[]); provs=[...new Set(arr.map(x=>x.provider).filter(Boolean))]; }catch(e){} }
-  sel.innerHTML='<option value="">All Providers</option>'+provs.sort().map(p=>`<option>${String(p).replace(/</g,'&lt;')}</option>`).join('');
-}
-async function populateSmsDetailCliList(){
-  const sel=document.getElementById('sdCli'); if(!sel) return;
-  const kv=sel.value;
-  const rj=await API.smsClis(sdListArgs());
-  sel.innerHTML=gxOptList(rj.items);
-  if(kv){ sel.value=kv; if(sel.value!==kv) sel.value=''; }
-}
-function populateSmsDetailFilterLists(base){
-  const rangeSel=document.getElementById('sdRange'), numberSel=document.getElementById('sdNumber'), userSel=document.getElementById('sdUser');
-  if(!rangeSel||!numberSel||!userSel)return;
-  const cr=rangeSel.value, cu=userSel.value;
-  const ranges=uniqueVals(base.map(r=>r.range_name)).sort();
-  const users=uniqueVals(base.map(r=>r.manager_name)).sort();
-  rangeSel.innerHTML='<option value="">All Ranges</option>'+ranges.map(v=>`<option value="${v}">${v}</option>`).join('');
-  /* P18: Number list ab CURRENT report dataset se server-side aati hai (populateSmsDetailNumberList) */
-  userSel.innerHTML='<option value="">All Managers</option>'+users.map(v=>`<option value="${v}">${v}</option>`).join('');
-  if(ranges.includes(cr))rangeSel.value=cr;if(users.includes(cu))userSel.value=cu;
-}
-async function populateSmsDetailNumberList(){
-  const sel=document.getElementById('sdNumber'); if(!sel) return;
-  const kv=sel.value;
-  try{ const rj=await API.smsNumbers(sdListArgs());
-    sel.innerHTML='<option value="">All Numbers</option>'+(rj.items||[]).map(x=>`<option value="${String(x.number).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${String(x.number).replace(/&/g,'&amp;').replace(/</g,'&lt;')}${x.count!=null?' ('+x.count+')':''}</option>`).join('');
-    if(kv){ sel.value=kv.replace(/\s*\(\d+\)$/,''); if(sel.value!==kv.replace(/\s*\(\d+\)$/,'')) sel.value=''; }
-  }catch(e){}
-}
-function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseProvider.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _p2=document.getElementById('sdProvider'),_c2=document.getElementById('sdCli'),_tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_p2)_p2.value='';if(_c2)_c2.value='';if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
+function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',manager:'',provider:''};gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseProvider.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
 function buildSummaryRows(rows){
   const dims=[];
   if(sdUseDate.checked) dims.push({key:'_date',label:'Date',cls:'tag-gray'});
@@ -1359,7 +1372,7 @@ function inSmsDateRange(receivedAt){
   if (to   && d > to)   return false;
   return true;
 }
-function renderSmsDetail(){
+function renderSmsDetail_legacy_dead_P19(){/* P19: DEAD pre-P14 copy — sirf reference ke liye rakha; NEVER call (removed helpers). Live = async renderSmsDetail neeche. */return;
   const q=(sdSearch.value||'').toLowerCase();
   let base=(smsRecords||[]).filter(r=>!sdUseDate.checked||inSmsDateRange(r.received_at));
   populateSmsDetailFilterLists(base);
@@ -1626,6 +1639,7 @@ function aiEsc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g
 async function loadAiKnowledge(){
   try{ aiKbData=await API.get('/assistant/knowledge'); }catch(e){ aiKbData={rows:[],settings:{}}; }
   const pay=document.getElementById('aiPayEnabled'); if(pay) pay.checked=aiKbData.settings.payment_enabled==='1';
+  const am=document.getElementById('aiAllocMax'); if(am) am.value=aiKbData.settings.alloc_max||'100';
   const tb=document.getElementById('aiKbBody'); if(!tb) return;
   tb.innerHTML=(aiKbData.rows||[]).map(r=>`<tr>
     <td><input type="checkbox" ${r.enabled?'checked':''} onchange="toggleAiKb(${r.id},this.checked)" aria-label="Enable"></td>
@@ -1645,6 +1659,13 @@ async function addAiKb(){
 }
 async function toggleAiKb(id,on){ try{ await API.put('/assistant/knowledge/'+id,{enabled:on}); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
 async function toggleAiPay(on){ try{ await API.put('/assistant/knowledge-settings',{payment_enabled:on}); alert(on?'✅ Payment knowledge ENABLED':'Payment knowledge DISABLED'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
+/* P19: AI allocation limit — admin configurable, backend enforced */
+async function saveAiAllocMax(){
+  const el=document.getElementById('aiAllocMax'); if(!el) return;
+  const v=parseInt(el.value,10);
+  if(!v||v<1||v>5000){ alert('Limit 1 se 5000 ke darmiyan integer likhen.'); return; }
+  try{ const r=await API.put('/assistant/knowledge-settings',{alloc_max:v}); alert('✅ AI allocation limit set: '+(r.settings&&r.settings.alloc_max||v)+' numbers per range.'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);}
+}
 async function delAiKb(id){ if(!confirm('Delete this question?'))return; try{ await API.del('/assistant/knowledge/'+id); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
 async function editAiKb(id){
   const r=(aiKbData.rows||[]).find(x=>x.id===id); if(!r)return;
@@ -2331,12 +2352,12 @@ async function renderSmsReport(){
   const from=document.getElementById('srFrom')?.value||'';
   const to=document.getElementById('srTo')?.value||'';
   const tfrom=(document.getElementById('srTFrom')?.value)||''; const tto=(document.getElementById('srTTo')?.value)||'';
-  const rangeVal=(document.getElementById('srRange')?.value)||''; const cliVal=(document.getElementById('srCli')?.value)||'';
+  const rangeVal=(document.getElementById('srRange')?.value)||'';
   const numberVal=(document.getElementById('srNumber')?.value||'').trim(); const mgrVal=(document.getElementById('srManager')?.value)||'';
   const _sst=(window.__srSort=window.__srSort||{k:'',d:''});
-  const sig=smsReportSignature({len,search,from,to,tfrom,tto,rangeVal,cliVal,numberVal,mgrVal,sk:_sst.k,sd:_sst.d}); if(state.signature!==sig){state.page=1;state.signature=sig;}
+  const sig=smsReportSignature({len,search,from,to,tfrom,tto,rangeVal,numberVal,mgrVal,sk:_sst.k,sd:_sst.d}); if(state.signature!==sig){state.page=1;state.signature=sig;}
   const params=new URLSearchParams({page:String(state.page||1),limit:len,sort:(_sst.k||'date'),dir:(_sst.k?_sst.d:'desc')}); if(from)params.set('from',from); if(to)params.set('to',to); if(search)params.set('search',search);
-  if(tfrom)params.set('tfrom',tfrom); if(tto)params.set('tto',tto); if(rangeVal)params.set('range',rangeVal); if(cliVal)params.set('cli',cliVal); if(numberVal)params.set('number',numberVal); if(mgrVal)params.set('manager',mgrVal);
+  if(tfrom)params.set('tfrom',tfrom); if(tto)params.set('tto',tto); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal); if(mgrVal)params.set('manager',mgrVal);
   let data={rows:[],total:0,page:1,limit:25,totalPages:1,totalPayment:'0'};
   try{ data=await API.get('/sms/paged?'+params.toString()); }catch(e){ console.warn('sms report load failed',e); }
   state.page=data.page||1; state.totalPages=data.totalPages||1;
@@ -2348,8 +2369,8 @@ async function renderSmsReport(){
 }
 async function renderSmsDetail(){
   if(!document.getElementById('sdBody')) return;
-  populateSmsDetailProviderList(); populateSmsDetailCliList(); populateSmsDetailNumberList();
-  /* BUGFIX: read the From/To range inputs. The old single #sdDate element was
+  const chips=document.getElementById('sdChips'); if(chips) chips.innerHTML=sdChipsHtml();
+  /* BUGFIX (kept from P14): read the From/To range inputs. The old single #sdDate element was
      replaced by #sdDateFrom / #sdDateTo, so this always fell back to today()
      and the Date filter silently did nothing. */
   const _sdF=(document.getElementById('sdDateFrom')?.value)||'';
@@ -2359,32 +2380,44 @@ async function renderSmsDetail(){
   else if(dateFrom && !dateTo){ dateTo='2099-12-31'; }
   else if(!dateFrom && dateTo){ dateFrom='1970-01-01'; }
   if(dateFrom>dateTo){ const _s=dateFrom; dateFrom=dateTo; dateTo=_s; }
-  const dateVal=dateFrom;
-  const rangeVal=document.getElementById('sdRange')?.value||'';
-  const numberVal=document.getElementById('sdNumber')?.value||'';
-  const userVal=document.getElementById('sdUser')?.value||'';
-  const provVal=document.getElementById('sdProvider')?.value||''; /* P18: hamesha apply */
-  const cliVal=document.getElementById('sdCli')?.value||''; /* P18: hamesha apply */
   const tfVal=document.getElementById('sdUseTime')?.checked?(document.getElementById('sdTimeFrom')?.value||''):'';
   const ttVal=document.getElementById('sdUseTime')?.checked?(document.getElementById('sdTimeTo')?.value||''):'';
   const search=(document.getElementById('sdSearch')?.value||'').trim();
   const len=document.getElementById('sdLen')?.value||'25';
-  /* P15: CLI/Provider grouping dims nahi — sirf filter; check par ALL rows (koi forced selection nahi) */
-  const summaryMode=sdUseRange?.checked||sdUseNumber?.checked||sdUseUser?.checked;
-  if(summaryMode){
-    const by=sdUseNumber?.checked?'number':(sdUseRange?.checked?'range':'manager');
-    const params=new URLSearchParams({from:dateFrom,to:dateTo}); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal); if(userVal)params.set('manager',userVal); if(search)params.set('search',search); if(provVal)params.set('provider',provVal); if(cliVal)params.set('cli',cliVal);
-    const _su=(window.__sdSumSort=window.__sdSumSort||{k:'',d:''}); if(_su.k){params.set('sort',_su.k);params.set('dir',_su.d);} if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);
+  /* P19 FACET LOGIC:
+     - koi dim TICKED hai (aur koi drill active nahi) => us dim ki values list (stats-summary:
+       server-side, role-scoped, current date/time/search + other picks ke mutabiq) — rows clickable.
+     - drill active (value par click hua) YA koi tick nahi => detail rows (sms/paged) with picks. */
+  const ticks=sdActiveTicks();
+  const drill=window.__sdDrill||'';
+  const dimLabel={cli:'CLI',number:'Number',range:'Range',manager:'Manager',provider:'Provider'};
+  if(!drill && ticks.length){
+    const by=ticks[0]; /* priority: cli > number > range > manager > provider */
+    const fp=sdSelParams(by); /* displayed dim ka apna pick ignore; baaki sab picks filter karte hain */
+    const params=new URLSearchParams({from:dateFrom,to:dateTo});
+    if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);
+    if(search)params.set('search',search);
+    for(const k of Object.keys(fp)) params.set(k,fp[k]);
+    const _su=(window.__sdSumSort=window.__sdSumSort||{k:'',d:''}); if(_su.k){params.set('sort',_su.k);params.set('dir',_su.d);}
     let data={rows:[]}; try{data=await API.get('/stats-summary/'+by+'?'+params.toString());}catch(e){console.warn(e)}
-    sdHead.innerHTML=`<tr><th>${by}</th><th class="sortable" onclick="gxSdSumSort('sms')">Total OTPs <span class="sort">${gxArr(_su,'sms')}</span></th><th class="sortable" onclick="gxSdSumSort('payment')">Total Payout <span class="sort">${gxArr(_su,'payment')}</span></th></tr>`;
-    const body=(data.rows||[]).map(x=>`<tr><td><span class="tag tag-blue">${x.key||'—'}</span></td><td class="cell-money">${x.sms||0}</td><td class="cell-money">${money(x.payment||'0')}</td></tr>`);
-    sdBody.innerHTML=body.join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
-    sdInfo.textContent=`Showing ${body.length} summary rows`; sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`; return;
+    sdHead.innerHTML=`<tr><th>${dimLabel[by]||by}</th><th class="sortable" onclick="gxSdSumSort('sms')">Total OTPs <span class="sort" id="sdSum_sms">${gxArr(_su,'sms')}</span></th><th class="sortable" onclick="gxSdSumSort('payment')">Total Payout <span class="sort" id="sdSum_payment">${gxArr(_su,'payment')}</span></th></tr>`;
+    sdBody.innerHTML=(data.rows||[]).map(x=>{
+      const raw=String(x.key||'\u2014');
+      const v=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      const mono=(by==='cli'||by==='number')?' mono':'';
+      return `<tr class="gx-facet-row" onclick="sdPick('${by}','${v}')" title="Click to show only this ${dimLabel[by]||by}"><td><span class="tag tag-blue${mono}">${v}</span></td><td class="cell-money">${x.sms||0}</td><td class="cell-money">${money(x.payment||'0')}</td></tr>`;
+    }).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+    sdInfo.textContent=`Showing ${(data.rows||[]).length} ${dimLabel[by]||by} values — click a row to filter`;
+    sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`;
+    return;
   }
   const state=pagerState('adminSmsDetailServer');
   const _sdst=(window.__sdSort=window.__sdSort||{k:'',d:''});
-  const sig=smsReportSignature({dateVal,rangeVal,numberVal,userVal,provVal,cliVal,tfVal,ttVal,search,len,sk:_sdst.k,sd:_sdst.d}); if(state.signature!==sig){state.page=1;state.signature=sig;}
-  const params=new URLSearchParams({page:String(state.page||1),limit:len,from:dateFrom,to:dateTo,sort:(_sdst.k||'date'),dir:(_sdst.k?_sdst.d:'desc')}); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal); if(userVal)params.set('manager',userVal); if(provVal)params.set('provider',provVal); if(cliVal)params.set('cli',cliVal); if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal); if(search)params.set('search',search);
+  const fp=sdSelParams('');
+  const sig=smsReportSignature({dateVal:dateFrom,rangeVal:fp.range||'',numberVal:fp.number||'',userVal:fp.manager||'',provVal:fp.provider||'',cliVal:fp.cli||'',tfVal,ttVal,search,len,sk:_sdst.k,sd:_sdst.d,drill}); if(state.signature!==sig){state.page=1;state.signature=sig;}
+  const params=new URLSearchParams({page:String(state.page||1),limit:len,from:dateFrom,to:dateTo,sort:(_sdst.k||'date'),dir:(_sdst.k?_sdst.d:'desc')});
+  for(const k of Object.keys(fp)) params.set(k,fp[k]);
+  if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal); if(search)params.set('search',search);
   let data={rows:[],total:0,page:1,limit:25,totalPages:1,totalPayment:'0'}; try{data=await API.get('/sms/paged?'+params.toString());}catch(e){console.warn(e)}
   state.page=data.page||1; state.totalPages=data.totalPages||1;
   sdHead.innerHTML=`<tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSdSort('range')">Range <span class="sort">${gxArr(_sdst,'range')}</span></th><th class="sortable" onclick="gxSdSort('number')">Number <span class="sort">${gxArr(_sdst,'number')}</span></th><th class="sortable" onclick="gxSdSort('cli')">CLI <span class="sort">${gxArr(_sdst,'cli')}</span></th><th class="sortable" onclick="gxSdSort('payout')">Payout Rate <span class="sort">${gxArr(_sdst,'payout')}</span></th><th>SMS (Message Body)</th></tr>`;
@@ -2416,6 +2449,7 @@ async function loadNumberSummary(){
   fillSelect('allocRange',allocData.map(r=>r.range));
   fillAdminAllocationTargets();
   renderAlloc();
+  if(typeof allocRateRefresh==='function') allocRateRefresh(); /* P19: default rate load */
 }
 function renderAlloc(){
   const body=document.getElementById('allocBody'); if(!body)return;
@@ -2424,19 +2458,37 @@ function renderAlloc(){
   let rows=allocData.map((r,i)=>({...r,_i:i})).filter(r=>r.range.toLowerCase().includes(q));
   const pag=API.paginateRows('adminAlloc',rows,len,'allocInfo',renderAlloc);const total=pag.total;rows=pag.rows;
   const targetHtml='<option value="">Select User</option>'+adminAllocTargets().map(u=>`<option value="${u.id}">${u.label}</option>`).join('');
-  body.innerHTML=rows.map(r=>`<tr><td><b>${r.range}</b></td><td><span class="tag tag-green">${r.avail}</span> <span class="muted">/ ${r.total}</span></td><td><span class="tag tag-amber">${r.alloc}</span></td><td class="cell-money">${adminCycleRate(r)}</td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="am${r._i}" style="width:auto;padding:7px 9px">${targetHtml}</select><select id="ap${r._i}" style="width:auto;padding:7px 9px"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select><input type="number" class="allocate-num" placeholder="Qty" id="al${r._i}"/><button type="button" class="gx-btn gx-green"  onclick="allocRow(${r._i})" data-tip="Allocate" title="Allocate" aria-label="Allocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button></div></td><td><div style="display:flex;gap:6px;align-items:center"><input type="number" class="allocate-num" placeholder="Qty" id="ul${r._i}"/><button type="button" class="gx-btn gx-amber"  onclick="unallocRow(${r._i})" data-tip="Unallocate" title="Unallocate" aria-label="Unallocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button></div></td></tr>`).join('')||`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No ranges found</td></tr>`;
+  body.innerHTML=rows.map(r=>`<tr><td><b>${r.range}</b></td><td><span class="tag tag-green">${r.avail}</span> <span class="muted">/ ${r.total}</span></td><td><span class="tag tag-amber">${r.alloc}</span></td><td class="cell-money">${adminCycleRate(r)}</td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="am${r._i}" style="width:auto;padding:7px 9px">${targetHtml}</select><select id="ap${r._i}" style="width:auto;padding:7px 9px"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select><input type="number" class="allocate-num" placeholder="Qty" id="al${r._i}"/><input type="number" class="allocate-num" placeholder="Rate" id="ar${r._i}" step="0.000001" min="0" value="${adminCycleRate(r)}" title="Rate — default Rate Management (${adminCycleRate(r)})" oninput="this.dataset.dirty='1'"/><button type="button" class="gx-btn gx-green"  onclick="allocRow(${r._i})" data-tip="Allocate" title="Allocate" aria-label="Allocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button></div></td><td><div style="display:flex;gap:6px;align-items:center"><input type="number" class="allocate-num" placeholder="Qty" id="ul${r._i}"/><button type="button" class="gx-btn gx-amber"  onclick="unallocRow(${r._i})" data-tip="Unallocate" title="Unallocate" aria-label="Unallocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button></div></td></tr>`).join('')||`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No ranges found</td></tr>`;
   const info=document.getElementById('allocInfo'); if(info) info.textContent=`Showing ${rows.length} of ${total} ranges`;
+}
+/* P19: toolbar Rate field — selected range + cycle ka Rate Management default. Admin
+   change kar sakta hai; change sirf us allocation par override lagta hai (numbers.rate). */
+function allocRateRefresh(){
+  const inp=document.getElementById('allocRate'); if(!inp) return;
+  if(inp.dataset.dirty==='1') return;
+  const r=document.getElementById('allocRange')?.value||'';
+  const cycle=document.getElementById('allocPayterm')?.value||'weekly_7_1';
+  const row=(typeof allocData!=='undefined'?allocData:[]).find(x=>x.range===r);
+  let def=row?adminCycleRate(row,cycle):'';
+  if(def==='0'||def==='NA') def='';
+  inp.value=def;
 }
 async function doAllocate(){
   const r=document.getElementById('allocRange').value,t=document.getElementById('allocManager').value,q=parseInt(document.getElementById('allocQty').value),payterm=document.getElementById('allocPayterm')?.value||'weekly_7_1';
   if(!r||!t||!q){alert('Select range, user and quantity.');return;}
   const row=(allocData||[]).find(x=>x.range===r); if(!row){alert('Range not found.');return;}
-  try{const res=await API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[+t],qty:q,payterm});alert(`✅ ${res.total||0} numbers allocated.`);document.getElementById('allocQty').value='';await loadNumberSummary();await renderNumbers();}catch(e){alert('❌ '+e.message)}
+  const rv=(document.getElementById('allocRate')?.value||'').trim();
+  if(rv && (isNaN(parseFloat(rv))||parseFloat(rv)<=0)){alert('Rate positive number likhen — ya khali chhor dein to Rate Management default lagega.');return;}
+  try{const body={range_ids:[row.id],target_ids:[+t],qty:q,payterm}; if(rv) body.rate=rv;
+    const res=await API.post('/numbers/smart-divide',body);alert(`✅ ${res.total||0} numbers allocated.`);document.getElementById('allocQty').value='';await loadNumberSummary();await renderNumbers();}catch(e){alert('❌ '+e.message)}
 }
 async function allocRow(i){
   const q=parseInt(document.getElementById('al'+i).value),t=document.getElementById('am'+i).value,payterm=document.getElementById('ap'+i)?.value||'weekly_7_1';
   const row=allocData[i]; if(!q||!t||!row){alert('Select user and quantity.');return;}
-  try{const res=await API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[+t],qty:q,payterm});alert(`✅ ${res.total||0} numbers allocated.`);await loadNumberSummary();await renderNumbers();}catch(e){alert('❌ '+e.message)}
+  const rv=(document.getElementById('ar'+i)?.value||'').trim();
+  if(rv && (isNaN(parseFloat(rv))||parseFloat(rv)<=0)){alert('Rate positive number likhen — ya khali chhor dein to Rate Management default lagega.');return;}
+  try{const body={range_ids:[row.id],target_ids:[+t],qty:q,payterm}; if(rv && rv!==String(adminCycleRate(row))) body.rate=rv;
+    const res=await API.post('/numbers/smart-divide',body);alert(`✅ ${res.total||0} numbers allocated.`);await loadNumberSummary();await renderNumbers();}catch(e){alert('❌ '+e.message)}
 }
 
 /* =============== FAST SERVER-SIDE ADMIN STATS OVERRIDES =============== */

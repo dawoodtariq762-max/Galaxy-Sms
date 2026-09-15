@@ -1191,7 +1191,15 @@ function assignedPaymentCycleForNumber(n, rangeRow={}){ const u=n?.agent_id?db.g
 function assignedPaymentTypeForNumber(n, rangeRow={}){ return normalizePaymentType(assignedPaymentCycleForNumber(n, rangeRow)); }
 function payoutRateForPaymentCycle(row, cycle){
   cycle=normalizePaymentCycle(cycle);
-  const candidates = cycle==='daily' ? [row.rate_1_1,row.number_rate,row.rate_7_1,row.rate_30_45] : (cycle==='weekly_7_7' ? [row.rate_7_7,row.rate_7_1,row.number_rate,row.rate_30_45,row.rate_1_1] : (cycle==='monthly_30x45' ? [row.rate_30_45,row.number_rate,row.rate_7_1,row.rate_1_1] : [row.rate_7_1,row.rate_7_7,row.number_rate,row.rate_30_45,row.rate_1_1]));
+  /* P19: number_rate (numbers.rate = admin allocation override) ab SAB se pehle check hota hai —
+     TRUE override semantics, bilkul numbers-list effective_rate display jaisi (wahan bhi n.rate
+     pehle aata hai). Pehle number_rate fallback position par tha (range rate ke baad) — admin
+     override tabhi lagta jab range ki cycle rate NA hoti. Existing production data me numbers.rate
+     sirf '' hota hai (koi code path use set nahi karta tha), is liye reordering purane rows ke
+     liye behaviour change NAHI hai. Rollback: candidates me row.number_rate ko cycle-rate ke baad
+     wapas rakh dein. */
+  const ov=row.number_rate;
+  const candidates = cycle==='daily' ? [ov,row.rate_1_1,row.rate_7_1,row.rate_30_45] : (cycle==='weekly_7_7' ? [ov,row.rate_7_7,row.rate_7_1,row.rate_30_45,row.rate_1_1] : (cycle==='monthly_30x45' ? [ov,row.rate_30_45,row.rate_7_1,row.rate_1_1] : [ov,row.rate_7_1,row.rate_7_7,row.rate_30_45,row.rate_1_1]));
   for(const c of candidates){ const v=normalizeDecimalString(c); if(isPositiveDecimal(v)) return v; }
   return '0';
 }
@@ -2038,10 +2046,38 @@ app.get('/api/numbers', authRequired, (req, res) => cachedJson(req, res, 60000, 
 }, 'numbers_ver'));
 
 // allocate selected numbers to a target user (one level down)
+/* P19 ADMIN ALLOCATION RATE OVERRIDE — shared validator (handleAllocate + smart-divide).
+   Sirf admin ke liye; positive decimal, <=6 dp, <=100000. Detailed comments handleAllocate me. */
+function validatedAllocationRate(user, raw) {
+  if (!user || user.role !== 'admin') return { ok: true, value: '' }; // non-admin rate param silently ignored (payout pattern)
+  if (raw === undefined || String(raw).trim() === '') return { ok: true, value: '' };
+  /* P19: negative raw yahin reject — normalizeDecimalString('-0.5') BigInt('-0') ka
+     sign drop kar ke '0.5' bana deta tha (negative input positive ban kar slip ho jata tha). */
+  if (String(raw).trim().startsWith('-'))
+    return { ok: false, error: 'Invalid rate: positive decimal number required (e.g. 0.013)' };
+  const v = normalizeDecimalString(raw);
+  if (!isPositiveDecimal(v)) return { ok: false, error: 'Invalid rate: positive decimal number required (e.g. 0.013)' };
+  const dp = (v.split('.')[1] || '').length;
+  if (dp > 6) return { ok: false, error: 'Invalid rate: max 6 decimal places' };
+  if (parseFloat(v) > 100000) return { ok: false, error: 'Invalid rate: value too large' };
+  return { ok: true, value: v };
+}
+
 function handleAllocate(req, res) {
   const { ids, target_id, payterm, payout } = req.body || {};
   if (!Array.isArray(ids) || !ids.length || !target_id)
     return res.status(400).json({ error: 'ids[] and target_id are required' });
+
+  /* P19 ADMIN ALLOCATION RATE OVERRIDE (sirf Admin):
+     - Default rate Rate Management (range ke cycle rate) se aata hai — yani rate NAHI diya
+       gaya to numbers.rate='' rehta hai aur payout range rate se hi calculate hota hai.
+     - Admin rate de to wahi IS allocation ke numbers par numbers.rate snapshot ho jata hai
+       (per-number, allocation-level — koi global Agent/Manager/Range rate change NAHI).
+     - Non-admin (manager/agent) ka rate param silently ignore hota hai (wahi pattern jo
+       pehle se payout ke liye hai) — manager ko naya override ability NAHI milti. */
+  const rateCheck = validatedAllocationRate(req.user, req.body ? req.body.rate : undefined);
+  if (!rateCheck.ok) return res.status(400).json({ error: rateCheck.error });
+  const rateVal = rateCheck.value;
 
   // PHASE-1 (#45.6): idempotent retries — same Idempotency-Key returns the
   // original response instead of double-processing.
@@ -2070,13 +2106,23 @@ function handleAllocate(req, res) {
   let sets = '', vals = [];
   if (target.role === 'manager') {
     // Admin -> Manager: reset downstream ownership so old Agent/Client links do not remain.
-    sets = "manager_id=?, agent_id=NULL, client_id=NULL, payout='0', rate=''";
-    vals = [target.id];
+    // (Only admin can allocate to a manager, so the P19 rate override applies here directly.)
+    sets = "manager_id=?, agent_id=NULL, client_id=NULL, payout='0', rate=?";
+    vals = [target.id, rateVal]; // rate='' -> Rate Management default; value -> this-allocation override
   } else if (target.role === 'agent') {
     // Manager -> Agent keeps manager chain. Admin -> Agent direct has no manager owner.
     const mgrId = req.user.role === 'admin' ? null : target.parent_id;
-    sets = "agent_id=?, manager_id=?, client_id=NULL, payout='0', rate=''";
-    vals = [target.id, mgrId];
+    if (req.user.role === 'admin') {
+      // P19: admin re-allocation = fresh admin decision -> rate set (override) ya clear (range default).
+      sets = "agent_id=?, manager_id=?, client_id=NULL, payout='0', rate=?";
+      vals = [target.id, mgrId, rateVal];
+    } else {
+      // P19 rate-lock: manager->agent existing (admin-set) rate KOI change nahi karta —
+      // pehle yahan rate='' tha jo override mita deta tha. Rollback: rate='' wapas lane se
+      // manager re-allocation override clear kar deta (purana behaviour).
+      sets = "agent_id=?, manager_id=?, client_id=NULL, payout='0'";
+      vals = [target.id, mgrId];
+    }
   } else if (target.role === 'client') {
     // Agent -> Client: snapshot chain for future SMS.
     const agentId = target.parent_id;
@@ -2106,8 +2152,20 @@ function handleAllocate(req, res) {
   const slotCol = { manager: 'manager_id', agent: 'agent_id', client: 'client_id' }[target.role];
   const force = truthy(req.body && req.body.force) && slotCol !== undefined; // callers are never clients, but stay defensive
   const scope = numberScope(req.user, 'n');
+  /* P19 FIX (pre-existing regression from f31ee62 audit guard #21–#25, 2026-09-13):
+     Purana ownGuard sirf fully-unallocated (teen slots NULL) ya already-target numbers
+     allow karta tha — is liye MANAGER apne pool ke numbers AGENT ko panel se allocate
+     karta tha to SKIPPED ho jate the (allocated:0, silent fail — UI "✅ allocated" dikha
+     raha tha) aur AGENT→CLIENT bhi same trap me tha. Manager/agent ke liye scope.where
+     pehle hi unke apne pool tak restrict karta hai, to steal ka akela risk target slot
+     hai — guard ab "target slot free ya already-target" hai (do agents ke beech silent
+     X→Y move ab bhi impossible — unallocate ya force chahiye). Admin ke liye strict
+     fully-unallocated rule barkarar (admin ke paas force hai). Rollback (purani line):
+     const ownGuard = force ? '1=1' : `((n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL) OR n.${slotCol}=?)`; */
   const ownGuard = force ? '1=1'
-    : `((n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL) OR n.${slotCol}=?)`;
+    : req.user.role === 'admin'
+      ? `((n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL) OR n.${slotCol}=?)`
+      : `(n.${slotCol} IS NULL OR n.${slotCol}=?)`;
 
   const TEMP = 'tmp_alloc_ids';
   let allocatedCount = 0;
@@ -2157,7 +2215,7 @@ function handleAllocate(req, res) {
       ...(conflictRows.length && !force ? { conflicts_sample: conflictRows.slice(0, 10).map(r => ({ id: r.id, number: r.number })) } : {}),
     };
     logAction(req, 'allocate_numbers', 'numbers',
-      { count: allocatedCount, requested: beforeRows.length, skipped: response.skipped, target: target.username, target_role: target.role, ...(force ? { force: true } : {}) });
+      { count: allocatedCount, requested: beforeRows.length, skipped: response.skipped, target: target.username, target_role: target.role, ...(rateVal ? { rate_override: rateVal } : {}), ...(force ? { force: true } : {}) });
     bumpNumbersVer();
     if (idemKey) idempotencyStore(req, 'allocate', idemKey, response);
     return res.json(response);
@@ -2255,13 +2313,26 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
       /* P18: pre-aggregated dashboard/stats counters bhi isi transaction mein kam karo,
         taake deleted SMS dashboard totals / CVR / stats se foran gayab ho jayen.
         Sirf non-test rows (wahi stats mein ginti hoti hai). */
-      const statMods = db.all(`SELECT date(received_at, '${ukSqlModifier()}') AS sd, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
-          COUNT(*) c, COALESCE(SUM(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL)),0) pay
+      /* P19 FIX: stat_date ki keying ab INGEST jaisi per-row DST-safe hai (ukStatDate).
+        Purana code SQL date(received_at, '<current-offset>') use karta tha — jab delete
+        UK DST boundary ke paar wale purane SMS par chalta tha (e.g. July ka data November
+        me delete), to key mismatch hota tha: decrement naye (galat) key par row banata,
+        'sms_count<=0' cleanup usse hata deta, aur ASLI stats row UNCHANGED reh jati —
+        deleted SMS dashboard/stats me dikhte rehte the. Rollback: purana GROUP BY SQL. */
+      const statRows = db.all(`SELECT received_at, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
+          COALESCE(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL),0) pay
         FROM sms_records
         WHERE COALESCE(is_test,0)=0 AND (number_id IN (SELECT id FROM tmp_delete_numbers)
-           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>''))
-        GROUP BY 1,2,3,4,5`);
-      statMods.forEach(m => {
+           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>''))`);
+      const statAgg = new Map();
+      for (const r of statRows) {
+        const sd = ukStatDate(r.received_at); /* same conversion as recordSmsStats at ingest */
+        const k = sd + '|' + r.mgr + '|' + r.ag + '|' + r.cl + '|' + r.cli;
+        const cur = statAgg.get(k);
+        if (cur) { cur.c += 1; cur.pay += r.pay; }
+        else statAgg.set(k, { sd, mgr: r.mgr, ag: r.ag, cl: r.cl, cli: r.cli, c: 1, pay: r.pay });
+      }
+      statAgg.forEach(m => {
         db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
           VALUES (?,?,?,?,?,?,?)
           ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
@@ -2445,9 +2516,16 @@ async function performSmartDivideJob(job){
           } else if(wantRole==='agent'){
             const mgr=db.get('SELECT parent_id FROM users WHERE id=?',[sp.t]);
             const mgrId = user.role === 'admin' ? null : (mgr?mgr.parent_id:null);
-            db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, payout='0', rate='', payterm=? WHERE id IN (${ph})`, [sp.t, mgrId, smartType, ...part]);
+            if (user.role === 'admin') {
+              /* P19: admin rate override (job.rate validated at endpoint; '' = Rate Management default) */
+              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, payout='0', rate=?, payterm=? WHERE id IN (${ph})`, [sp.t, mgrId, job.rate || '', smartType, ...part]);
+            } else {
+              /* P19 rate-lock: manager->agent admin-set rate preserve karta hai (pehle rate='' tha) */
+              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, payout='0', payterm=? WHERE id IN (${ph})`, [sp.t, mgrId, smartType, ...part]);
+            }
           } else {
-            db.runNoSave(`UPDATE numbers SET manager_id=?, agent_id=NULL, client_id=NULL, payout='0', rate='' WHERE id IN (${ph})`, [sp.t, ...part]);
+            /* P19: admin->manager (admin-only path) — rate override support */
+            db.runNoSave(`UPDATE numbers SET manager_id=?, agent_id=NULL, client_id=NULL, payout='0', rate=? WHERE id IN (${ph})`, [sp.t, job.rate || '', ...part]);
           }
           total += part.length;
           setJob(job,{processed:total,progress:planned?Math.floor(total/planned*100):100});
@@ -2458,7 +2536,7 @@ async function performSmartDivideJob(job){
       report.push({range:rname?rname.name:rid,taken:take,split});
     }
     db.save(); clearApiReadCache();
-    auditJobAction(user,'smart_divide_numbers_background','numbers',{total,report,payterm:smartType});
+    auditJobAction(user,'smart_divide_numbers_background','numbers',{total,report,payterm:smartType,...(job.rate?{rate_override:job.rate}:{})});
     setJob(job,{status:'done',progress:100,total,processed:total,report,completed_at:new Date().toISOString(),message:'Completed'});
     bumpNumbersVer();
   }catch(e){
@@ -2498,9 +2576,12 @@ app.post('/api/numbers/smart-divide', authRequired, async (req, res) => {
   }
   if(!wantRole) return res.status(403).json({error:'Not allowed'});
   if(!validateSmartDivideTargets(req.user,wantRole,cleanTargetIds)) return res.status(403).json({ error: 'Invalid target(s)' });
+  /* P19: admin rate override (same validator as handleAllocate; non-admin silently ignored) */
+  const sdRateCheck = validatedAllocationRate(req.user, req.body ? req.body.rate : undefined);
+  if (!sdRateCheck.ok) return res.status(400).json({ error: sdRateCheck.error });
   const estimated=cleanRangeIds.length*cleanQty;
   const shouldBackground = background !== false && estimated >= 1000;
-  const job={job_id:makeNumberJobId(),type:'smart_divide',status:'queued',progress:0,processed:0,total:estimated,user:{id:req.user.id,username:req.user.username,role:req.user.role},wantRole,range_ids:cleanRangeIds,target_ids:cleanTargetIds,qty:cleanQty,payterm:normalizePaymentCycle(payterm||'weekly_7_1'),created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+  const job={job_id:makeNumberJobId(),type:'smart_divide',status:'queued',progress:0,processed:0,total:estimated,user:{id:req.user.id,username:req.user.username,role:req.user.role},wantRole,range_ids:cleanRangeIds,target_ids:cleanTargetIds,qty:cleanQty,payterm:normalizePaymentCycle(payterm||'weekly_7_1'),rate:sdRateCheck.value,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
   numberJobs.set(job.job_id, job);
   setImmediate(()=>performSmartDivideJob(job));
   if(shouldBackground){
@@ -2667,7 +2748,7 @@ app.get('/api/sms/paged', authRequired, (req, res) => cachedJson(req, res, 1200,
     ${built.baseSql}
     ORDER BY ${orderSql} LIMIT ? OFFSET ?`, [...built.params, limit, offset]);
   return { rows: attachSmsPayoutFields(rows), total, page, limit, totalPages, totalPayment };
-}));
+}, 'numbers_ver')); /* P19: number-delete report cache turant invalidate */
 app.get('/api/stats-summary/:by', authRequired, (req, res) => cachedJson(req, res, 1500, () => {
   const by = req.params.by;
   const built = buildSmsPagedQuery(req.user, req.query || {});
@@ -2677,7 +2758,10 @@ app.get('/api/stats-summary/:by', authRequired, (req, res) => cachedJson(req, re
     manager: { expr:'mu.username', label:'manager_name' },
     range: { expr:'r.name', label:'range_name' },
     number: { expr:'s.number', label:'number' },
-    cli: { expr:'s.cli', label:'cli' }
+    cli: { expr:'s.cli', label:'cli' },
+    /* P19: Provider dimension — SMS Detail Report ke provider facet ke liye (admin UI).
+       Same scoping/filters baaki sab dims jaisi (buildSmsPagedQuery). */
+    provider: { expr:"COALESCE(r.provider,'')", label:'provider' }
   };
   const g = groupMap[by];
   if (!g) { res.status(400); return { error: 'Invalid stats dimension' }; }
@@ -2694,7 +2778,7 @@ app.get('/api/stats-summary/:by', authRequired, (req, res) => cachedJson(req, re
   const totalSms = rows.reduce((a,r)=>a+(+r.sms||0),0);
   const totalPayment = rows.reduce((a,r)=>decimalAdd(a,r.payment||'0'),'0');
   return { rows, totalSms, totalPayment, by };
-}));
+}, 'numbers_ver'));
 // Legacy bulk endpoint kept for the summary widgets. Capped (see
 // smsRowsForScope) and cached, because panels re-call it on every page click.
 app.get('/api/sms', authRequired, (req, res) => cachedJson(req, res, 2500, () => {
@@ -2716,7 +2800,7 @@ app.get('/api/sms/clis', authRequired, (req, res) => cachedJson(req, res, 30000,
   const built = buildSmsPagedQuery(req.user, q);
   const rows = db.all(`SELECT s.cli AS cli, COUNT(*) AS c ${built.baseSql} AND s.cli IS NOT NULL AND TRIM(s.cli)<>'' GROUP BY s.cli ORDER BY s.cli LIMIT 300`, built.params);
   return { clis: rows.map(r => r.cli), items: rows.map(r => ({ cli: r.cli, count: r.c })), from: q.from, to: q.to };
-}));
+}, 'numbers_ver'));
 app.get('/api/sms/numbers', authRequired, (req, res) => cachedJson(req, res, 30000, () => {
   /* P18: Number filter list = current report dataset (same filters/scope as /api/sms/paged) */
   const q = { ...(req.query || {}) };
@@ -2730,7 +2814,7 @@ app.get('/api/sms/numbers', authRequired, (req, res) => cachedJson(req, res, 300
   const built = buildSmsPagedQuery(req.user, q);
   const rows = db.all(`SELECT s.number AS number, COUNT(*) AS c ${built.baseSql} AND s.number IS NOT NULL AND TRIM(s.number)<>'' GROUP BY s.number ORDER BY s.number LIMIT 300`, built.params);
   return { numbers: rows.map(r => r.number), items: rows.map(r => ({ number: r.number, count: r.c })), from: q.from, to: q.to };
-}));
+}, 'numbers_ver'));
 
 // aggregated stats by dimension
 app.get('/api/stats/:by', authRequired, (req, res) => {
@@ -2896,7 +2980,7 @@ app.get('/api/users/hierarchy-stats', authRequired, requireRole('admin', 'manage
   return out;
 }));
 
-app.get('/api/dashboard', authRequired, (req, res) => cachedJson(req, res, 10000, () => {
+app.get('/api/dashboard', authRequired, (req, res) => cachedJson(req, res, 10000, () => { /* P19: verKey — number delete/alloc dashboard cache turant invalidate */
   const u = req.user;
   const smsScope = smsScopeWhere(u);
   const numScope = numberScopeWhere(u);
@@ -3015,7 +3099,7 @@ app.get('/api/dashboard', authRequired, (req, res) => cachedJson(req, res, 10000
   } catch(e) {}
   /* ===== /GALAXY ===== */
   return { sms_today: today, otp_today: today, successful_otp_today: successToday, failed_otp_today: failedToday, failed_sms_today: failedToday, total_sms: totalSms, failed_total: failedTotal, sms_yesterday: yesterday, sms_7d: d7, sms_month: month, payout_7d: payout7, payout_month: payoutMonth, managers, agents, clients, numbers, daily7, recent, sms_year: smsYear, payout_week: payoutWeek, over_limit_today, over_limit_week, sms_by_country };
-}));
+}, 'numbers_ver'));
 
 
 /* ============ NUMBER IMPORT (Admin only, background/batched) ============ */

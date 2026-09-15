@@ -33,7 +33,16 @@ const LLM_TIMEOUT_MS = 9000;
 const GLOBAL_RPM = parseInt(process.env.ASSISTANT_GLOBAL_RPM || '60', 10) || 60;
 const USER_RPM = parseInt(process.env.ASSISTANT_USER_RPM || '10', 10) || 10;
 const USER_RPD = parseInt(process.env.ASSISTANT_USER_RPD || '100', 10) || 100;
-const AI_ALLOC_MAX = 500;
+/* P19: AI allocation limit ab DB-configurable hai (assistant_settings.alloc_max).
+   Default 100 (purana hardcoded 500 — rollback: const AI_ALLOC_MAX = 500).
+   Admin isse AI Assistant (knowledge) page par badal sakta hai; backend enforce karta hai. */
+const AI_ALLOC_DEFAULT_MAX = 100;
+const AI_ALLOC_HARD_CAP = 5000; /* absolute ceiling — admin isse upar set nahi kar sakta */
+function aiAllocMax() {
+  const n = parseInt(rpv('alloc_max', String(AI_ALLOC_DEFAULT_MAX)), 10);
+  if (!Number.isFinite(n) || n <= 0) return AI_ALLOC_DEFAULT_MAX;
+  return Math.min(n, AI_ALLOC_HARD_CAP);
+}
 const INTENT_TTL_MS = 5 * 60 * 1000;
 
 let kbCache = { rows: [], at: 0 };
@@ -284,7 +293,7 @@ function register(app, ctx) {
     const cat = String(req.query.category || '').trim();
     const rows = cat ? db.all('SELECT * FROM assistant_knowledge WHERE category=? ORDER BY sort_order,id', [cat])
                      : db.all('SELECT * FROM assistant_knowledge ORDER BY category,sort_order,id');
-    res.json({ rows, settings: { payment_enabled: rpv('payment_enabled', '0'), general_enabled: rpv('general_enabled', '1') } });
+    res.json({ rows, settings: { payment_enabled: rpv('payment_enabled', '0'), general_enabled: rpv('general_enabled', '1'), alloc_max: String(aiAllocMax()) } });
   });
   app.post('/api/assistant/knowledge', authRequired, adminGate, (req, res) => {
     const b = req.body || {};
@@ -312,7 +321,20 @@ function register(app, ctx) {
     for (const k of ['payment_enabled', 'general_enabled']) {
       if (b[k] !== undefined) db.run("UPDATE assistant_settings SET value=?, updated_at=datetime('now') WHERE key=?", [b[k] ? '1' : '0', k]);
     }
-    kbCache.at = 0; res.json({ ok: true, settings: { payment_enabled: rpv('payment_enabled', '0'), general_enabled: rpv('general_enabled', '1') } });
+    /* P19: AI Number Allocation Limit — admin-configurable, backend-enforced.
+       Positive integer, 1..AI_ALLOC_HARD_CAP. Persisted in assistant_settings (existing KV store). */
+    if (b.alloc_max !== undefined) {
+      /* P19: strict integer string — '2.5' pehle parseInt() se '2' ban kar slip ho
+         jata tha (silent truncation). Sirf pure digits accept. Rollback: purani line
+         const n = parseInt(String(b.alloc_max).trim(), 10); */
+      const raw = String(b.alloc_max).trim();
+      const n = /^\d+$/.test(raw) ? parseInt(raw, 10) : NaN;
+      if (!Number.isFinite(n) || n < 1 || n > AI_ALLOC_HARD_CAP)
+        return res.status(400).json({ error: 'alloc_max must be an integer between 1 and ' + AI_ALLOC_HARD_CAP });
+      db.run(`INSERT INTO assistant_settings (key,value) VALUES ('alloc_max',?)
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')`, [String(n)]);
+    }
+    kbCache.at = 0; res.json({ ok: true, settings: { payment_enabled: rpv('payment_enabled', '0'), general_enabled: rpv('general_enabled', '1'), alloc_max: String(aiAllocMax()) } });
   });
   app.get('/api/assistant/knowledge/export.txt', authRequired, adminGate, (req, res) => {
     try {
@@ -323,7 +345,7 @@ function register(app, ctx) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  /* ---------------- main message endpoint (AGENT ONLY) ---------------- */
+/* ---------------- main message endpoint (AGENT ONLY) ---------------- */
   app.post('/api/assistant/message', authRequired, agentGate, async (req, res) => {
     const uid = req.user.id;
     const text = String((req.body || {}).text || '').slice(0, 500).trim();
@@ -360,13 +382,13 @@ function register(app, ctx) {
           return res.json({ reply: 'Wrong range. This range is not currently available.' + (names ? ' Available ranges: ' + names + '.' : ''), flow: 'alloc-range' });
         }
         it.range = r; it.step = 'qty';
-        return res.json({ reply: 'Kitne numbers chahiye? (max ' + AI_ALLOC_MAX + ' per range)', flow: 'alloc-qty' });
+        return res.json({ reply: 'Kitne numbers chahiye? (max ' + aiAllocMax() + ' per range)', flow: 'alloc-qty' });
       }
       if (it.step === 'qty') {
         if (CANCEL.test(text.trim())) { intents.delete(uid); return res.json({ reply: 'Theek — allocation cancel kar diya.', flow: null }); }
         const q = parseQty(text);
         if (!q || q <= 0) return res.json({ reply: 'Valid quantity likhen (e.g. 100).', flow: 'alloc-qty' });
-        if (q > AI_ALLOC_MAX) return res.json({ reply: 'The maximum I can provide is ' + AI_ALLOC_MAX + ' numbers per range.', flow: 'alloc-qty' });
+        if (q > aiAllocMax()) return res.json({ reply: 'The maximum I can provide is ' + aiAllocMax() + ' numbers per range.', flow: 'alloc-qty' });
         const avail = poolCount(it.range.id, pc.cond);
         if (avail < 0) { intents.delete(uid); return res.json({ reply: 'Availability check failed — thori dair baad koshish karein.', flow: null }); }
         if (avail < q) {
@@ -385,6 +407,8 @@ function register(app, ctx) {
       if (it.step === 'confirm') {
         intents.delete(uid);
         if (!YES.has(norm(text))) return res.json({ reply: 'Theek — allocation cancel kar diya.', flow: null });
+        /* P19: confirm-time re-check — agar admin ne beech me limit kam kar di ho */
+        if ((it.qty | 0) > aiAllocMax()) { intents.delete(uid); return res.json({ reply: 'The maximum I can provide is ' + aiAllocMax() + ' numbers per range. Kam quantity se dobara shuru karein.', flow: null }); }
         const out = executeAllocation(agent, it, pc);
         return res.json({ reply: out.reply, flow: null, done: out.ok });
       }
@@ -436,4 +460,4 @@ function register(app, ctx) {
 }
 
 function refreshRanges() { rangesCache.at = 0; generateKnowledgeFiles(); }
-module.exports = { register, generateKnowledgeFiles, refreshRanges, AI_ALLOC_MAX };
+module.exports = { register, generateKnowledgeFiles, refreshRanges, aiAllocMax, AI_ALLOC_HARD_CAP };

@@ -248,6 +248,9 @@ function createTables() {
   /* Payment knowledge section: DISABLED by default (Admin enable kare ga) */
   if (!db.get("SELECT value FROM assistant_settings WHERE key='payment_enabled'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('payment_enabled','0')");
   if (!db.get("SELECT value FROM assistant_settings WHERE key='general_enabled'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('general_enabled','1')");
+  /* P19: AI number-allocation limit (per range request). Default 100 (pehle hardcoded 500 tha).
+     Admin AI Assistant page se change hota hai — backend enforce karta hai. */
+  if (!db.get("SELECT value FROM assistant_settings WHERE key='alloc_max'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('alloc_max','100')");
   if (!db.get('SELECT id FROM assistant_knowledge LIMIT 1')) {
     const insKb = (c,q,a,e,so) => db.run('INSERT INTO assistant_knowledge (category,question,answer,enabled,sort_order) VALUES (?,?,?,?,?)',[c,q,a,e,so]);
     insKb('general', 'What is Galaxy SMS?', 'Galaxy SMS ek SMS management platform hai — panels, numbers, allocation, traffic aur rates manage karne ke liye.', 1, 1);
