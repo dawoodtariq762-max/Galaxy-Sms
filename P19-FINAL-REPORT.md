@@ -224,3 +224,81 @@ pm2 restart galaxy     # (or the name from: pm2 list)
 **After deploy (one time):** Admin panel → **Numbers** page → **Rebuild Stats** (🔄 button next to "Delete by Range") → confirm. This repairs any dashboard counters that went stale from deletes made under the old code. Then hard-refresh the browser (Ctrl+Shift+R) so the new `galaxy.js?v=gal-9` loads.
 
 **Verify (1 minute):** Dashboard map now shows only real countries (no Russia/Afghanistan unless you truly have such numbers — range country wins) · delete a number with OTP data → cards, payouts AND map all drop immediately and stay dropped on refresh.
+
+---
+
+# P19c — 3 FINAL FIXES (Client Week Payout · Exact Client Payout · Deleted-Data Dashboards)
+
+**Files changed (P19c only):**
+| File | Change |
+|---|---|
+| `client.html` | FIX#1 dashboard card + binding; FIX#2 Payout column + `cliPay()` formatter (both loaders + both renderers) |
+| `tests/p19c-verify.js` | NEW — 57 checks covering all 3 fixes incl. owner's TEST A–D and jsdom UI verification |
+
+**APIs changed:** NONE. No backend file touched in P19c — verified by inspection that `/api/dashboard` already returns `payout_week` (Monday-start UK week) and `/api/numbers` already returns `payout` for clients; only the client UI bound/ignored them.
+**DB changes:** NONE.
+**`api.js` unchanged** → no `?v=` cache-bust needed in the four panels.
+
+## FIX#1 — Client dashboard "This Month Payout" → REAL "This Week Payout"
+
+- **Implementation:** card label changed (client.html ~370) and the 4th card now binds `'$ '+pay3(d.payout_week)` (client.html ~573). `payout_week` is computed by the SAME existing engine the admin panel uses: UK (`Europe/London`) stat-dates, week window = **Monday → today**. No new calculation was written (no duplicate system).
+- **Week-payout implementation (existing, reused):** `sms_daily_stats.payout_sum` summed over `stat_date BETWEEN monday AND today`, scoped to the logged-in client's numbers only.
+- **Test proof (week ≠ month):** inserted a client stats row dated previous Monday (payout_sum 5.00) → `payout_month` included it (5.02), `payout_week` did NOT (0.02) — proves the card is genuinely weekly, not a label rename. Admin/manager/agent dashboards untouched.
+
+## FIX#2 — Client panel shows EXACT agent-assigned allocation payout
+
+- **Payout source (full trace):** agent allocates → `POST /api/numbers/allocate` stores the entered value **verbatim** into `numbers.payout` ('0', '1', '2', '0.013') → `/api/numbers` returns `SELECT n.*` (field `payout`, all roles incl. client) → client panel renders it. **No fallback** to range rate / manager rate / agent default / global rate — the value displayed is exactly the agent's allocation.
+- **Zero / 1 / 2 / custom preservation:** new `cliPay(v)` formatter — empty → `$0.00`; ≤2 decimals → `$X.XX` (`$0.00`, `$1.00`, `$2.00`); >2 decimals → **exact raw string** (`$0.013`). Values stored as exact decimal strings in DB (verified `"0","1","2","0.013"`).
+- **UI:** new **Payout** column after Status (header + LIVE renderer + legacy renderer + empty-state colspan 6→7; `data-label="Payout"` for mobile card view). Range Management rate stayed `0.010` — no leakage.
+- **Test cases:** same client, 4 numbers with payouts 0/1/2/0.013 → each correct + coexisting + stable after refresh (UI-C6…UI-C10).
+
+## FIX#3 — Deleted numbers/OTP no longer counted in Admin dashboard (root cause)
+
+**Owner's 6 questions — direct answers:**
+
+1. **Why CDR/SMS stats were correct while Admin Dashboard still counted:** they read different tables. CDR / SMS Detail read `sms_records` — the delete removed those rows, so CDR went clean immediately. Dashboard cards ("This Year OTPs", "This Month Payout", all others) read pre-aggregated `sms_daily_stats` — the old delete path **never decremented** that table, so dashboard numbers stayed stale forever.
+2. **Which API/query/table/cache was responsible:** `/api/dashboard` → `statSum()`/`statPay()` queries on table `sms_daily_stats`. There is also a 15-second dashboard cache in memory — but it is version-keyed (`verKey`) and invalidated by deletes, so cache was NOT the culprit; the missing decrement was.
+3. **What changed (in P19/P19b, re-verified for P19c):** `POST /api/numbers/delete` now decrements `sms_daily_stats` for selected numbers, "select all" (filtered), range-delete, and orphaned SMS — phantom-safe upsert (no row is created for deleted data; no negatives).
+4. **Why the new implementation keeps consistency:** deletes and dashboard both go through `sms_daily_stats`; CDR goes through `sms_records`; both are updated in the same delete transaction, so they can never disagree again.
+5. **How unrelated-data preservation was verified:** TEST D — a second number's SMS/CDR/stats survived the delete intact; payment ledger untouched (immutable business rule — it never feeds dashboard totals, so no change needed there); client payouts and range rates unchanged.
+6. **Important for your live VPS:** any staleness created by deletes made **before** P19 is historical residue in `sms_daily_stats`. After deploying this bundle, run **Rebuild Stats once** (Numbers page → 🔄) — it recomputes the stats table from `sms_records` and permanently removes the old residue. New deletes need no rebuild.
+
+**TEST A–D results (dedicated numbers `447200000001/2`, controlled SMS, real delete API):**
+- **A (before):** today 6, month 11, year 13 (incl. 2 backdated March rows), payout_month 5.06, CDR showed TN1 CLIs 9101:2 / 9102:1.
+- **B (delete + delete_sms):** number gone, 5 sms_records gone, CDR clean (9101/9102 no longer listed), **This Year OTPs 13 → 8** (−5: 3 today + 2 March), **This Month 11 → 8** (−3), **This Month Payout 5.06 → 5.03** (−0.030 = exactly this-month rows; March payout only affects year-level stats), today 6→3, total 13→8. No negative/orphan rows.
+- **C (cache/reload):** immediate re-read, re-login, and `_nocache=1` all show the same post-delete values — no resurrection.
+- **D (unrelated data):** TN2's number, SMS, CDR CLI 9201:1 and dashboard counts all intact; payment ledger rows preserved.
+
+## Tests (all run in this sandbox)
+
+| Suite | Result |
+|---|---|
+| `tests/p19c-verify.js` (NEW — FIX#1/#2/#3 + TEST A–D + jsdom client panel) | **57 / 57 PASS** |
+| `tests/p19-verify.js` (regression) | 112 / 112 PASS |
+| `tests/p19b-verify.js` (regression) | 35 / 35 PASS |
+| `tests/p19-ui-verify.js` (regression, incl. client.html mobile/viewport checks) | 36 / 36 PASS |
+| `scripts/check-html-scripts.js` × 4 panels | 0 FAIL |
+
+UI verified via jsdom on a live server (desktop DOM) + static mobile checks (viewport, 7 media queries, `data-label` card layout). True visual browser rendering isn't possible in this sandbox — a quick look on your phone after deploy is the final confirmation.
+
+## Unrelated functionality — unchanged
+
+Admin/manager/agent dashboards, payment frequency, Rate Management, allocation rules (`handleAllocate` untouched — FIX#2 only *reads* what it stores), auth/permissions, SMS provider/webhook logic, payment ledger (immutable), CDR behaviour, filters/date behaviour, single-process architecture.
+
+## Remaining issues / notes
+
+- **Rebuild Stats (one time)** is still required on the VPS to clear pre-P19 stale residue — included in deploy steps below.
+- Client "This Week Payout" reflects SMS-payout engine values (range-rate based), the same engine used for every other payout figure; the per-number allocation payout is a display field (FIX#2 column) by existing design — unchanged, per scope.
+- No other open issues from these 3 fixes.
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev
+pm2 restart galaxy     # (or the name from: pm2 list)
+```
+
+**After deploy (one time, if not already done for P19b):** Admin → Numbers → **Rebuild Stats** (🔄) → confirm. Then hard-refresh browsers (Ctrl+Shift+R).
+
+**Verify (1 minute):** log in as a client → dashboard 4th card reads **This Week Payout** and shows only this week's amount → Numbers tab shows a **Payout** column with the agent's exact values ($0.00 / $1.00 / $2.00 / $0.013) → refresh page → values stable. As admin: delete a test number with OTP data → This Year OTPs and This Month Payout drop immediately and stay dropped after re-login/refresh.
