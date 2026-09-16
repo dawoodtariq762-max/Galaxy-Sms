@@ -126,16 +126,34 @@ async function backfillSmsStats(user) {
       const hi = Math.min(last + 100000, maxId);
       db.execNoSave('BEGIN IMMEDIATE');
       try {
+        /* P19d FIX: stat_date ab PER-ROW ukStatDate se (DST-safe — yahi function ingest
+           recordSmsStats aur delete decrementSmsDailyStats use karte hain, to teeno ka
+           keying HAMESHA match karega). Purana SQL date(received_at,'<CURRENT UK offset>')
+           SAB historical rows par AAJ ka offset lagata tha: September (BST +60) me rebuild
+           karne par January (GMT) ki 23:xx rows agle din par shift ho jaati thi — us number
+           ko delete karne par decrement sahi key par jata tha aur GALAT-key row bachi reh
+           jati thi => dashboard stale (owner ka exact symptom). Rollback: upar wala
+           INSERT..SELECT date(received_at,'${ukSqlModifier()}') GROUP BY SQL. */
+        const rows = db.all(`SELECT received_at, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
+            COALESCE(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL),0) pay
+          FROM sms_records WHERE COALESCE(is_test,0)=0 AND id > ? AND id <= ?`, [last, hi]);
+        const statAgg = new Map();
+        for (const r of rows) {
+          const sd = ukStatDate(r.received_at);
+          const k = sd + '|' + r.mgr + '|' + r.ag + '|' + r.cl + '|' + r.cli;
+          const cur = statAgg.get(k);
+          if (cur) { cur.c += 1; cur.pay += r.pay; }
+          else statAgg.set(k, { sd, mgr: r.mgr, ag: r.ag, cl: r.cl, cli: r.cli, c: 1, pay: r.pay });
+        }
         // date-owner-cli keys SPAN chunks -> must UPSERT (add), not plain INSERT
-        db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
-          SELECT date(received_at, '${ukSqlModifier()}') AS sd, COALESCE(manager_id,-1), COALESCE(agent_id,-1), COALESCE(client_id,-1), COALESCE(cli,''),
-                 COUNT(*), COALESCE(SUM(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL)),0)
-          FROM sms_records
-          WHERE COALESCE(is_test,0)=0 AND id > ? AND id <= ?
-          GROUP BY sd, manager_id, agent_id, client_id, cli
-          ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
-          DO UPDATE SET sms_count = sms_count + excluded.sms_count,
-                        payout_sum = payout_sum + excluded.payout_sum`, [last, hi]);
+        statAgg.forEach(m => {
+          db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
+            VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
+            DO UPDATE SET sms_count = sms_count + excluded.sms_count,
+                          payout_sum = payout_sum + excluded.payout_sum`,
+            [m.sd, m.mgr, m.ag, m.cl, m.cli, m.c, m.pay]);
+        });
         db.execNoSave('COMMIT');
       } catch (e) { try { db.execNoSave('ROLLBACK'); } catch (_) {} throw e; }
       last = hi;
@@ -2142,7 +2160,16 @@ function handleAllocate(req, res) {
   if (target.role === 'agent' && payterm) { const pt=normalizePaymentCycle(payterm); sets += ', payterm=?'; vals.push(pt); }
   // Rate lock rule: Admin->Manager and Manager->Agent must keep the existing/Admin rate.
   // Only Agent->Client can set/change client payout.
-  if (req.user.role === 'agent' && payout !== undefined && payout !== '') { sets += ', payout=?'; vals.push(String(payout)); }
+  /* P19d FIX (owner rule: agent payout set na kare to client ko exact 0 dikhna chahiye):
+     agent->client allocation me payout HAMESHA explicitly write hota hai — empty/undefined
+     => '0'. Purana guard (payout!==undefined && payout!=='') empty par numbers.payout ko
+     UNCHANGED chhod deta tha: force re-allocation par NAYA client PURANE client ka payout
+     dekh leta tha (repro: C1 payout "2" -> C2 force alloc, payout empty -> C2 ko "2" milta tha).
+     Rollback: if (req.user.role === 'agent' && payout !== undefined && payout !== '') { sets += ', payout=?'; vals.push(String(payout)); } */
+  if (req.user.role === 'agent') {
+    const pay19d = (payout === undefined || String(payout).trim() === '') ? '0' : String(payout).trim();
+    sets += ', payout=?'; vals.push(pay19d);
+  }
 
   // PHASE-1 (#21–#25): transactional, guarded, chunk-free allocation.
   //  - temp table instead of WHERE id IN (?,?,…) → SQLite 32,761 variable
@@ -2527,7 +2554,10 @@ async function performSmartDivideJob(job){
           if(wantRole==='client'){
             const agt=db.get('SELECT parent_id FROM users WHERE id=?',[sp.t]);
             const mgr=agt?db.get('SELECT parent_id FROM users WHERE id=?',[agt.parent_id]):null;
-            db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=?, manager_id=? WHERE id IN (${ph})`, [sp.t, agt?agt.parent_id:null, mgr?mgr.parent_id:null, ...part]);
+            /* P19d: smart-divide/Range-Allocation page payout set NAHI karta — client ko
+               explicit '0' mile (agent ke paas is path par payout input hai hi nahi).
+               Rollback: payout='0' hata do. */
+            db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=?, manager_id=?, payout='0' WHERE id IN (${ph})`, [sp.t, agt?agt.parent_id:null, mgr?mgr.parent_id:null, ...part]);
           } else if(wantRole==='agent'){
             const mgr=db.get('SELECT parent_id FROM users WHERE id=?',[sp.t]);
             const mgrId = user.role === 'admin' ? null : (mgr?mgr.parent_id:null);

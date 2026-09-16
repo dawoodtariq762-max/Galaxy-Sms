@@ -302,3 +302,70 @@ pm2 restart galaxy     # (or the name from: pm2 list)
 **After deploy (one time, if not already done for P19b):** Admin → Numbers → **Rebuild Stats** (🔄) → confirm. Then hard-refresh browsers (Ctrl+Shift+R).
 
 **Verify (1 minute):** log in as a client → dashboard 4th card reads **This Week Payout** and shows only this week's amount → Numbers tab shows a **Payout** column with the agent's exact values ($0.00 / $1.00 / $2.00 / $0.013) → refresh page → values stable. As admin: delete a test number with OTP data → This Year OTPs and This Month Payout drop immediately and stay dropped after re-login/refresh.
+
+---
+
+# P19d — FIX AGAIN + FULL END-TO-END PROOF (Client Payout · Dashboard-After-Delete)
+
+**This round the bugs were REPRODUCED FIRST, then fixed, then re-tested end-to-end through the real panels (jsdom UI + live API + direct DB). Reproduction script: `tests/p19d-repro.js` (kept as evidence). Full E2E suite: `tests/p19d-verify.js` — 63/63 PASS.**
+
+**Files changed (P19d):**
+| File | Change |
+|---|---|
+| `backend/server.js` | (1) `handleAllocate`: agent→client payout now ALWAYS written — empty/omitted ⇒ `'0'`. (2) smart-divide client allocation: explicit `payout='0'`. (3) `backfillSmsStats` (Rebuild Stats): stat_date keying now per-row `ukStatDate` (DST-safe) instead of one fixed SQL offset. |
+| `tests/p19d-repro.js` | NEW — reproduces all 3 defects on the old code, passes after the fix |
+| `tests/p19d-verify.js` | NEW — 63 E2E checks (real agent modal, real client panel, real admin panel, TEST A–D, phantom+rebuild, DST chain) |
+
+**APIs changed:** behaviour of `POST /api/numbers/allocate` (agent payout-empty case) and `POST /api/admin/backfill-stats` (correct keying) — no new endpoints, no API contracts broken. **DB changes:** none (no schema change; `sms_daily_stats` content repaired by Rebuild Stats). `api.js` **unchanged** → no `?v=` bump needed. No frontend file changed in P19d.
+
+## FIX#1 — Client allocation payout: exact value (owner's 6 cases)
+
+1. **What was wrong:** the payout shown to a client could be a value from a PREVIOUS allocation (not the one actually applied to this allocation) when the Agent left the payout field empty.
+2. **Exact root cause:** `handleAllocate` only wrote `numbers.payout` when the payout param was non-empty (`payout !== undefined && payout !== ''`). On empty it left the old value — so re-allocating a number (e.g. force move from client A to client B) kept client A's payout for client B. Reproduced: A gets `"2"`, force re-alloc to B with payout empty → B saw `"2"`.
+3. **What changed:** agent→client allocation now always writes payout: empty/omitted ⇒ `'0'`, otherwise the exact entered string (`'0'`, `'1'`, `'2'`, `'0.013'` stored verbatim). Smart-divide/Range-Allocation (no payout input by design) explicitly sets `'0'`. No fallback to range/manager/agent/global rate anywhere — verified Range Management rate stayed `0.010` throughout. Rollback comments are in the code.
+4. **Exact test performed (through the REAL agent panel UI — "Allocate Selected Numbers" modal, not just API):** for each case the suite checks the modal checkbox → opens the modal → types the payout → Allocate; then verifies **DB string → client API string → client panel rendered cell → full page reload**. Cases: field cleared (empty), `0`, `1`, `2`, `0.013`, plus two numbers with different payouts (`1` and `2`) on the same client, plus Range-Allocation (smart-divide) from its real page, plus force re-allocation with empty payout.
+5. **Before (reproduced):** empty payout on re-allocation → new client inherited the OLD client's `"2"`; DB kept stale `"2"`. (The always-explicit cases 0/1/2/0.013 already stored exactly — P19c had verified that.)
+6. **After (all PASS):** empty ⇒ `"0"`; `0` ⇒ `"0"`; `1` ⇒ `"1"`; `2` ⇒ `"2"`; `0.013` ⇒ `"0.013"`; NB1 `$1.00` and NB2 `$2.00` side-by-side, each its own; re-allocation with empty ⇒ new client sees `$0.00` (not `$2.00`); client panel shows `$0.00 / $0.00 / $1.00 / $2.00 / $0.013` exactly; Range-Allocation number ⇒ `$0.00`.
+7. **After reload:** YES — a fresh client panel session (full re-login DOM) showed identical values (C-UI9).
+8. **Remaining issue:** none for these cases. Note: `numbers.payout` values written by allocations made BEFORE this deploy keep whatever the old code stored — an agent can correct any number by unallocate → re-allocate with the intended payout (or force re-allocate).
+
+## FIX#2 — Dashboard still showing old statistics after delete
+
+1. **What was wrong:** after deleting a number + its OTP/SMS, CDR/SMS pages went clean but Admin Dashboard totals (This Year OTPs, This Month Payout, others) stayed stale — and **the same happened after running Rebuild Stats** for SMS received in the other DST half of the year.
+2. **Exact root cause (two independent causes, both real):**
+   - **(a) Historical residue (your live VPS):** dashboard cards read the pre-aggregated `sms_daily_stats` table; CDR reads `sms_records`. Deletes made under the PRE-P19 code removed `sms_records` but never decremented `sms_daily_stats` — those orphan "phantom" rows stay counted forever. New deletes decrement correctly, but they cannot remove residue for SMS that no longer exists — **only Rebuild Stats can** (it recomputes the whole table from live `sms_records`). This is why your dashboard can show 125,000 OTPs / $183 while CDR shows less.
+   - **(b) Rebuild Stats DST bug (found this round, reproduced):** the rebuild keyed every historical row's `stat_date` using **today's** UK offset (`date(received_at, '+60 minutes')` in summer). A winter SMS at 23:30 GMT (correct UK date 15 Jan) was rebuilt onto 16 Jan. Ingest and delete use the per-row DST-correct `ukStatDate` — so after a rebuild, deleting that number decremented the CORRECT key while the stats row sat on the WRONG key: the row survived, and the dashboard kept counting deleted SMS. Reproduced end-to-end: rebuild put the row on `2026-01-16`; delete left it there; dashboard year stayed the same.
+3. **What changed:** `backfillSmsStats` now groups rows with the SAME per-row `ukStatDate` function used by ingest (`recordSmsStats`) and by delete (`decrementSmsDailyStats`) — all three key sources can no longer disagree. Nothing was subtracted, hidden, or hardcoded; the dashboard still computes from `sms_daily_stats`, which is now guaranteed to equal a recomputation from live `sms_records` after Rebuild Stats. Payment ledger untouched (immutable history — it does not feed dashboard totals).
+4. **Exact test performed:** owner's TEST A–D exactly — dedicated numbers `447500000001/2/3`, controlled SMS (3 today via the real webhook + 2 winter rows at the Jan 15 23:30 GMT boundary + 1 surviving winter row), before-values recorded (dashboard API, CDR per CLI, ledger row count, DB counts, and the ADMIN PANEL's rendered "This Year" card and "Payout — This Month" chip); then delete with `delete_sms:true` **through the panel's own API transport**; then cached reload / re-login / `_nocache` direct API / panel re-render; then unrelated-data checks; then a phantom-residue simulation (42,000 SMS + $99 inserted as pre-P19 residue) repaired via the panel's Rebuild Stats button path; then delete of a winter-row number AFTER rebuild to prove the rebuilt keys decrement correctly.
+5. **Before (reproduced):** rebuild keyed the winter row `2026-01-15 23:30 UTC` as `2026-01-16`; after delete the row survived and the dashboard still counted it (year stayed unchanged). Phantom residue inflated year by 42,000 / payout by $99 with no way for deletes to remove it.
+6. **After (all PASS):** TEST B — This Year OTPs 7→2 (−5: 3 today + 2 winter), This Month 4→1 (−3), This Month Payout 0.04→0.01 (−0.030 exactly the deleted this-month rows), today 4→1, total 7→2, winter stats row fully gone, no negative/leftover rows, ledger unchanged. TEST C — reload / re-login / `_nocache` / admin panel cards all identical post-delete values (no resurrection). TEST D — the other number's SMS/CDR/winter row intact, payouts intact, ledger intact. Phantom — after Rebuild Stats: year 42,002→2 == live `sms_records` count, payout 99.01→0.01 == live sum, winter row re-keyed to the correct `2026-01-15`. Delete-after-rebuild — year 2→1, winter row gone, **final dashboard == live sms_records exactly (dash=1, db=1)**.
+7. **After reload:** YES — TEST C and the final panel assertions are post-reload/re-login reads.
+8. **Remaining issue / ACTION REQUIRED ON VPS (one time):** the residue created by pre-P19 deletes on your live DB cannot be decremented by any delete (those SMS rows no longer exist). After deploying this bundle, run **Admin → Numbers → Rebuild Stats (🔄)** once. With the P19d fix the rebuild is now DST-correct, so it fully replaces `sms_daily_stats` with an exact recomputation from live data. If you already ran Rebuild Stats on the previous bundle, run it once more after this deploy (the old rebuild may have left winter-edge rows on shifted dates). Note: the panels also have a tiny 3-second client-side GET cache for `/dashboard` (cleared instantly on any panel action) — if you delete from one browser and stare at an already-open dashboard in another, it can lag ≤3 seconds; a page reload always shows fresh values.
+
+## Tests (all run in this sandbox, single Node process + single SQLite file — architecture unchanged)
+
+| Suite | Result |
+|---|---|
+| `tests/p19d-verify.js` (NEW — full E2E: real agent modal → DB → client panel → reload; TEST A–D; phantom+rebuild; DST chain) | **63 / 63 PASS** |
+| `tests/p19d-repro.js` (NEW — bug reproduction; FAIL on old code, clean after fix) | documented evidence |
+| `tests/p19-verify.js` | 112 / 112 PASS |
+| `tests/p19b-verify.js` | 35 / 35 PASS |
+| `tests/p19c-verify.js` | 57 / 57 PASS |
+| `tests/p19-ui-verify.js` (incl. client.html mobile/viewport checks) | 36 / 36 PASS |
+| `scripts/check-html-scripts.js` × 4 panels | 0 FAIL |
+
+## Unrelated functionality — unchanged
+
+Rate Management, payment frequency/eligibility engine, payment ledger (immutable), allocation rules (only the payout-write condition changed), auth/permissions, SMS provider/webhook logic, CDR behaviour, filters/date behaviour, admin/manager/agent dashboards' calculation source, single-process architecture. No frontend file was modified in P19d.
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev
+pm2 restart galaxy     # (or the name from: pm2 list)
+```
+
+**After deploy (REQUIRED, one time):** Admin → Numbers → **Rebuild Stats** (🔄) → confirm. Then hard-refresh browsers (Ctrl+Shift+R).
+
+**Verify on your live data (2 minutes):** after Rebuild Stats finishes, check Dashboard: This Year OTPs and This Month Payout should now match reality (CDR counts). Then delete one test number with OTP data (choose "delete associated SMS") → This Year OTPs and This Month Payout must drop immediately and stay dropped after re-login/refresh. As a client: Numbers tab shows each number's exact allocated payout, stable on refresh.
