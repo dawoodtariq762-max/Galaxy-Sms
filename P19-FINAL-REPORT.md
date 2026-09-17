@@ -593,3 +593,62 @@ Fixture: 10 ranges (R01–R10); Manager A ke 4 ranges, Manager B ke 2, Agent ke 
 - `scripts/verify-chat-deploy.sh` — VPS par deploy ke baad, restart se PEHLE chalao (no secrets inside).
 
 **Deploy order reminder:** files push → `git reset --hard origin/main` → `verify-chat-deploy.sh` (sab OK) → `pm2 restart galaxy` → hard refresh.
+
+---
+
+## P19h — CHAT UX FIXES: open conversation me live update + subtle notification sound
+
+**Date:** 2026-09-17 · **Files changed:** `assets/chat.js` (realtime block + sound), `backend/chat.js` (1 line: heartbeat named event), `admin/manager/agent/client.html` (`?v=gxchat1` → `gxchat2`), **new:** `tests/p19g-verify.js`. Chat permissions/hierarchy/schema/complaints/SMS/numbers/payments/reports/dashboard/auth — **ZERO changes**.
+
+### Root cause (FIX #1 — open conversation me naya message live nahi dikhta tha)
+
+Inspection (pura realtime pipeline trace kiya — SSE backend broadcast → frontend `onLiveMsg` → `appendMsg`, aur 9s polling fallback):
+
+1. **Frontend ka SSE error-handling fragile tha:** `es.onerror` stream ko **permanently close** kar deta tha — EventSource ka native auto-reconnect khud bandh ho jata tha aur client **hamesha ke liye** 9s polling par chala jata tha (kabhi wapas SSE nahi). Ek transient network blip / proxy hiccup / SSE slot limit (per-user 5) ka 503 — bas, poora session slow-poll mode me.
+2. **Silently buffered/dead stream detect hota hi nahi tha:** reverse proxy agar SSE buffer kare to connection "connected" dikhti hai, koi error nahi aata — fallback poll **start hi nahi hota**. Server ka 25s heartbeat sirf comment (`: hb`) tha jo JS me kabhi dikhta hi nahi.
+3. **Fallback poll me open conversation sirf 9s update hoti thi** — "immediately appear" kabhi nahi ho sakta tha; owner ko baar-baar reopen karna padta tha. (Chat list theek lagti thi kyunki wo 9s me update ho jati thi — is liye symptom sirf open conv ka tha.)
+
+Sandbox me **real two-account live reproduction** banaya (jsdom = real panel + real server + real SSE stream via EventSource polyfill — p19e ke jsdom tests me EventSource tha hi nahi, is liye ye path pehle kabhi UI-level par test nahi hua tha): SSE healthy hone par open conv me message **151ms** me aa jata tha — matlab code ka append path theek tha; **tootna wala hissa SSE ka degradation/lifecycle tha** (upar ke 3 points).
+
+### Kya badla (existing architecture ke andar — koi naya system nahi)
+
+**`assets/chat.js` — realtime block:**
+- SSE transient errors (readyState CONNECTING) par interference NAHI — browser khud reconnect karta hai.
+- **Heartbeat watchdog:** server ab `event: hb` bhejta hai (25s) — 40s+ koi event nahi = zombie/buffered stream → close → poll fallback → 60s baad SSE retry (**self-heal**).
+- **SSE liveness prove hone par poll bandh** (`touchSse` → `stopPolling`) — healthy SSE = **bilkul zero polling** (pehle jaisa hi).
+- **Reconnect (`ready`) par instant catch-up** (`after_id` — gap ke messages miss nahi hote) + **tab visible hone par instant catch-up** (hidden phase ke messages).
+- **Fallback poll adaptive:** open conversation + chat page active = **3s** (pehle 9s), warna 9s; conversation open hote hi turant re-schedule + ek instant catch-up tick. **Same existing `after_id` mechanism — doosra system nahi.**
+- **Request load:** SSE healthy = zero poll. Degraded = 9s idle / 3s open-conv (tiny after_id responses). Sab extra fetches event-driven hain (reconnect/focus) — koi naya periodic request nahi.
+
+**`backend/chat.js` (1 line):** heartbeat ab `sseSend(res,'hb',{t})` — purane cached clients isay ignore karte hain (SSE spec), naya chat.js watchdog ise use karta hai.
+
+**FIX #2 — sound (naya, lightweight):** WebAudio se 2 soft sine notes (B5 987.77Hz + E6 1318.51Hz, ~0.28s total, peak gain 0.06 — subtle), **koi audio file NAHI, koi library NAHI** (~25 lines JS). Autoplay policy: pehla pointerdown/keydown (chat interface ka koi bhi interaction) AudioContext unlock karta hai. **Sirf genuinely new incoming messages** par: apne bheje messages par nahi (sender_id check), history-load par nahi (renderMsgs path), duplicate deliveries par nahi (message-id dedupe `S.sounded`), burst me machine-gun nahi (**max 1 ding per 2s throttle**). Poll/degraded mode me badge-delta + conv-list snapshot (jo waise bhi fetch hoti hai — zero extra request) se detection.
+
+### Tests — `tests/p19g-verify.js` (fresh DB, live two-account) — 35/35 PASS
+
+| # | Owner verification point | Result |
+|---|---|---|
+| B4 | A open conv me, B ne bheja → **bina click/reload 151ms me** conversation ke andar dikha | PASS |
+| B5/B8/C3 | No duplicates; multiple rapid messages sab real-time (SSE) | PASS |
+| B6 | Open conv = actively read — list me phantom unread badge nahi (read ke baad list refresh) | PASS |
+| B3 | SSE healthy → polling **OFF** (no unnecessary requests) | PASS |
+| C2 | Poll fallback me bhi open conv bina click ke — 1.5–1.8s (3s adaptive interval) | PASS |
+| B10/C5 | Doosri conv ka message → chat list preview + unread update live | PASS |
+| B11 | Doosri conv ka message open conv me leak nahi hota | PASS |
+| B7/C4/B12/C6 | Notification sound: incoming par **1 subtle ding** (2 oscillators), khud bheje par nahi, doosri conv par bhi, poll mode me bhi | PASS |
+| B13 | History load/reopen par sound NAHI | PASS |
+| B9 | Apna message render hota hai, sound nahi | PASS |
+| B14 | Hidden tab → visible hote hi instant catch-up, exactly once (no dup) | PASS |
+| D1 | Refresh/login par correct full history | PASS |
+| B15/C7 | Browser console errors: **0** | PASS |
+| D6 | Server stderr: clean (koi naya error nahi) | PASS |
+| D2–D4 | Chat send/unread/complaints APIs unchanged | PASS |
+| D5 | SSE stream: `ready` + 25s `hb` dono events | PASS |
+
+### Full regression (sab green)
+
+p19 **112/0** · p19b **35/0** · p19c **57/0** · p19d **63/0** · p19e **94/0** (38e assertion naye adaptive-poll contract par update) · p19f **35/0** · p19g **35/0** · p19-ui **36/0** · check-html-scripts ×4 **0 FAIL**. SMS/numbers/allocation/payments/reports/dashboard/SMPP/auth sab apne suites me PASS — unrelated functionality unchanged.
+
+### Deploy
+
+Tarball extract → `git add -A` → push → VPS: `cd /opt/galaxy && git fetch && git reset --hard origin/main && npm install --omit=dev && bash scripts/verify-chat-deploy.sh && pm2 restart galaxy` → browser **Ctrl+Shift+R** (panels `?v=gxchat2` fetch karenge — purana cached chat.js automatically bust ho jayega). Pehle naye messages ke liye panel me **ek click/keypress** zaroor hoga (autoplay unlock) — uske baad sound har naye incoming par.

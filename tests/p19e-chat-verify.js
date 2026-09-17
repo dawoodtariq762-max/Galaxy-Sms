@@ -405,7 +405,9 @@ function sseCollect(ticket, ms) {
   const push = await pushP;
   const pushed = push.chunks.join('');
   t('38d. SSE live push: message delivered without polling', pushed.includes('event: msg') && pushed.includes('SSE push test'), '');
-  t('38e. polling fallback sirf 9s interval (chat.js) + visibility-guarded', /9000\)/.test(chatSrc) && /visibilityState\s*===\s*'hidden'/.test(chatSrc), '');
+  /* P19g update: fallback ab adaptive hai — open conv 3s / baaki 9s (setTimeout chain),
+     visibility-guarded, aur SSE healthy hone par poll bilkul bandh (stopPolling). */
+  t('38e. polling fallback bounded (9s / open-conv 3s — P19g) + visibility-guarded + SSE-healthy=zero-poll', /\? 3000 : 9000/.test(chatSrc) && /visibilityState\s*===\s*'hidden'/.test(chatSrc) && /stopPolling/.test(chatSrc), '');
 
   /* 39: indexes used (EXPLAIN QUERY PLAN) */
   const plans = {

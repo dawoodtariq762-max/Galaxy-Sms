@@ -5,7 +5,10 @@
  *
  * - WhatsApp-style layout, Galaxy branding/theme (CSS vars of existing theme + fallbacks).
  * - Real-time: SSE (one-time ticket — JWT kabhi URL me nahi jata). EventSource na ho ya
- *   fail ho to visible-tab polling fallback (9s). Heavy polling kabhi nahi.
+ *   fail ho to visible-tab polling fallback (9s; open conversation 3s — P19g). Heavy polling
+ *   kabhi nahi; SSE zombie/buffered streams heartbeat watchdog se pakre jate hain (P19g).
+ * - P19g: naya INCOMING message open conversation me turant render + subtle WebAudio ding
+ *   (no audio file, no library; autoplay unlock pehle user-gesture par).
  * - Sab user text textContent/esc() se render hota hai (XSS-safe). No voice/audio/calls.
  */
 (function () {
@@ -19,7 +22,7 @@
   const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', agent: 'Agent', client: 'Client' };
 
   /* ---------- state ---------- */
-  const S = { convs: [], convId: null, other: null, oldest: null, hasOlder: false, scope: 'mine', q: '', started: false, es: null, pollTimer: null, lastMsgId: {}, readTimer: null, cFilter: '', complaints: [] };
+  const S = { convs: [], convId: null, other: null, oldest: null, hasOlder: false, scope: 'mine', q: '', started: false, es: null, pollTimer: null, lastMsgId: {}, readTimer: null, cFilter: '', complaints: [], lastEvt: 0, monitor: null, sseRetryTimer: null, connecting: false, convsTimer: null, lastDingAt: 0, sounded: {}, soundedOrder: [], lastUnread: null, audioUnlocked: false };
   const EMOJI = ('😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😋 😛 😜 🤪 🤨 🧐 🤓 😎 🤔 🤗 🤫 🤭 😐 😑 😶 😏 🙄 😬 😮 😯 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 👍 👎 👌 ✌️ 🤞 🤟 🤘 👏 🙌 🤝 🙏 💪 👋 🖐 ✋ 🤙 ❤️ 🧡 💛 💚 💙 💜 🖤 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 ⭐ 🌟 ✨ ⚡ 🔥 💥 💯 ✅ ❌ ❗ ❓ 💤 🎉 🎊 🎁 🏆 ⏰ 📌 📎 🔒 🔑 💡 📱 💻').split(' ');
 
   /* ---------- tiny DOM helpers ---------- */
@@ -152,8 +155,25 @@
     try {
       const url = '/chat/conversations' + (S.scope === 'all' ? '?scope=all' : '');
       S.convs = await API.get(url) || [];
+      detectNewInList(S.convs);
       renderConvList();
     } catch (e) { /* offline — list purani */ }
+  }
+  /* P19g: degraded/poll mode me dusri convs ke naye messages ka reliable detection —
+     badge-delta (refreshBadges) ek race me miss ho sakta hai (ek conv read hote hi
+     doosri ka naya message count mask kar deta hai). Convs list jo waise bhi fetch
+     hoti hai usi ka snapshot compare karte hain — ZERO extra request. SSE mode me
+     per-message dingOnce pehle hi chuka hota hai (2s throttle double rok deta hai). */
+  function detectNewInList(convs) {
+    if (S.scope !== 'mine' || !Array.isArray(convs)) return;
+    const next = {}; let fresh = false;
+    convs.forEach(c => {
+      next[c.id] = (c.last_message_at || '') + '|' + (c.unread || 0);
+      if (S.listSnap && S.convId !== c.id && S.listSnap[c.id] !== undefined && next[c.id] !== S.listSnap[c.id] && (c.unread || 0) > 0) fresh = true;
+    });
+    const had = S.listSnap; S.listSnap = next;
+    if (!had) return; /* pehli load = baseline, koi ding nahi */
+    if (fresh) playDing();
   }
 
   function renderConvList() {
@@ -251,6 +271,9 @@
     $('gxcSend').disabled = true;
     await loadHistory(true);
     markReadSoon();
+    /* P19g: conversation open hote hi (agar fallback poll chal raha hai) usse turant
+       3s fast interval par re-schedule karo — pehla naya message 9s tak intezar na kare */
+    if (S.pollTimer) { stopPolling(); startPolling(); }
   }
 
   async function loadHistory(fresh) {
@@ -335,7 +358,7 @@
     el.appendChild(renderMsg(m));
     el.scrollTop = el.scrollHeight;
     S.lastMsgId[S.convId] = Math.max(S.lastMsgId[S.convId] || 0, m.id);
-    if (m.sender_id !== ME.id) markReadSoon();
+    if (m.sender_id !== ME.id) { dingOnce(m); markReadSoon(); }
   }
 
   let readPending = 0;
@@ -347,49 +370,182 @@
   }
 
   /* ---------- real-time: SSE (ticket) → polling fallback ---------- */
+  /* P19g FIX (owner: open conversation me naya message live dikhna chahiye + subtle sound).
+   * ROOT CAUSE (pehle kya toota tha): SSE ka PEHLA error hi stream ko permanently close kar
+   * deta tha (EventSource ka native auto-reconnect khud bandh kar 9s polling par chale jate
+   * the — phir kabhi SSE wapas NAHI aata tha), aur silently buffered/dead stream (reverse
+   * proxy buffering) par koi error aata hi nahi tha — open conversation me naya message
+   * reopen ke bina nahi dikhta tha.
+   * AB: (1) transient error par EventSource reconnect karne diya jata hai, (2) server ka
+   * 25s heartbeat (event: hb) stream-liveness dikhata hai — 40s+koi event nahi = zombie
+   * stream -> close + poll fallback, (3) fallback me OPEN conversation 3s after_id catch-up
+   * (pehle 9s tha — isi existing mechanism ka reuse, koi naya system nahi), (4) 60s baad
+   * SSE khud retry (self-heal) — healthy hone par poll bandh, (5) tab visible hone par
+   * instant catch-up, (6) naye INCOMING message par subtle WebAudio ding (no file/lib).
+   * SSE healthy = bilkul zero polling (pehle jaisa hi). Rollback: ye pura block purane
+   * startRealtime/onLiveMsg/startPolling se replace karo + panels me ?v=gxchat1. */
   async function startRealtime() {
     if (S.started) return; S.started = true;
+    S.lastEvt = Date.now();
+    unlockAudioOnGesture();
+    document.addEventListener('visibilitychange', onVisChange);
+    connectSSE();
+    S.monitor = setInterval(sseMonitor, 15000);
+  }
+  async function connectSSE() {
+    if (S.es || S.connecting) return;
+    if (typeof EventSource === 'undefined') { startPolling(); return; }
+    S.connecting = true;
     try {
-      if (typeof EventSource !== 'undefined') {
-        const { ticket } = await API.post('/chat/ticket', {});
-        const es = new EventSource('/api/chat/stream?ticket=' + encodeURIComponent(ticket));
-        S.es = es;
-        es.addEventListener('msg', (ev) => { try { const d = JSON.parse(ev.data); onLiveMsg(d.c, d.m); } catch (e) {} });
-        es.addEventListener('read', (ev) => { try { onLiveRead(JSON.parse(ev.data)); } catch (e) {} });
-        es.onerror = () => { try { es.close(); } catch (e) {} S.es = null; startPolling(); };
-        return;
-      }
-    } catch (e) { /* ticket fail → polling */ }
-    startPolling();
+      const { ticket } = await API.post('/chat/ticket', {});
+      const es = new EventSource('/api/chat/stream?ticket=' + encodeURIComponent(ticket));
+      S.es = es; touchSse();
+      es.addEventListener('ready', () => { touchSse(); if (S.convId) catchUpOpenConv(); /* reconnect gap ke messages */ });
+      es.addEventListener('hb', touchSse);
+      es.addEventListener('msg', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveMsg(d.c, d.m); } catch (e) {} });
+      es.addEventListener('read', (ev) => { try { touchSse(); onLiveRead(JSON.parse(ev.data)); } catch (e) {} });
+      es.onerror = () => {
+        if (!S.es) { startPolling(); scheduleSseRetry(); return; }
+        const rs = S.es.readyState;
+        if (rs === 2) { /* CLOSED — final: poll bridge + 60s retry */
+          try { S.es.close(); } catch (e) {} S.es = null; startPolling(); scheduleSseRetry();
+        }
+        /* rs === 0 (CONNECTING): browser khud reconnect kar raha hai — interference nahi.
+           Agar reconnect kaam nahi karega to sseMonitor 40s me zombie pakar lega. */
+      };
+      /* stream khula par pehla event (ready) 8s+ na aaye (proxy buffering) -> poll bridge */
+      setTimeout(() => { if (S.es && !S.pollTimer && Date.now() - S.lastEvt > 8000) startPolling(); }, 8500);
+    } catch (e) { /* ticket fail (network) -> poll + retry */ startPolling(); scheduleSseRetry(); }
+    S.connecting = false;
+  }
+  function touchSse() {
+    S.lastEvt = Date.now();
+    if (S.pollTimer) stopPolling(); /* SSE ne liveness PROVE kar di — polling bandh (no unnecessary requests) */
+  }
+  function sseMonitor() {
+    if (!S.es) { scheduleSseRetry(); return; }
+    if (Date.now() - S.lastEvt > 40000) { /* zombie/buffered stream — heartbeat (25s) bhi nahi aaya */
+      try { S.es.close(); } catch (e) {} S.es = null; startPolling(); scheduleSseRetry();
+    }
+  }
+  function scheduleSseRetry() {
+    if (S.sseRetryTimer) return;
+    S.sseRetryTimer = setTimeout(() => { S.sseRetryTimer = null; if (!S.es) connectSSE(); }, 60000);
+  }
+  function onVisChange() {
+    if (document.visibilityState !== 'visible' || !S.convId) return;
+    /* tab wapas visible hua -> open conv ka instant catch-up (jo messages hidden phase me aaye) */
+    catchUpOpenConv();
+  }
+  async function catchUpOpenConv() {
+    if (!S.convId) return;
+    try {
+      const after = S.lastMsgId[S.convId] || 0;
+      const data = await API.get(`/chat/messages/${S.convId}?after_id=${after}`);
+      (data.messages || []).forEach(m => appendMsg(m));
+    } catch (e) {}
+    if (S.convId) markReadSoon();
   }
   function onLiveMsg(convId, m) {
-    if (S.convId === convId && document.visibilityState === 'visible') { appendMsg(m); loadConvs(); }
-    else { refreshBadges(); loadConvs(); }
+    if (S.convId === convId && document.visibilityState === 'visible') {
+      appendMsg(m);
+      loadConvsSoon(); /* read-mark hone ke BAAD list refresh — open conv ka phantom unread na dikhe */
+    } else {
+      refreshBadges(); loadConvs();
+      dingOnce(m); /* dusri/hidden conv ka naya incoming message */
+    }
   }
+  function loadConvsSoon() { clearTimeout(S.convsTimer); S.convsTimer = setTimeout(() => { loadConvs(); refreshBadges(); }, 700); }
   function onLiveRead(d) {
     if (S.convId !== d.c) return;
     document.querySelectorAll('#gxcMsgs .gxc-row.mine .gxc-ticks').forEach(t => { t.classList.add('read'); t.textContent = '✓✓'; });
   }
   function startPolling() {
     if (S.pollTimer) return;
-    S.pollTimer = setInterval(async () => {
+    const tick = async () => {
       if (document.visibilityState === 'hidden') return;
       refreshBadges();
-      if (S.convId) {
-        try {
-          const after = S.lastMsgId[S.convId] || 0;
-          const data = await API.get(`/chat/messages/${S.convId}?after_id=${after}`);
-          (data.messages || []).forEach(m => appendMsg(m));
-        } catch (e) {}
-      }
+      if (S.convId) { try { await catchUpOpenConv(); } catch (e) {} }
       if ($('page-chat') && $('page-chat').classList.contains('active')) loadConvs();
-    }, 9000);
+    };
+    const sched = () => {
+      /* P19g: open conversation + chat page active -> 3s (immediate feel), warna 9s.
+         Same after_id catch-up mechanism — koi doosra system nahi. SSE healthy hone
+         par poll chalta hi nahi (touchSse stopPolling karta hai). */
+      const iv = (S.convId && $('page-chat') && $('page-chat').classList.contains('active')) ? 3000 : 9000;
+      S.pollTimer = setTimeout(() => { tick().catch(() => {}).then(sched); }, iv);
+    };
+    tick().catch(() => {}); /* fallback ON hote hi ek instant catch-up */
+    sched();
   }
+  function stopPolling() { if (S.pollTimer) { clearTimeout(S.pollTimer); S.pollTimer = null; } }
   async function refreshBadges() {
     try {
       const b = await API.get('/chat/unread-count');
+      const prev = S.lastUnread; S.lastUnread = b.chat;
+      /* poll mode: kisi AUR conv me naya message aya (unread badha) — subtle ding.
+         (SSE mode me per-message dingOnce pehle hi ho chuka hota hai; 2s throttle double ko rokta hai.) */
+      if (prev !== null && b.chat > prev) playDing();
       setBadge('gxChatBadge', b.chat); setBadge('gxCompBadge', b.complaints);
     } catch (e) {}
+  }
+
+  /* ---------- P19g: subtle notification sound (WebAudio — no audio file, no library) ---------- */
+  let audioCtx = null;
+  function ensureAudio() {
+    if (audioCtx !== null) return audioCtx;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = AC ? new AC() : false;
+    } catch (e) { audioCtx = false; }
+    return audioCtx;
+  }
+  function unlockAudioOnGesture() {
+    if (S.audioUnlocked) return;
+    const unlock = () => {
+      S.audioUnlocked = true;
+      const ctx = ensureAudio();
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+      document.removeEventListener('pointerdown', unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+    /* browser autoplay policy: pehle user-interaction ke baad hi sound allowed —
+       chat interface ka koi bhi pehla click/keypress audio unlock kar deta hai */
+    document.addEventListener('pointerdown', unlock);
+    document.addEventListener('keydown', unlock);
+  }
+  const DING_GAP = 2000; /* burst me machine-gun nahi — max ek ding per 2s */
+  function playDing() {
+    const now = Date.now();
+    if (now - (S.lastDingAt || 0) < DING_GAP) return;
+    S.lastDingAt = now;
+    const ctx = ensureAudio();
+    if (!ctx) return; /* AudioContext available nahi (very old browser) — chup-chaap skip */
+    if (ctx.state === 'suspended') { try { ctx.resume().catch(() => {}); } catch (e) {} if (ctx.state === 'suspended') return; }
+    try {
+      const t0 = ctx.currentTime;
+      const note = (freq, start, dur, vol) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t0 + start);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + start + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t0 + start); o.stop(t0 + start + dur + 0.03);
+      };
+      note(987.77, 0, 0.12, 0.06);     /* B5 — soft "ding" */
+      note(1318.51, 0.09, 0.16, 0.05); /* E6 — gentle tail */
+    } catch (e) {}
+  }
+  function dingOnce(m) {
+    /* sirf genuinely NAYA incoming message — apne bheje messages, history-load aur
+       duplicate deliveries (SSE+poll/catch-up overlap) par sound NAHI */
+    if (!m || m.sender_id === ME.id) return;
+    const k = String(m.id);
+    if (S.sounded[k]) return;
+    S.sounded[k] = 1; S.soundedOrder.push(k);
+    if (S.soundedOrder.length > 300) delete S.sounded[S.soundedOrder.shift()];
+    playDing();
   }
   function setBadge(id, n) {
     const el = $(id); if (!el) return;

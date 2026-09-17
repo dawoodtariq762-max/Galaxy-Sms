@@ -27,7 +27,7 @@ fi
 
 echo "== 3) Panels chat.js load karte hain + nav items? =="
 for f in admin.html manager.html agent.html client.html; do
-  if grep -q 'assets/chat.js?v=gxchat1' "$f" 2>/dev/null; then ok "$f loads chat.js"; else bad "$f chat.js tag missing"; fi
+  if grep -q 'assets/chat.js?v=gxchat' "$f" 2>/dev/null; then ok "$f loads chat.js"; else bad "$f chat.js tag missing"; fi
   if grep -q 'data-page="chat"' "$f" 2>/dev/null; then ok "$f has Chat nav item"; else bad "$f Chat nav missing"; fi
 done
 

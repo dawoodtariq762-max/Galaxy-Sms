@@ -93,8 +93,12 @@ function unreadCounts(meId, convIds) {
 const sseTickets = new Map();   // ticket -> { userId, role, expires }
 const sseClients = new Map();   // userId -> Set<res>
 const HB_MS = 25000, MAX_SSE_TOTAL = 300, MAX_SSE_PER_USER = 5;
+/* P19g: heartbeat ab NAMED event bhi bhejta hai (event: hb). Purane clients isay ignore
+ * kar dete hain (SSE spec — bina listener ke event drop), naya chat.js ise stream-liveness
+ * detect karne ke liye use karta hai (zombie/buffered proxy stream pakarne ke liye).
+ * Rollback: sseSend(res,'hb',...) wali line hata do, comment write wapas aa jayega. */
 const hbTimer = setInterval(() => {
-  for (const set of sseClients.values()) for (const res of set) { try { res.write(': hb\n\n'); } catch (e) {} }
+  for (const set of sseClients.values()) for (const res of set) { try { sseSend(res, 'hb', { t: Date.now() }); } catch (e) {} }
 }, HB_MS);
 if (hbTimer.unref) hbTimer.unref();
 const ticketSweeper = setInterval(() => {

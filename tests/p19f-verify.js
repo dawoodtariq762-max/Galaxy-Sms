@@ -89,7 +89,7 @@ async function bootPanel(page, tok, user) {
   let panelsOk = true;
   for (const f of ['admin.html', 'manager.html', 'agent.html', 'client.html']) {
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
-    if (!(src.includes('/assets/chat.js?v=gxchat1') && src.includes('data-page="chat"') && src.includes('data-page="complaints"'))) { panelsOk = false; t('A4 ' + f + ' chat wiring', false, 'script/nav missing'); }
+    if (!(src.includes('/assets/chat.js?v=gxchat') && src.includes('data-page="chat"') && src.includes('data-page="complaints"'))) { panelsOk = false; t('A4 ' + f + ' chat wiring', false, 'script/nav missing'); }
   }
   t('A4 all 4 panels: chat.js tag + nav items present', panelsOk);
   t('A5 schema has chat/complaint tables', fs.readFileSync(path.join(ROOT, 'backend/schema.js'), 'utf8').includes('CREATE TABLE IF NOT EXISTS chat_conversations'));
