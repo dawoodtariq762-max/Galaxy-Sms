@@ -652,3 +652,101 @@ p19 **112/0** · p19b **35/0** · p19c **57/0** · p19d **63/0** · p19e **94/0*
 ### Deploy
 
 Tarball extract → `git add -A` → push → VPS: `cd /opt/galaxy && git fetch && git reset --hard origin/main && npm install --omit=dev && bash scripts/verify-chat-deploy.sh && pm2 restart galaxy` → browser **Ctrl+Shift+R** (panels `?v=gxchat2` fetch karenge — purana cached chat.js automatically bust ho jayega). Pehle naye messages ke liye panel me **ek click/keypress** zaroor hoga (autoplay unlock) — uske baad sound har naye incoming par.
+
+---
+
+## P19i — ZERO-COST PANEL REQUEST + EMAIL VERIFICATION SYSTEM (public signup + Gmail OTP)
+
+**Date:** 2026-09-17 · **Naya:** `backend/pubreq.js`, `public-request.html`, `set-password.html`, `.env.example`, `tests/p19i-verify.js` · **Modified:** `backend/server.js` (sirf: shared `insertUserAccount` helper extract + 1 mount line), `backend/schema.js` (3 additive tables), `admin.html` (Panel Requests page), `package.json` (nodemailer). **Auth/user management REBUILD NAHI hua** — existing users table + bcrypt + JWT + hierarchy exactly wahi hai.
+
+### A) Official Google documentation jo check ki (live fetch — 2026-09-17)
+
+| Doc | Kya confirm hua |
+|---|---|
+| support.google.com/mail/answer/7104828 | **smtp.gmail.com**, port **587 STARTTLS** (465 SSL bhi), SSL/TLS required, **authentication required** |
+| support.google.com/accounts/answer/185833 | **App Password = 16-digit passcode**, sirf **2-Step Verification ON** hone par available; account ka main password change hone par app passwords **revoke** ho jate hain; kabhi bhi revoke kar sakte ho |
+| support.google.com/mail/answer/22839 | Free Gmail: **~500 recipients/day** (ek email me 500 recipients YA 500 emails/day) — limit cross hone par **1–24 ghante** tak sending band; Workspace accounts ka limit zyada hai (Google Workspace sending limits) |
+| support.google.com/mail/answer/7126229 | Google "Sign in with Google" recommend karta hai; lekin SMTP-only apps ke liye App Password hi supported lightweight method hai |
+
+### B) Selected method + kyun zero-cost hai
+
+**Gmail SMTP + App Password (nodemailer se, existing VPS par).** Koi paid service nahi: Gmail account free (owner ke paas hai), App Password free, nodemailer free open-source (ek hi naya npm dep), sending existing Node process se (PM2 same single process). OAuth2/Gmail API bhi free hai lekin uske liye GCP project + credentials + refresh-token rotation chahiye — is low-volume request form ke liye unnecessary complexity. App Password Google ka supported method hai.
+
+### C) Current Gmail limitations (relevant)
+
+- Free Gmail ≈ **500 emails/day** — is system ke liye kaafi (har request ≈ 2 emails: OTP + welcome).
+- Limit cross → 1–24h block. **Handling:** sendMail ka error catch hota hai, `mail_status='failed'` + sanitized error request par record hota hai (sirf admin dikhta hai), **koi auto-retry loop nahi**; admin "Resend Mail" se manually dobara bhej sakta hai (D-part test).
+- Deliverability: naye Gmail accounts ki emails kabhi spam me ja sakti hain (IP reputation ke bina) — customer se kahna ho ki Spam check karein.
+- App Password tab tak valid jab tak account ka main password change na ho (change par naya generate karke `.env` update karna hoga).
+
+### D) Owner ko manually kya karna hai (ek baar, 10 minute)
+
+1. Galaxy Gmail account me login: **myaccount.google.com/security** → **2-Step Verification ON** karo.
+2. **myaccount.google.com/apppasswords** → naya App Password banao (16 characters, spaces hata kar copy karo).
+3. VPS par file banao: `nano /opt/galaxy/.env` aur ye bharo (asli values se):
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=aapka.galaxy.account@gmail.com
+   SMTP_PASSWORD=16charapppassword
+   MAIL_FROM="Galaxy SMS" <aapka.galaxy.account@gmail.com>
+   PUBLIC_BASE_URL=http://AAPKA.VPS.IP
+   ```
+4. `cd /opt/galaxy && npm install --omit=dev && pm2 restart galaxy`
+   (`.env` file `.gitignore` me already hai — kabhi GitHub par nahi jayegi; sample: `.env.example` placeholders ke saath repo me hai.)
+
+**Env vars:** `SMTP_HOST, SMTP_PORT (587 ya 465), SMTP_USER, SMTP_PASSWORD, MAIL_FROM` + optional: `OTP_TTL_MINUTES (10), OTP_RESEND_GAP_MS (60000), OTP_MAX_PER_HOUR (3), PASSWORD_SETUP_TTL_MINUTES (1440), PUBREQ_ENABLED (1), PUBLIC_BASE_URL`. `.env` configure na ho to system "dry-run" me chalta hai — email nahi jata, `mail_status='not_configured'`, koi crash nahi.
+
+### E) Database changes (additive — existing tables untouched)
+
+- `panel_requests` (id, name, email, username, panel_type, contact, email_verified, status pending/approved/rejected, ip, otp_mail_status, welcome_mail_status, mail_error, reject_reason, decided_by, decided_at, created_user_id, timestamps) + 3 indexes (status, email, username)
+- `panel_request_otp` (request_id, **otp_hash** — peppered HMAC-SHA256, plaintext OTP kabhi DB me nahi; attempts, used, expires_at) + index
+- `password_setup_tokens` (user_id, **token_hash**, expires_at, used) + index
+- Users table me ZERO changes — approve par wahi `users` table use hoti hai.
+
+### F) API routes + pages
+
+- **Public:** `GET /panel-request` (form page), `POST /api/pubreq/submit`, `POST /api/pubreq/otp/resend`, `POST /api/pubreq/otp/verify`, `POST /api/pubreq/set-password`, `GET /set-password?token=…`, `GET /api/pubreq/config`
+- **Admin-only (backend `requireRole('admin')`):** `GET /api/panel-requests?status=`, `GET /api/panel-requests/:id`, `POST /api/panel-requests/:id/approve` `{parent_id?}`, `POST /api/panel-requests/:id/reject` `{reason?}`, `POST /api/panel-requests/:id/resend-welcome`
+- **Admin Panel location:** User Management › **Panel Requests** (status filter + View/Approve/Reject/Resend Mail).
+- **Account creation:** `/api/users` POST ka insert logic ab shared `insertUserAccount()` helper hai (same bcrypt, same NOCASE uniqueness, same payment_type rules) — approve route wahi use karta hai. Koi doosra user system nahi.
+
+### G) Security measures
+
+OTP: 6-digit crypto-random, **hashed (HMAC-SHA256 + server pepper)**, TTL 10 min (configurable), **single-use**, max **5 wrong attempts** (phir OTP invalidate), resend **60s gap + 3/hour/email** (ms-precise in-memory + DB fallback), IP rate limits (30/min public, alag buckets). Public form: server-side validation (name/email/username format, panel_type whitelist), duplicate username (users NOCASE + pending requests), duplicate email (pending/approved — rejected ke baad dobara apply allowed), SQLi → 100% parametrized, XSS → admin page par `pesc()` escaping (jsdom-verified). Password **form par collect hi nahi hota** — approve par random temp password + **one-time setup link** (hashed token, 24h, single-use); customer khud password set karta hai. SMTP creds: sirf `.env` (gitignored), responses/logs me kabhi nahi (error sanitizer password ko `***` karta hai — E1/D3 tested). Admin routes backend-enforced 403 (manager/agent/unauth tested). Request ID: integer validation + 404. CSRF: token-in-header scheme (no cookies) — existing architecture jaisa hi.
+
+### H) Tests — `tests/p19i-verify.js` — 95/95 PASS (2 stable runs)
+
+Poora flow **real nodemailer → fake SMTP server** se E2E (Gmail credentials ke bina poora SMTP path prove hota hai):
+B: public page (200 branded) → submit → OTP email (subject/branding/expiry/"did not request" note) → OTP hashed in DB → wrong OTP countdown → verify OK → **reuse rejected** → **expired rejected** → **5-attempt brute-force lock** → resend works after lock → gap limit → hourly cap → duplicates (username/email/pending) → validation + SQLi/XSS payloads.
+C: manager/agent/no-token admin access **403** → id manipulation 400/404 → admin list/detail → **approve manager** (account EXISTING users table me, parent=admin, NOCASE preserved, welcome email: subject + username + setup link + panel URL, **no plaintext password**) → **set-password** (weak 400, wrong token 400, OK, **reuse 400**, expired 400) → **customer naye password se LOGIN + /api/me role manager** → agent approve bina parent 400 / under-agent 400 / under-manager OK (hierarchy enforced) → client default admin neeche → reject + reason + no account + re-approve 400.
+D: **Gmail quota simulation (421)** → account banta hai, `mail_status='failed'` + sanitized error (admin-only), koi retry loop nahi → recover par Resend Mail OK.
+E: SMTP creds kisi response/log me nahi; existing `/api/users` POST unchanged (NOCASE 409, agent→agent 403); 4 tables coexist; indexes; server stderr clean.
+F (jsdom): admin panel me Panel Requests page render, requests list, **XSS naam escaped (execute nahi hota)**, View modal, 0 console errors.
+**Full regression:** p19 112/0 · p19b 35/0 · p19c 57/0 · p19d 63/0 · p19e 94/0 · p19f 35/0 · p19g 35/0 · p19-ui 36/0 · check-html-scripts ×4 0 FAIL — SMS/numbers/allocation/payments/reports/dashboard/chat sab untouched.
+
+### I) No-domain (IP-only) limitations — SACH much
+
+Aaj bhi poora panel plain HTTP par chalta hai (existing /panel-login bhi). Is system me:
+- Public form sirf name/email/username bhejta hai — **password form par hota hi nahi** (setup-link method isi wajah se chuna).
+- OTP email se aata hai (out-of-band) — network sniffing se safe.
+- **Genuinely insecure point:** `/set-password` page naya password plain HTTP par bhejta hai, aur existing panel login bhi yahi karta hai — koi network-level attacker (same WiFi/ISP path) password dekh sakta hai. YE FIX KARNE KE LIYE HTTPS genuinely required hai.
+- **Zero-cost HTTPS path (jab chaho):** free subdomain (DuckDNS / No-IP — $0) + **Let's Encrypt certificate ($0)** + reverse proxy (Caddy/Nginx). Domain kharidna zaroori NAHI. Jab tak HTTPS na ho,敏感 credentials HTTP par jayenge — yeh limitation silently chhupayi nahi gayi, yahan clearly likhi hai.
+- Email links me `PUBLIC_BASE_URL` use hota hai — VPS IP set karo to links `http://IP/...` banenge.
+
+### J) Future (agar volume badhe)
+
+500/day cross hone lage → options (usi order me): Google Workspace (~2,000/day, paid) YA free transactional tier wale providers (Brevo/SendGrid free tiers) — code me sirf `.env` ke SMTP settings badalne hain (mailer transport standard SMTP hai), ya phir apni VPS par self-hosted relay. Abhi ke customer-request volume ke liye Gmail kaafi hai.
+
+### K) Deploy order (VPS)
+
+```bash
+# PC: tarball extract → git add -A → push
+# VPS:
+cd /opt/galaxy
+nano .env                      # Section D wali values (sirf pehli baar)
+git fetch && git reset --hard origin/main
+npm install --omit=dev         # nodemailer naya dep
+pm2 restart galaxy
+```
+Verify: `http://VPS-IP/panel-request` khulna chahiye (branded form). Test request bhejo → Gmail inbox me "Galaxy SMS — Email Verification Code" aana chahiye (Spam check karein) → OTP verify → Admin Panel › User Management › Panel Requests me request dikhegi → Approve → customer ko welcome email → link se password set → `/panel-login` se login.

@@ -835,6 +835,54 @@ function createTables() {
   db.run(`CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, created_at)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_jobs_user   ON jobs(created_by, created_at)`);
 
+  /* 9) P19i: PUBLIC PANEL REQUESTS (zero-cost customer signup + Gmail OTP verification).
+     panel_requests: public form se aya request — account SIRF admin approve karne par
+     existing users table me banta hai (yahan sirf request state rehti hai).
+     panel_request_otp: OTP hash (peppered HMAC — plain OTP kabhi DB me nahi).
+     password_setup_tokens: approval email ke one-time password-setup links. */
+  db.run(`CREATE TABLE IF NOT EXISTS panel_requests (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL,
+    email          TEXT NOT NULL,
+    username       TEXT NOT NULL,
+    panel_type     TEXT NOT NULL,             -- manager | agent | client
+    contact        TEXT DEFAULT '',
+    email_verified INTEGER DEFAULT 0,         -- 1 = OTP verified (email control proven)
+    status         TEXT NOT NULL DEFAULT 'pending',  -- pending | approved | rejected
+    ip             TEXT DEFAULT '',
+    otp_mail_status    TEXT DEFAULT '',       -- sent | failed | not_configured
+    welcome_mail_status TEXT DEFAULT '',
+    mail_error     TEXT DEFAULT '',           -- admin-only visibility (sanitized)
+    reject_reason  TEXT DEFAULT '',
+    decided_by     INTEGER,
+    decided_at     TEXT,
+    created_user_id INTEGER,                  -- approve par bana hua users.id
+    created_at     TEXT DEFAULT (datetime('now')),
+    updated_at     TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_panel_req_status ON panel_requests(status, created_at)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_panel_req_email  ON panel_requests(email, status)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_panel_req_user  ON panel_requests(username)`);
+  db.run(`CREATE TABLE IF NOT EXISTS panel_request_otp (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id INTEGER NOT NULL,
+    otp_hash   TEXT NOT NULL,
+    attempts   INTEGER DEFAULT 0,
+    used       INTEGER DEFAULT 0,
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_protp_req ON panel_request_otp(request_id, used)`);
+  db.run(`CREATE TABLE IF NOT EXISTS password_setup_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    token_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used       INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_pst_hash ON password_setup_tokens(token_hash, used)`);
+
 }
 
 module.exports = { createTables };

@@ -406,6 +406,7 @@
         <div class="sub-item" data-page="managers"><span class="dot"></span> Managers</div>
         <div class="sub-item" data-page="agents"><span class="dot"></span> Agents</div>
         <div class="sub-item" data-page="clients"><span class="dot"></span> Clients</div>
+        <div class="sub-item" data-page="panelRequests"><span class="dot"></span> Panel Requests</div>
       </div>
 
       <div class="sb-section">Reports</div>
@@ -571,6 +572,8 @@
       <section class="page" id="page-managers"></section>
       <section class="page" id="page-agents"></section>
       <section class="page" id="page-clients"></section>
+      <!-- P19i: PUBLIC PANEL REQUESTS (builds at runtime) -->
+      <section class="page" id="page-panelRequests"></section>
 
 
       <section class="page" id="page-cliSearch">
@@ -751,7 +754,7 @@
 /* auth guard — admin only */
 if(window.API){ API.guard('admin'); }
 window.PX_PANEL_MODE='admin_ops';
-const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','aiKnowledge','payMgmt','chat','complaints']);
+const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','aiKnowledge','payMgmt','chat','complaints','panelRequests']);
 function normalizePanelPage(id){ id=String(id||'dashboard'); return ADMIN_ALLOWED_PAGES.has(id)?id:'dashboard'; }
 function applyPanelSplitUi(){
   if(window.PX_PANEL_MODE!=='admin_light') return;
@@ -2320,6 +2323,142 @@ function gxDeleteModal(title,line1,line2){
     ov.addEventListener('click',e=>{ if(e.target===ov) close(null); });
   });
 }
+/* ================= P19i: PUBLIC PANEL REQUESTS (admin) =================
+   Public /panel-request form → OTP verified → yahan list → Approve/Reject.
+   Approve = EXISTING user architecture se account (backend /api/panel-requests/:id/approve). */
+let prqData = [], prqFilter = 'pending';
+function pesc(v){ return String(v==null?'':v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function buildPanelRequests(){
+  const page = document.getElementById('page-panelRequests');
+  page.innerHTML = `
+  <div class="page-head"><div><h2>Panel Requests</h2><div class="breadcrumb"><b>User Management</b> › Public Panel Requests</div></div>
+    <div class="head-actions"><select id="prqFilter" style="width:auto">
+      <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="">All</option>
+    </select></div></div>
+  <div class="table-wrap"><div class="tscroll"><table>
+    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Username</th><th>Type</th><th>Verified</th><th>Created</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody id="prqBody"></tbody></table></div>
+    <div class="table-foot"><div class="info" id="prqInfo"></div></div></div>
+  <div class="hint" style="margin-top:10px">Public form: <b>/panel-request</b> — customer khud request bhejta hai, email OTP se verify hota hai, account SIRF aap ke approve karne par banta hai.</div>`;
+  document.getElementById('prqFilter').addEventListener('change', e => { prqFilter = e.target.value; renderPanelRequests(); });
+  loadPanelRequests();
+}
+async function loadPanelRequests(){
+  try {
+    const qs = prqFilter ? ('?status=' + prqFilter) : '';
+    prqData = await API.get('/panel-requests' + qs) || [];
+  } catch (e) { prqData = []; try { prqBody.innerHTML = window.GX ? GX.error(e.message,'loadPanelRequests()') : '⚠ Load failed: ' + pesc(e.message); } catch (_) {} return; }
+  renderPanelRequests();
+}
+function prqBadge(v, okText, noText){ return v ? `<span class="tag" style="background:rgba(22,163,74,.14);color:#16a34a">${okText}</span>` : `<span class="tag" style="background:rgba(239,68,68,.12);color:#ef4444">${noText}</span>`; }
+function renderPanelRequests(){
+  const body = document.getElementById('prqBody'); if (!body) return;
+  document.getElementById('prqFilter').value = prqFilter;
+  body.innerHTML = prqData.length ? '' : '<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Koi request nahi mili.</td></tr>';
+  prqData.forEach(r => {
+    const tr = document.createElement('tr');
+    const stTag = r.status === 'pending' ? '<span class="tag" style="background:rgba(245,158,11,.15);color:#f59e0b">Pending</span>'
+      : r.status === 'approved' ? '<span class="tag" style="background:rgba(22,163,74,.14);color:#16a34a">Approved</span>'
+      : '<span class="tag" style="background:rgba(239,68,68,.12);color:#ef4444">Rejected</span>';
+    tr.innerHTML = `<td class="mono">#${r.id}</td><td><b>${pesc(r.name)}</b></td><td>${pesc(r.email)}</td><td class="mono">${pesc(r.username)}</td>
+      <td><span class="tag tag-blue">${pesc(r.panel_type)}</span></td>
+      <td>${prqBadge(r.email_verified, '✓ Verified', '✗ No')}</td>
+      <td class="muted">${pesc(r.created_at)}</td><td>${stTag}</td>
+      <td style="white-space:nowrap">
+        <button class="gx-btn gx-blue" data-a="view">View</button>
+        ${r.status === 'pending' ? `<button class="gx-btn gx-green" data-a="approve">Approve</button><button class="gx-btn danger" data-a="reject">Reject</button>` : ''}
+        ${(r.status === 'approved' && r.welcome_mail_status && r.welcome_mail_status !== 'sent') ? `<button class="gx-btn gx-blue" data-a="resend" title="Welcome email dobara bhejein">Resend Mail</button>` : ''}
+      </td>`;
+    tr.querySelector('[data-a="view"]').addEventListener('click', () => prqView(r.id));
+    const ap = tr.querySelector('[data-a="approve"]'); if (ap) ap.addEventListener('click', () => prqApprove(r.id));
+    const rj = tr.querySelector('[data-a="reject"]'); if (rj) rj.addEventListener('click', () => prqReject(r.id));
+    const rs = tr.querySelector('[data-a="resend"]'); if (rs) rs.addEventListener('click', () => prqResend(r.id));
+    body.appendChild(tr);
+  });
+  document.getElementById('prqInfo').textContent = prqData.length + ' request(s)';
+}
+async function prqView(id){
+  let r; try { r = await API.get('/panel-requests/' + id); } catch (e) { alert('❌ ' + e.message); return; }
+  closeModal('prqModal');
+  const ov = document.createElement('div'); ov.className = 'modal-overlay show'; ov.id = 'prqModal';
+  ov.innerHTML = `<div class="modal" style="max-width:520px">
+    <div class="modal-head"><h3>Panel Request #${r.id}</h3><button class="modal-close" onclick="closeModal('prqModal')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Name</label><div><b>${pesc(r.name)}</b></div></div>
+      <div class="form-group"><label>Email</label><div>${pesc(r.email)} ${prqBadge(r.email_verified, '✓ OTP Verified', '✗ Not verified')}</div></div>
+      <div class="form-group"><label>Requested Username</label><div class="mono">${pesc(r.username)}</div></div>
+      <div class="form-group"><label>Panel Type</label><div><span class="tag tag-blue">${pesc(r.panel_type)}</span></div></div>
+      ${r.contact ? `<div class="form-group"><label>Contact</label><div>${pesc(r.contact)}</div></div>` : ''}
+      <div class="form-group"><label>Created</label><div>${pesc(r.created_at)}</div></div>
+      <div class="form-group"><label>Status</label><div>${pesc(r.status)}${r.decided_at ? ' · ' + pesc(r.decided_at) + (r.decided_by ? ' by ' + pesc(r.decided_by) : '') : ''}</div></div>
+      ${r.reject_reason ? `<div class="form-group"><label>Reject Reason</label><div>${pesc(r.reject_reason)}</div></div>` : ''}
+      ${r.created_user_id ? `<div class="form-group"><label>Created User ID</label><div class="mono">#${r.created_user_id}</div></div>` : ''}
+      <div class="form-group"><label>Email Delivery</label><div style="font-size:12.5px">OTP mail: <b>${pesc(r.otp_mail_status || '—')}</b> · Welcome mail: <b>${pesc(r.welcome_mail_status || '—')}</b>
+      ${r.mail_error ? `<br/><span style="color:#ef4444">Last error: ${pesc(r.mail_error)}</span>` : ''}</div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('prqModal')">Close</button>
+    ${r.status === 'pending' ? `<button class="btn btn-blue" id="prqVA">Approve</button>` : ''}</div></div>`;
+  document.body.appendChild(ov);
+  const va = ov.querySelector('#prqVA'); if (va) va.addEventListener('click', () => { closeModal('prqModal'); prqApprove(r.id); });
+}
+async function prqApprove(id){
+  let r; try { r = await API.get('/panel-requests/' + id); } catch (e) { alert('❌ ' + e.message); return; }
+  if (!r.email_verified) { alert('Is request ka email abhi verify nahi hua (OTP pending).'); return; }
+  closeModal('prqModal');
+  /* parent selection — existing hierarchy rules (backend enforce karta hai) */
+  let parentHtml = '';
+  if (r.panel_type === 'agent') {
+    let mgrs = []; try { mgrs = await API.get('/users/manager') || []; } catch (e) {}
+    if (!mgrs.length) { alert('Pehle koi Manager user banayein — Agent usi ke neeche jata hai.'); return; }
+    parentHtml = `<div class="form-group"><label>Parent Manager *</label><select id="prqParent" style="width:100%">
+      ${mgrs.filter(m => m.active).map(m => `<option value="${m.id}">${pesc(m.username)} — ${pesc(m.name || '')}</option>`).join('')}</select></div>`;
+  } else if (r.panel_type === 'client') {
+    let mgrs = [], agts = [];
+    try { mgrs = await API.get('/users/manager') || []; } catch (e) {}
+    try { agts = await API.get('/users/agent') || []; } catch (e) {}
+    const opts = [].concat(agts.filter(a => a.active).map(a => ({ id: a.id, label: pesc(a.username) + ' (Agent)' })), mgrs.filter(m => m.active).map(m => ({ id: m.id, label: pesc(m.username) + ' (Manager)' })));
+    parentHtml = `<div class="form-group"><label>Parent (optional — default: aap khud)</label><select id="prqParent" style="width:100%">
+      <option value="">— Admin (no parent) —</option>${opts.map(o => `<option value="${o.id}">${o.label}</option>`).join('')}</select></div>`;
+  }
+  const ov = document.createElement('div'); ov.className = 'modal-overlay show'; ov.id = 'prqApproveModal';
+  ov.innerHTML = `<div class="modal" style="max-width:480px">
+    <div class="modal-head"><h3>Approve Request #${r.id}</h3><button class="modal-close" onclick="closeModal('prqApproveModal')">×</button></div>
+    <div class="modal-body">
+      <div class="hint" style="margin-bottom:12px"><b>${pesc(r.name)}</b> · ${pesc(r.email)} · <span class="tag tag-blue">${pesc(r.panel_type)}</span> · username <b class="mono">${pesc(r.username)}</b><br/>Approve karne par EXISTING user system me account banega aur customer ko welcome email (username + one-time password setup link) jayega.</div>
+      ${parentHtml}
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('prqApproveModal')">Cancel</button><button class="btn btn-blue" id="prqGo">Approve & Create Account</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#prqGo').addEventListener('click', async () => {
+    const parentSel = ov.querySelector('#prqParent');
+    const body = parentSel && parentSel.value ? { parent_id: parseInt(parentSel.value, 10) } : {};
+    try {
+      const out = await API.post('/panel-requests/' + id + '/approve', body);
+      closeModal('prqApproveModal');
+      alert('✅ Account bana — user #' + out.user_id + ' (' + out.username + '). Welcome email ' + (r.panel_type === 'manager' ? 'bhej diya' : 'bhej diya') + '.');
+      loadPanelRequests();
+    } catch (e) { alert('❌ ' + e.message); }
+  });
+}
+function prqReject(id){
+  closeModal('prqRejectModal');
+  const ov = document.createElement('div'); ov.className = 'modal-overlay show'; ov.id = 'prqRejectModal';
+  ov.innerHTML = `<div class="modal" style="max-width:440px">
+    <div class="modal-head"><h3>Reject Request #${id}</h3><button class="modal-close" onclick="closeModal('prqRejectModal')">×</button></div>
+    <div class="modal-body"><div class="form-group"><label>Reason (optional, internal)</label><input type="text" id="prqReason" maxlength="200" style="width:100%" placeholder="Short reason"/></div></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('prqRejectModal')">Cancel</button><button class="btn btn-blue" id="prqGo">Reject</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#prqGo').addEventListener('click', async () => {
+    try { await API.post('/panel-requests/' + id + '/reject', { reason: ov.querySelector('#prqReason').value.trim() }); closeModal('prqRejectModal'); loadPanelRequests(); }
+    catch (e) { alert('❌ ' + e.message); }
+  });
+}
+async function prqResend(id){
+  if (!confirm('Welcome email dobara bhejein? (Naya one-time password setup link banega)')) return;
+  try { const out = await API.post('/panel-requests/' + id + '/resend-welcome', {}); alert(out.ok ? '✅ Email bhej diya.' : '⚠ Email nahi gaya: ' + (out.mail_error || out.mail_status)); loadPanelRequests(); }
+  catch (e) { alert('❌ ' + e.message); }
+}
+
 async function loadAdminPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
@@ -2334,6 +2473,7 @@ async function loadAdminPageData(page){
     if(page==='payMgmt') return loadPayMgmt();
     if(page==='chat') return window.GXChat?GXChat.open('chat'):null;
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
+    if(page==='panelRequests') return buildPanelRequests();
     if(page==='managers') return buildUserPage('manager');
     if(page==='agents') return buildUserPage('agent');
     if(page==='clients') return buildUserPage('client');

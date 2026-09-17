@@ -14,7 +14,7 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 const { createTables } = require('./schema');
 const { seed } = require('./seed');
-const { sign, authRequired, requireRole, descendantIds } = require('./auth');
+const { sign, authRequired, requireRole, descendantIds, SECRET } = require('./auth');
 const backup = require('./backup');
 const providerSync = require('./providerSync');
 const smsFts = require('./fts');
@@ -431,6 +431,11 @@ app.use(express.static(FRONTEND_ROOT));
 /* ===== P19e: INTERNAL CHAT + COMPLAINTS (isolated module — is line ko hata kar feature
    poora disable/revert ho jata hai; kisi existing route/behaviour ko touch nahi karta) ===== */
 require('./chat')(app, { authRequired, requireRole, logAction });
+
+/* ===== P19i: PUBLIC PANEL REQUESTS + GMAIL OTP VERIFICATION (isolated module —
+   is line ko hata kar feature poora revert ho jata hai; users creation sirf
+   insertUserAccount helper se hoti hai jo upar /api/users POST bhi use karta hai) ===== */
+require('./pubreq')(app, { authRequired, requireRole, logAction, SECRET, insertUserAccount });
 
 
 /* ============ PROVIDER SYNC ADMIN API ============
@@ -1125,6 +1130,23 @@ app.get('/api/users/:role', authRequired, (req, res) => {
 });
 
 // create user (admin->manager, manager->agent, agent->client)
+/* P19i (panel requests): shared user-insert helper — POST /api/users aur panel-request
+   APPROVE dono yahi use karte hain (ek hi user system, koi duplication nahi).
+   Behaviour /api/users ke purane inline insert ke bilkul barabar hai. */
+function insertUserAccount({ username, password, role, name, email, whatsapp, contact, skype, active, payment_type, parentId }) {
+  const cleanUsername = String(username || '').trim();
+  if (!cleanUsername) return { error: 'username required', status: 400 };
+  const exists = db.get('SELECT id FROM users WHERE username=? COLLATE NOCASE', [cleanUsername]);
+  if (exists) return { error: 'Username already taken', status: 409 };
+  const info = db.run(
+    `INSERT INTO users (username,password,role,name,email,whatsapp,contact,skype,parent_id,active,payment_type)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [cleanUsername, bcrypt.hashSync(String(password), 10), role, name || '', email || '',
+     whatsapp || '', contact || '', skype || '', parentId, active === false ? 0 : 1, role==='agent'?normalizePaymentCycle(payment_type||'weekly_7_1'):'weekly_7_1']
+  );
+  return { ok: true, id: info.lastInsertRowid };
+}
+
 app.post('/api/users', authRequired, (req, res) => {
   const { username, password, role, name, email, whatsapp, contact, skype, active, payment_type } = req.body || {};
   if (!username || !password || !role) return res.status(400).json({ error: 'username, password, role required' });
@@ -1151,12 +1173,8 @@ app.post('/api/users', authRequired, (req, res) => {
     if (!ids.includes(parentId)) return res.status(403).json({ error: 'Invalid parent user' });
   }
 
-  db.run(
-    `INSERT INTO users (username,password,role,name,email,whatsapp,contact,skype,parent_id,active,payment_type)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    [cleanUsername, bcrypt.hashSync(String(password), 10), role, name || '', email || '',
-     whatsapp || '', contact || '', skype || '', parentId, active === false ? 0 : 1, role==='agent'?normalizePaymentCycle(payment_type||'weekly_7_1'):'weekly_7_1']
-  );
+  const created = insertUserAccount({ username, password, role, name, email, whatsapp, contact, skype, active, payment_type, parentId });
+  if (!created.ok) return res.status(created.status || 400).json({ error: created.error });
   logAction(req,'create_user','users',{username,role});
   res.json({ ok: true });
 });
