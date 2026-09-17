@@ -406,6 +406,9 @@
         <div class="rsubitem" data-page="bulkAlloc"><span class="d"></span><span class="lbl">Range Allocation</span></div>
       </div>
 
+      <div class="rsec">Communication</div>
+      <div class="ritem" data-page="chat"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="lbl">Chat</span><span class="gx-nav-badge" id="gxChatBadge" style="display:none"></span></div>
+      <div class="ritem" data-page="complaints"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="lbl">Complaints</span><span class="gx-nav-badge" id="gxCompBadge" style="display:none"></span></div>
       <div class="ritem" data-page="clients"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg><span class="lbl">Client Management</span></div>
 
       <div class="ritem" id="pCdr" onclick="toggleSub('sCdr','pCdr')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg><span class="lbl">SMS CDR Stats</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
@@ -513,6 +516,10 @@
           <div class="table-foot"><div class="info" id="baInfo"></div></div></div>
       </section>
 
+      <!-- P19e: INTERNAL CHAT + COMPLAINTS (GXChat builds UI at runtime) -->
+      <section class="page" id="page-chat"></section>
+      <section class="page" id="page-complaints"></section>
+
       <!-- CLIENTS -->
       <section class="page" id="page-clients"></section>
       <!-- CDR pages -->
@@ -585,7 +592,7 @@
 
 
 <div class="modal-overlay" id="walletHelpModal"><div class="modal" style="max-width:720px"><div class="modal-head"><h3>How to copy Binance USDT (TRC20) wallet</h3><button class="modal-close" onclick="closeModal('walletHelpModal')">×</button></div><div class="modal-body"><div class="hint" style="margin-bottom:12px"><b>Warning:</b> Using the wrong network or wallet address is the user's responsibility.</div><div class="card"><b>Step 1</b><div class="hint">Open Binance → Wallet → Spot/Funding → Deposit.</div><div style="border:1px solid #ddd6fe;border-radius:12px;padding:12px;margin-top:8px;background:#faf5ff">Example Screenshot: Deposit → Select USDT</div></div><div class="card"><b>Step 2</b><div class="hint">Choose coin: USDT. Choose network: TRC20 / Tron.</div><div style="border:1px solid #ddd6fe;border-radius:12px;padding:12px;margin-top:8px;background:#faf5ff">Example Screenshot: Network TRC20 selected</div></div><div class="card"><b>Step 3</b><div class="hint">Copy the address starting with T and paste it here.</div><div style="border:1px solid #ddd6fe;border-radius:12px;padding:12px;margin-top:8px;background:#faf5ff">Example: Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</div></div></div></div></div>
-<script src="/api.js?v=20260914-agent-manager-allocation-final"></script>
+<script src="/api.js?v=20260914-agent-manager-allocation-final"></script><script src="/assets/chat.js?v=gxchat1"></script>
 <script>
 if(window.API){ API.guard('agent'); }
 /* NAV */
@@ -993,6 +1000,8 @@ async function loadAgentPageData(page){
     if(page==='numbers') return loadNumbers();
     if(page==='bulkAlloc'){ await Promise.allSettled([loadClients(), loadNumberSummaryForBulk()]); return; }
     if(page==='clients'){ buildClients(); return loadClients(); }
+    if(page==='chat') return window.GXChat?GXChat.open('chat'):null;
+    if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
     if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return loadSms(); }
     if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); return loadSms(); }
     if(page==='clientStats'){ if(!document.getElementById('csBody')) buildClientStats(); return loadSms(); }

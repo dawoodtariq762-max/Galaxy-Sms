@@ -369,3 +369,227 @@ pm2 restart galaxy     # (or the name from: pm2 list)
 **After deploy (REQUIRED, one time):** Admin → Numbers → **Rebuild Stats** (🔄) → confirm. Then hard-refresh browsers (Ctrl+Shift+R).
 
 **Verify on your live data (2 minutes):** after Rebuild Stats finishes, check Dashboard: This Year OTPs and This Month Payout should now match reality (CDR counts). Then delete one test number with OTP data (choose "delete associated SMS") → This Year OTPs and This Month Payout must drop immediately and stay dropped after re-login/refresh. As a client: Numbers tab shows each number's exact allocated payout, stable on refresh.
+
+---
+
+# P19f — INTERNAL CHAT + COMPLAINTS SYSTEM (new feature, fully E2E tested)
+
+**New suite `tests/p19e-chat-verify.js`: 94/94 PASS — all 39 mandatory test groups (functional 1–12, security 13–20, persistence 21–25, UI 26–34, performance 35–39). Full regression: 112 + 35 + 57 + 63 + 36 all PASS, 4 panels 0 FAIL.**
+
+## Existing architecture discovered (before any code)
+
+- **Auth:** JWT (`{id, username, role}` only — no parent_id in token) via `backend/auth.js` (`authRequired`, `requireRole`); 12h expiry; per-user 1200 req/min global limiter.
+- **Hierarchy:** `users.parent_id` (admin > manager > agent > client); `descendantIds()` helper exists; roles: admin/manager/agent/client; `users.name` display field.
+- **Server:** single Express process + single SQLite (better-sqlite3); no compression middleware; `express.static(project root)`; panels served via `sendFrontendPage`; per-panel page routers + nav; admin pages whitelisted in `ADMIN_ALLOWED_PAGES`.
+- **Client layer:** shared `/api.js` (window.API; tiny client GET cache — chat paths NOT in its cacheable list, so chat reads are always fresh); shared `/assets/galaxy.js`.
+
+## Database changes (additive only — `backend/schema.js`, auto-created on boot, no migration)
+
+| Table | Purpose | Indexes |
+|---|---|---|
+| `chat_conversations` | 1:1 pair (user_a < user_b, UNIQUE) + last-message cache | pair-unique, (user_a,last_at), (user_b,last_at), (last_at) |
+| `chat_messages` | conversation_id, sender_id, body, created_at, read_at | (conversation_id,id), (sender_id,read_at), (read_at) |
+| `complaints` | sender_id, subject, body, status, created/updated, status_updated_by | (sender_id,created_at), (status,created_at) |
+| `complaint_replies` | complaint_id, sender_id, body, created_at | (complaint_id,id) |
+
+Messages store **references only** (sender_id) — identity JOINed from `users`; no duplication.
+
+## New APIs (`backend/chat.js` — isolated module, mounted with ONE line in server.js; remove that line to fully revert)
+
+- `GET /api/chat/contacts?q=` — permitted partners only (role-scoped, from parent_id)
+- `GET /api/chat/conversations` (+`?scope=all` admin-only, `?q=` search) — list w/ identity, last message, unread
+- `POST /api/chat/conversations {user_id}` — start/get (permission matrix enforced)
+- `GET /api/chat/messages/:id?limit=30&before_id=&after_id=` — paginated history (recent window + older on demand)
+- `POST /api/chat/messages/:id {body}` — send (≤2000 chars, 60 msg/min per user)
+- `POST /api/chat/messages/:id/read` — read receipts
+- `GET /api/chat/unread-count` — nav badges (chat + complaints)
+- `POST /api/chat/ticket` + `GET /api/chat/stream?ticket=` — SSE stream (one-time 60s ticket so the JWT never goes in a URL)
+- `POST/GET /api/complaints`, `GET /api/complaints/:id`, `POST /api/complaints/:id/replies`, `POST /api/complaints/:id/status` (admin-only status; Open/In Progress/Resolved)
+
+No existing endpoint, query, or behaviour was modified. SMS/numbers/payment code paths untouched.
+
+## Permission rules (backend-enforced — users.parent_id, no second hierarchy)
+
+| Role | Can chat with | Cannot |
+|---|---|---|
+| Client | own agent (parent) only | other clients, other agents, manager, admin chat (complaint flow to admin) |
+| Agent | own clients (children) + own manager (parent) | other agents, other managers, admin chat (complaint flow to admin) |
+| Manager | own agents (children) + admin | other managers, clients (even own agents' clients) |
+| Admin | any active user; **can open/read/reply in ANY conversation**; `All Chats` view (`scope=all`, 403 for non-admin) | — |
+
+Conversation access = participant OR admin (server-side, on every read/send). Complaints: sender OR admin; status changes admin-only; complaint creation blocked for admin.
+
+## UI changes
+
+- New **Chat** + **Complaints** nav items & pages in all 4 panels (badges included); `ADMIN_ALLOWED_PAGES` updated with `chat`,`complaints`; admin gets **My Chats / All Chats** tabs.
+- New shared `assets/chat.js?v=gxchat1` (loaded after api.js in all panels): Galaxy-themed (existing CSS vars) WhatsApp-style two-pane desktop UI; mobile = single pane, full-screen conversation, back button, sticky bottom input with safe-area padding + `visualViewport` scroll guard, no horizontal overflow. Emoji picker (107 emojis, no external assets), timestamps + day dividers, unread badges, ✓/✓✓ read status, conversation search, New Chat (contacts search), 30-message window + "Load older".
+- Every message shows **display name + role + timestamp**; sender identity always labelled on incoming messages (incl. Admin replies inside others' conversations).
+
+## Complaint system
+
+Separate section (not chat): ID, sender name+role, subject, message, created/updated, status (Open / In Progress / Resolved), reply thread, admin status control, status-change attribution + audit-log entries. Complaint creation is available to manager/agent/client (all non-admin roles — matches "Client cannot access Admin conversations unless an explicit Complaint flow is used"). A hint in the form states range/number/rate requests do NOT belong here — those stay in their existing panel functions (untouched).
+
+## Real-time approach
+
+**SSE** on the same Node process — zero new infrastructure/dependencies. One-time 60-second tickets keep the JWT out of URLs; heartbeat every 25s (no DB work); caps: 300 total / 5 per user connections; broadcasts go to participants + connected admins. Automatic **9-second polling fallback** (visibility-guarded) where EventSource is unavailable — so old browsers still work without heavy polling. `X-Accel-Buffering: no` is sent (respected by nginx; if the panel runs behind a proxy that buffers SSE, add `proxy_buffering off;` for `/api/chat/stream`).
+
+## Performance results (measured)
+
+- 60 concurrent messages (6 users × 10): **all 200 in 128 ms**; all persisted.
+- `/api/dashboard` 4 ms → 20 ms avg and `/api/numbers` 3 ms → 21 ms avg **during** concurrent chat load — no blocking of SMS/number APIs.
+- `EXPLAIN QUERY PLAN` confirms index usage: messages → `idx_chat_msg_conv`; conversations → multi-index OR on pair indexes; unread-count → `idx_chat_msg_read`; complaints → `idx_complaints_sender`.
+- History is paginated (30-message window, cursor-based "Load older"); conversation list capped at 60.
+- Server RSS ≈ 248 MB under full suite load.
+
+## Security tests (all FAIL as required)
+
+Agent A → Agent B's chat 403 · Agent A → other agent's client conversation 403 (read AND write) · Manager A → Manager B's chat 403 · Manager → agent's private client conversation 403 · Client A → Client B's chat 403 · Client → other agent's chat 403 · normal user → admin's private conversation 403 · starting disallowed conversations 403 (agent→admin, client→admin, agent→agent, manager→manager, manager→client, client→client, client→other-agent) · `scope=all` non-admin 403 · complaint cross-access + non-admin status change 403 · empty message 400 · bad/reused SSE ticket 401. **Admin accesses everything: 200.** Contacts endpoint returns exactly the permitted set per role (verified content).
+
+## Functional results (owner's 1–12)
+
+Client→Agent ✓, Agent→Client ✓, Agent→Manager ✓, Manager→Agent ✓, Manager→Admin ✓, Admin→Manager ✓, Admin→Agent ✓, Admin→Client ✓, Agent complaint→Admin ✓, Admin opens ✓, Admin replies ✓, Admin status change Open→In Progress→Resolved ✓. Persistence: messages + scoping survive **server restart** and re-login. UI (jsdom, real panels): desktop build ✓, mobile CSS rules ✓ (media query, full-screen conversation, back button, safe-area, no-overflow, sticky keyboard-safe input), emoji send ✓, 1500-char message ✓, empty rejection (UI + API) ✓, unread badge shows/clears ✓, ✓✓ read status ✓, multiple conversations ✓, 30+15 pagination with no duplicates ✓, admin All Chats + reply inside any conversation with Admin identity ✓, complaint create/reply/status via UI ✓, fresh-session history ✓.
+
+## Remaining limitations (honest)
+
+- No typing indicator / online status / message edit-delete / voice features (not requested).
+- If the admin re-parents a user later, **existing** conversations stay accessible to their participants; new conversations follow the new hierarchy.
+- Badge updates only while a panel tab is open (no push/email notifications).
+- Chat history has no retention policy (grows slowly; SMS retention settings untouched).
+- jsdom cannot do true visual rendering — after deploy, please open Chat once on desktop and a phone to confirm visuals; everything else is API/UI-logic verified.
+
+## Files changed / added (P19f)
+
+| File | Change |
+|---|---|
+| `backend/chat.js` | **NEW** — isolated chat + complaints module |
+| `backend/schema.js` | 4 new tables + indexes (additive) |
+| `backend/server.js` | 1 mount line (+comment) — nothing else |
+| `assets/chat.js` | **NEW** — shared chat/complaints UI module |
+| `admin.html manager.html agent.html client.html` | nav items (with badges), 2 page sections, router branches, script tag; admin: `ADMIN_ALLOWED_PAGES` + `chat`,`complaints` |
+| `tests/p19e-chat-verify.js` | **NEW** — 94 E2E checks |
+
+`api.js` unchanged → no `?v=` bump needed (new `chat.js` has its own `?v=gxchat1`). **No new npm dependencies.** Architecture unchanged: single Node process + single SQLite file.
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev        # (no new deps — usually a no-op)
+pm2 restart galaxy            # (or the name from: pm2 list)
+```
+Tables auto-create on first boot — no migration, no Rebuild Stats needed for this feature. Then hard-refresh browsers (Ctrl+Shift+R).
+
+**Verify (1 minute):** as Agent → Chat tab → your clients + your manager listed, admin NOT listed; send a message to a client → client sees it live with your name+role; Complaints → submit one → Admin sees it in Complaints, replies, sets status → agent sees the reply + status. As Client → Chat shows ONLY your agent.
+
+---
+
+## P19g — FIX #1: Chat VPS par nahi dikh raha (deployment gap) + FIX #2: Range selectors role-scoping
+
+**Date:** 2026-09-17 · **Files changed:** `backend/server.js` (sirf `/api/ranges` handler), **new:** `scripts/verify-chat-deploy.sh`, `tests/p19f-verify.js` · **Chat code me KOI change NAHI hua** — chat 100% theek tha.
+
+### A) FIX #1 — Chat not showing on VPS: ROOT CAUSE
+
+**Diagnosis chain (owner ke VPS output se):**
+- `ls: cannot access '/opt/galaxy/assets/chat.js': No such file or directory` — chat UI file VPS par hai hi nahi.
+- PM2 `galaxy` online (326MB, ↺24) — lekin PM2 "online" sirf process zinda hai ka matlab hai; wo ABHI PURANE code ko memory me chala raha hai (deploy ke baad restart nahi hua tha is feature ke liye... jab restart hoga aur mount hai lekin file missing hai to crash — neeche dekho).
+- Workspace/GitHub comparison: panels (admin/manager/agent/client.html) VPS par deploy ho gaye (wo MODIFIED tracked files thi) — unme `/assets/chat.js?v=gxchat1` script tag + Chat nav item hai. Lekin teen NAYI files (`backend/chat.js`, `assets/chat.js`, `tests/p19e-chat-verify.js`) UNTRACKED thi — `git add -u` type commit me nayi files kabhi include nahi hoti, is liye wo GitHub par push hi nahi huin.
+
+**Root cause (ek line me):** Pichhli deployment me sirf MODIFIED files push huin; teen NAYI (untracked) chat files commit/push nahi huin. Browser panel load karta hai, `assets/chat.js` 404 deta hai, `GXChat` undefined → Chat nav click par blank page. Logs me "chat.js" isi 404 ki wajah se aata tha.
+
+**Kaun sa file/component/route responsible:** koi code bug NAHI. Sirf deployment chain toota: GitHub → VPS me nayi files transfer nahi huiin.
+
+**Kya change hua (code):** kuch nahi — chat implementation workspace me 100% complete verified (module 22487B, UI 34797B, mount server.js:433, 4 panels tags, 11 routes, schema tables). Sirf ek VPS self-check script `scripts/verify-chat-deploy.sh` add ki hai jo file-level gap deploy ke pehle pakar legi.
+
+**Repair (owner PC se, copy-paste):**
+```bash
+# 1) PC par: tarball extract karo repo root me (sirf 3 nayi files zaroori hain):
+tar xzf galaxy-sms-p19-fixes.tar.gz backend/chat.js assets/chat.js tests/p19e-chat-verify.js
+# (FIX #2 bhi lene ke liye backend/server.js + scripts/verify-chat-deploy.sh + tests/p19f-verify.js bhi extract kar lo — recommended)
+
+# 2) NAYI files ko git me daalo — yehi step pichhli baar miss hua tha:
+git add -A
+git commit -m "P19e chat files + P19f range scoping"
+git push
+
+# 3) VPS par:
+cd /opt/galaxy && git fetch && git reset --hard origin/main && npm install --omit=dev
+bash scripts/verify-chat-deploy.sh     # sab OK hone par hi aage barho
+pm2 restart galaxy
+```
+
+**⚠️ CRITICAL ORDER WARNING:** VPS par `backend/server.js` ka naya version (jo `require('./chat')` karta hai) deploy ho chuka hai lekin `backend/chat.js` missing hai. Agar aap files push kiye baghair `pm2 restart galaxy` chala dein to server **CRASH** hoga (`MODULE_NOT_FOUND: backend/chat.js`). Files pehle, restart baad me — is liye `verify-chat-deploy.sh` restart se PEHLE chalao.
+
+**Verify:** restart ke baad browser me Ctrl+Shift+R (hard refresh) → har panel me Chat nav + page. Agar phir bhi nahi: `grep -n "require('./chat')" backend/server.js` aur `ls -la backend/chat.js assets/chat.js` ka output bhejo.
+
+### B) FIX #2 — SMS Numbers Range filter role-scoped (backend-enforced)
+
+**Problem:** `/api/ranges` HAR authenticated user ko SAB ranges de raha tha (admin theek tha, lekin Manager/Agent/Client ko bhi 10 me se 10 dikhte the — chahe unka ek bhi number us range me na ho).
+
+**Mojooda (existing) scope logic jo use kiya — koi naya ownership model NAHI:** `numberScope(user)` wahi function jo `/api/numbers` me se pehle hi ownership lagu karta hai: manager → `numbers.manager_id = me`, agent → `numbers.agent_id = me`, client → `numbers.client_id = me`. FIX isi existing model ko ranges tak extend karta hai.
+
+**Change (sirf `backend/server.js` → `/api/ranges` handler, ~line 1314):**
+```js
+// P19f FIX (owner: Range selectors role-scoped) — pehle: non-admin ko bhi SAB
+// ranges milti thi. Ab non-admin ko sirf wahi ranges milte hain jin me uske
+// accessible numbers hain (numberScope — wahi model jo /api/numbers use karta hai).
+// Admin behaviour unchanged (sab ranges). Rollback: neeche ka scoped block hata do.
+let scopeIds = null;
+if (req.user.role !== 'admin') {
+  const scoped = db.prepare(`SELECT DISTINCT n.range_id FROM numbers n WHERE n.range_id IS NOT NULL AND ${numberScope(req.user)}`).all();
+  scopeIds = new Set(scoped.map(r => r.range_id));
+  if (!scopeIds.size) return res.json([]); // koi accessible number nahi -> koi range nahi
+}
+// dono includeTests branches me: .filter(r => !scopeIds || scopeIds.has(r.id))
+```
+
+**Affected API:** sirf `GET /api/ranges` (include_tests variant samet). Isi se JITNE bhi Range dropdowns hain wo sab cover: number search/filter (`numRange`), number allocation, bulk allocation, smart-divide modal, test-range selectors, Manager Rate Card, Agent smart-divide — sab isi ek endpoint se aate hain. **Frontend filtering par security ka bharosa NAHI** — backend khud filter karta hai.
+
+**Backend enforcement pehle se maujood thi (verified, dobara add NAHI kiya):** `buildNumberQuery` owner-scope PEHLE lagata hai phir range filter → unauthorized range query ko 0 rows milte hain; `allocate` + `smart-divide` `numberScope`/ownerCond se guard hain → unauthorized range se allocation `allocated:0` deta hai, client allocation 403. Pehle sirf ranges ke NAAM leak ho rahe the (data nahi) — ab naam bhi nahi.
+
+**Kya NAHI hua (regression safety):** admin sab ranges dekhta hai (unchanged); number ownership, allocation logic, payments, SMS processing, reports, dashboard, SMPP, auth, role hierarchy, manager Rate Card ka `cli-search` data — sab untouched.
+
+### C) Test results — `tests/p19f-verify.js` (fresh DB, port 8100) — 35/35 PASS
+
+Fixture: 10 ranges (R01–R10); Manager A ke 4 ranges, Manager B ke 2, Agent ke 3, Client C1 → 1, Client C2 → 1, ek manager jinke 0 numbers.
+
+| # | Test | Result |
+|---|---|---|
+| A1–A5 | Chat code integrity (files, mount, 4 panel tags, schema) — wahi gap jo VPS pe missing tha | PASS |
+| B1–B8 | mA=4 ranges, mB=2, agent=3, C1=1, C2=1, admin=10; include_tests=1 scoped; zero-number manager=0 ranges | PASS |
+| C1–C3 | mA/mB/C1 unauthorized range query (name + range_id dono se) → 0 rows | PASS |
+| C4 | Authorized range → rows milte (scope intact) | PASS |
+| C5 | mA tries allocating mB's numbers → allocated:0, skipped:3 | PASS |
+| C6–C7 | Unauthorized smart-divide (mA→R03, agent→R08) → total 0 | PASS |
+| C8 | Client allocation attempt → 403 | PASS |
+| C9 | ADMIN allocates R04→mA — admin power unchanged | PASS |
+| C10 | Allocation ke BAAD mA ko R04 bhi dikhne laga (dynamic) | PASS |
+| D1–D4 | Real panels (jsdom): manager/agent/client numRange dropdowns exactly scoped, 0 JS errors; admin sab 10 | PASS |
+| E1–E3 | Chat send 200; /api/numbers/summary scoped as before; dashboard unaffected | PASS |
+
+### D) Owner ki mandatory verification list — jawabat
+
+1. Chat frontend kahan render hota hai → `assets/chat.js` (GXChat, sab 4 panels me `/assets/chat.js?v=gxchat1` tag) — VPS par yehi file missing thi.
+2. Kaun sa file render karta hai → same; page container `#gx-chat-page` har panel me inline.
+3. Backend routes → `backend/chat.js` (11 routes, `/api/chat/*` + `/api/complaints/*`), mounted `backend/server.js:433`.
+4. Route/nav registration → panels ke nav me `data-page="chat"` — deployed (tracked modified files thi).
+5. Role permissions chat chhupa rahe the? → NAHI — permissions theek; file missing thi.
+6. Galat JS path? → Path theek (`/assets/chat.js`); file hi disk par nahi thi → 404.
+7. Stale assets? → Nahi; fresh push + Ctrl+Shift+R se theek ho jayega.
+8. VPS par latest files? → NAHI — yehi root cause (3 nayi files uncommitted).
+9. PM2 updated code chala raha tha? → Nahi — old code memory me (↺24 ka purana boot).
+10. Case-sensitivity (Linux)? → Nahi, issue nahi tha (files thi hi nahi).
+11. API errors? → Nahi — chat API mount hi nahi tha purane process me.
+12. DB tables/migrations? → Theek — schema.js additive, first boot par ban jati hain.
+13. Frontend conditional? → Nahi.
+14. Chain kahan tooti → GitHub→VPS transfer: untracked new files push nahi huin.
+15. Server/PM2 logs — chat.js ka zikr 404 (browser) ki wajah se; server crash nahi hua kyunki restart nahi hua.
+16. Browser console → `GET /assets/chat.js?v=gxchat1 404` + `GXChat is not defined` (owner ne click par blank dekha).
+17. Range fix ke baad Admin/Manager/Agent/Client sab test → p19f B/C/D columns upar; admin regression C9 + D4.
+18. Unrelated functionality unchanged → FULL regression green: p19 112/0, p19b 35/0, p19c 57/0, p19d 63/0, p19e 94/0, p19-ui 36/0, check-html-scripts ×4 (0 FAIL); payments/SMS/reports/dashboard/SMPP/auth suites sab PASS.
+
+### E) Deliverables
+
+- `galaxy-sms-p19-fixes.tar.gz` — updated (chat files + FIXED server.js + p19f suite + verify-chat-deploy.sh).
+- `scripts/verify-chat-deploy.sh` — VPS par deploy ke baad, restart se PEHLE chalao (no secrets inside).
+
+**Deploy order reminder:** files push → `git reset --hard origin/main` → `verify-chat-deploy.sh` (sab OK) → `pm2 restart galaxy` → hard refresh.

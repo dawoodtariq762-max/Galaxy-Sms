@@ -428,6 +428,10 @@ app.get('/test/:page', (req, res) => sendFrontendPage(res, 'test.html'));
 // serve frontend assets and static files from project root
 app.use(express.static(FRONTEND_ROOT));
 
+/* ===== P19e: INTERNAL CHAT + COMPLAINTS (isolated module — is line ko hata kar feature
+   poora disable/revert ho jata hai; kisi existing route/behaviour ko touch nahi karta) ===== */
+require('./chat')(app, { authRequired, requireRole, logAction });
+
 
 /* ============ PROVIDER SYNC ADMIN API ============
    Panels never call a provider. These endpoints only manage the sync
@@ -1333,13 +1337,29 @@ app.get('/api/ranges', authRequired, (req, res) => cachedJson(req, res, 5000, ()
   const includeDeleted = String(req.query.include_deleted || '').toLowerCase() === '1' || String(req.query.include_deleted || '').toLowerCase() === 'true';
   const includeTests = String(req.query.include_tests || '').toLowerCase() === '1' || String(req.query.include_tests || '').toLowerCase() === 'true';
   const where = includeDeleted ? '1=1' : "COALESCE(r.deleted_at,'')=''";
+  /* P19f FIX (owner: Range selectors role-scoped): non-admin ko sirf WOHI ranges milte hain
+     jinme uske accessible numbers hain — EXISTING ownership model se (numbers.manager_id /
+     agent_id / client_id — wahi numberScope jo /api/numbers use karta hai). Zero accessible
+     numbers => range hidden. Admin ko sab ranges (Rate Management unchanged).
+     NOTE: sirf list scope nahi hai security — /api/numbers (buildNumberQuery owner-scope),
+     /api/numbers/allocate (numberScope guard) aur smart-divide (ownerCond) pehle se hi
+     scope-enforced hain, is liye manual API call se unauthorized range ka data ya allocation
+     possible nahi (p19f-verify.js me tested). Rollback: yeh scope block delete kar do. */
+  let scopeIds = null;
+  if (req.user && req.user.role !== 'admin') {
+    const sc = numberScope(req.user, 'n');
+    scopeIds = new Set(db.all(`SELECT DISTINCT n.range_id FROM numbers n WHERE n.range_id IS NOT NULL AND ${sc.where}`, sc.params).map(r => r.range_id));
+    if (!scopeIds.size) return [];
+  }
   if (!includeTests) {
     return db.all(`SELECT r.id,r.name,r.prefix,r.currency,r.rate_1_1,r.rate_7_1,r.rate_7_7,r.rate_30_45,r.memo,r.payment_type,r.created_at,r.deleted_at,r.country,r.provider,r.currency_rate,r.cli_limit,r.range_start,r.range_end,r.status,'' AS test_number,'' AS test_numbers
-      FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`);
+      FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`)
+      .filter(r => !scopeIds || scopeIds.has(r.id));
   }
   const rows = db.all(`SELECT r.*,
     COALESCE((SELECT GROUP_CONCAT(test_number, ', ') FROM range_test_numbers t WHERE t.range_id=r.id AND t.active=1), r.test_number, '') AS test_numbers
-    FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`);
+    FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`)
+    .filter(r => !scopeIds || scopeIds.has(r.id));
   rows.forEach(r => { if (r.test_numbers) r.test_number = r.test_numbers; });
   return rows;
 }));

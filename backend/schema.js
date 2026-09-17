@@ -730,6 +730,58 @@ function createTables() {
     WHERE manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL`);
 
   // 5) Version counters for cache invalidation (numbers_ver / sms_ver / users_ver)
+  /* ===== P19e: INTERNAL CHAT + COMPLAINTS (isolated, reversible feature) =====
+     chat_conversations: 1:1 pairwise (user_a < user_b, UNIQUE pair) — permission matrix
+     client<->agent, agent<->manager, manager<->admin, admin<->anyone backend-enforced.
+     chat_messages: sender reference only (users se identity aati hai — no duplication). */
+  db.run(`CREATE TABLE IF NOT EXISTS chat_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_a INTEGER NOT NULL,
+    user_b INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    last_message_at TEXT,
+    last_message_text TEXT DEFAULT ''
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_pair ON chat_conversations(user_a, user_b)`);
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_conv_pair ON chat_conversations(user_a, user_b)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_a ON chat_conversations(user_a, last_message_at)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_b ON chat_conversations(user_b, last_message_at)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_last ON chat_conversations(last_message_at)`);
+  db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    sender_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    read_at TEXT
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_conv ON chat_messages(conversation_id, id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_sender ON chat_messages(sender_id, read_at)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_read ON chat_messages(read_at)`);
+  /* complaints: manager/agent/client -> admin; replies = thread; status history via
+     status_updated_* + audit_logs (logAction). */
+  db.run(`CREATE TABLE IF NOT EXISTS complaints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Open',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    status_updated_at TEXT,
+    status_updated_by TEXT DEFAULT ''
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_complaints_sender ON complaints(sender_id, created_at)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status, created_at)`);
+  db.run(`CREATE TABLE IF NOT EXISTS complaint_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    complaint_id INTEGER NOT NULL,
+    sender_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_complaint_replies ON complaint_replies(complaint_id, id)`);
+
   db.run(`CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
