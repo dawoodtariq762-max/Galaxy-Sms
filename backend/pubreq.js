@@ -105,7 +105,7 @@ function sanitizeErr(e) {
 }
 async function sendMail(to, subject, html, text) {
   if (mailMode !== 'smtp' || !transporter) {
-    console.log(`[pubreq:mail-dryrun] to=${to} subject="${subject}" (SMTP configured nahi — email nahi gaya)`);
+    console.log(`[pubreq:mail-dryrun] to=${to} subject="${subject}" (SMTP not configured — email not sent)`);
     return { ok: false, status: 'not_configured', error: 'SMTP not configured (set SMTP_USER/SMTP_PASSWORD in .env)' };
   }
   try {
@@ -132,25 +132,25 @@ function emailShell(inner, footerNote) {
 function otpEmailHtml(code, minutes) {
   return emailShell(`
     <div style="font-weight:bold;font-size:17px;margin-bottom:10px;">Email Verification</div>
-    <p style="margin:0 0 14px;">Aap ne Galaxy SMS panel account request ki hai. Apna verification code enter karein:</p>
+    <p style="margin:0 0 14px;">You have requested a Galaxy SMS panel account. Please enter your verification code:</p>
     <div style="text-align:center;margin:22px 0;"><div style="display:inline-block;background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:14px 28px;font-size:32px;font-weight:bold;letter-spacing:10px;color:#1d4ed8;">${code}</div></div>
-    <p style="margin:0 0 8px;">Ye code <b>${minutes} minutes</b> me expire ho jayega aur sirf <b>ek baar</b> use ho sakta hai.</p>
-    <p style="margin:0;color:#64748b;font-size:13px;">Agar aap ne ye request NAHI ki hai to is email ko ignore kar dein.</p>`,
+    <p style="margin:0 0 8px;">This code will expire in <b>${minutes} minutes</b> and can be used <b>only once</b>.</p>
+    <p style="margin:0;color:#64748b;font-size:13px;">If you did NOT make this request, please ignore this email.</p>`,
     'Verification codes are for one-time use only.');
 }
 function welcomeEmailHtml(baseUrl, username, setupUrl, ttlHours) {
   return emailShell(`
     <div style="font-weight:bold;font-size:17px;margin-bottom:10px;">Welcome to Galaxy SMS! 🎉</div>
-    <p style="margin:0 0 14px;">Aap ka panel account ready hai. Details:</p>
+    <p style="margin:0 0 14px;">Your panel account is ready. Here are your details:</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;margin-bottom:18px;">
       <tr><td style="padding:6px 0;color:#64748b;width:130px;">Panel URL</td><td style="padding:6px 0;"><b>${baseUrl}/panel-login</b></td></tr>
       <tr><td style="padding:6px 0;color:#64748b;">Username</td><td style="padding:6px 0;"><b>${username}</b></td></tr>
     </table>
-    <p style="margin:0 0 14px;">Pehla step — apna password set karein (one-time secure link):</p>
+    <p style="margin:0 0 14px;">First step — set your password (one-time secure link):</p>
     <div style="text-align:center;margin:20px 0;"><a href="${setupUrl}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:12px;padding:13px 30px;font-weight:bold;font-size:15px;">Set My Password</a></div>
-    <p style="margin:0 0 6px;font-size:13px;color:#64748b;">Ye link <b>${ttlHours} ghante</b> ke liye hai aur sirf ek baar use hota hai.</p>
-    <p style="margin:0;font-size:13px;color:#64748b;">Agar button kaam na kare to ye link copy karein:<br/><span style="word-break:break-all;">${setupUrl}</span></p>`,
-    'Agar aap ne account request nahi ki to is email ko ignore karein.');
+    <p style="margin:0 0 6px;font-size:13px;color:#64748b;">This link is valid for <b>${ttlHours} hours</b> and can be used only once.</p>
+    <p style="margin:0;font-size:13px;color:#64748b;">If the button does not work, copy this link:<br/><span style="word-break:break-all;">${setupUrl}</span></p>`,
+    'If you did not request this account, please ignore this email.');
 }
 
 /* ---------------- helpers ---------------- */
@@ -370,11 +370,11 @@ module.exports = function mountPubreq(app, deps) {
         if (role === 'client' && !['agent', 'manager'].includes(p.role)) return res.status(400).json({ error: 'Client must be placed under an Agent or Manager' });
         parentId = wanted;
       } else if (role === 'agent') {
-        return res.status(400).json({ error: 'Agent ke liye parent Manager select karna zaroori hai' });
+        return res.status(400).json({ error: 'A parent Manager must be selected for an Agent' });
       }
       /* client bina parent ke admin ke neeche chalega (manager jaisa) */
     } else if (wanted) {
-      return res.status(400).json({ error: 'Manager request ke liye parent select nahi karte' });
+      return res.status(400).json({ error: 'A parent must not be selected for a Manager request' });
     }
 
     /* random strong password — customer apna password setup-link se khud set karega */

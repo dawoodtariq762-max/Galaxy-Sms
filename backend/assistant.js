@@ -138,16 +138,16 @@ function findRange(text) {
   return null;
 }
 function rateAnswer(r) {
-  return 'Range "' + r.name + '" ke current rates: Daily(1/1) ' + (money(r.rate_1_1) || 'NA')
+  return 'Current rates for range "' + r.name + '": Daily(1/1) ' + (money(r.rate_1_1) || 'NA')
     + ' | Weekly(7/1) ' + (money(r.rate_7_1) || 'NA') + ' | Weekly(7/7) ' + (money(r.rate_7_7) || 'NA')
     + ' | Monthly(30/45) ' + (money(r.rate_30_45) || 'NA') + '.';
 }
 function allRatesAnswer() {
   const rows = rangesRows().slice(0, 10);
-  if (!rows.length) return 'Abhi koi range configured nahi hai.';
+  if (!rows.length) return 'No ranges are currently configured.';
   const lines = rows.map((r) => '• ' + r.name + ' — Daily ' + (money(r.rate_1_1) || 'NA') + ' | Weekly(7/1) ' + (money(r.rate_7_1) || 'NA')
     + ' | Weekly(7/7) ' + (money(r.rate_7_7) || 'NA') + ' | Monthly ' + (money(r.rate_30_45) || 'NA'));
-  return 'Current configured rates:\n' + lines.join('\n') + '\nKisi specific range ka detail chahiye to range ka naam likhen.';
+  return 'Current configured rates:\n' + lines.join('\n') + '\nType a range name for details of a specific range.';
 }
 
 /* ---------------- agent pool resolution (manager vs admin) ---------------- */
@@ -156,26 +156,25 @@ function agentPoolContext(agent) {
   if (parent && parent.role === 'manager') {
     return { mode: 'manager', caller: { id: parent.id, username: parent.username, role: 'manager' }, label: parent.name || parent.username,
       cond: 'manager_id=' + parseInt(parent.id, 10) + ' AND agent_id IS NULL AND client_id IS NULL',
-      shortContact: 'apne manager (' + (parent.name || parent.username) + ') se contact karein' };
+      shortContact: 'please contact your manager (' + (parent.name || parent.username) + ')' };
   }
   const adm = db.get("SELECT id,username,role FROM users WHERE role='admin' AND active=1 ORDER BY id LIMIT 1") || { id: 0, username: 'admin', role: 'admin' };
   return { mode: 'admin', caller: { id: adm.id, username: adm.username, role: 'admin' }, label: 'Galaxy SMS (admin)',
     cond: 'manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL',
-    shortContact: 'support team se contact karein' };
+    shortContact: 'please contact the support team' };
 }
 function poolCount(rangeId, cond) { try { return db.get('SELECT COUNT(*) c FROM numbers WHERE range_id=? AND ' + cond, [rangeId])?.c || 0; } catch (_) { return -1; } }
 function availabilityAnswer(agent) {
   const pc = agentPoolContext(agent);
   const rows = rangesRows().slice(0, 10);
-  if (!rows.length) return 'Abhi koi range configured nahi hai.';
+  if (!rows.length) return 'No ranges are currently configured.';
   const lines = [];
   let total = 0;
-  for (const r of rows) { const c = poolCount(r.id, pc.cond); if (c < 0) return 'Availability check failed — thori dair baad koshish karein.'; total += c; if (c > 0) lines.push('• ' + r.name + ': ' + c + ' available'); }
+  for (const r of rows) { const c = poolCount(r.id, pc.cond); if (c < 0) return 'Availability check failed — please try again in a little while.'; total += c; if (c > 0) lines.push('• ' + r.name + ': ' + c + ' available'); }
   if (!lines.length) return pc.mode === 'manager'
-    ? 'Aap ke manager (' + pc.label + ') ke paas is waqt koi unallocated number available nahi hai. Zyada numbers ke liye ' + pc.shortContact + '.'
-    : 'Is waqt koi unallocated number available nahi hai. Zyada numbers ke liye ' + pc.shortContact + '.';
-  return 'Aap ke liye available numbers (' + pc.label + ' ke pool me):\n' + lines.join('\n') + '\nTotal: ' + total
-    + '\nAllocate karne ke liye likhen: "I need numbers"';
+    ? 'Your manager (' + pc.label + ') currently has no unallocated numbers available. For more numbers, ' + pc.shortContact + '.'
+    : 'There are currently no unallocated numbers available. For more numbers, ' + pc.shortContact + '.';
+  return 'Numbers available to you (pool of ' + pc.label + '):\n' + lines.join('\n') + '\nTotal: ' + total;
 }
 
 /* ---------------- limits ---------------- */
@@ -241,7 +240,7 @@ const cycleLabel = (c) => ({ daily: 'Daily', weekly_7_1: 'Weekly (7/1)', weekly_
 function executeAllocation(agent, it, pc) {
   const ids = db.all('SELECT id FROM numbers WHERE range_id=? AND ' + pc.cond + ' LIMIT ?', [it.range.id, it.qty]).map((r) => r.id);
   if (ids.length < it.qty) {
-    return { reply: 'Ab sirf ' + ids.length + ' numbers available hain — allocation nahi kiya. Zyada ke liye ' + pc.shortContact + '.', ok: false };
+    return { reply: 'Only ' + ids.length + ' numbers are currently available — nothing was allocated. For more, ' + pc.shortContact + '.', ok: false };
   }
   let captured = null;
   const fakeRes = {
@@ -251,7 +250,7 @@ function executeAllocation(agent, it, pc) {
   };
   const fakeReq = { user: pc.caller, headers: { 'idempotency-key': it.key }, body: { ids, target_id: agent.id, payterm: it.cycle, payout: '', force: true }, ip: 'ai-assistant', get(h) { return this.headers[String(h).toLowerCase()]; } };
   try {
-    if (!allocateFn) return { reply: 'Allocation engine load nahi hua — thori dair baad koshish karein.', ok: false };
+    if (!allocateFn) return { reply: 'The allocation engine is not loaded — please try again in a little while.', ok: false };
     const out = allocateFn(fakeReq, fakeRes);
     if (out && typeof out.then === 'function') { /* handler sync hai; phir bhi safe */ }
   } catch (e) {
@@ -259,9 +258,9 @@ function executeAllocation(agent, it, pc) {
     return { reply: 'Allocation failed: ' + String(e.message || e).slice(0, 80), ok: false };
   }
   try { db.run('INSERT INTO audit_logs (user_id,username,role,action,module,details,ip) VALUES (?,?,?,?,?,?,?)', [pc.caller.id, pc.caller.username, pc.caller.role, 'ai_assistant_allocation', 'assistant', JSON.stringify({ agent: agent.username, range: it.range.name, qty: ids.length, cycle: it.cycle, pool: pc.mode }), 'ai-assistant']); } catch (_) {}
-  if (!captured) return { reply: 'Allocation engine ne jawab nahi diya — panel se verify karein.', ok: false };
+  if (!captured) return { reply: 'The allocation engine did not respond — please verify on the panel.', ok: false };
   if (captured.code === 200) {
-    return { reply: '✅ Ho gaya: ' + ids.length + ' numbers range "' + it.range.name + '" aap ko allocate kar diye (' + cycleLabel(it.cycle) + ' cycle). Numbers page par nazar aa jayenge.', ok: true };
+    return { reply: '✅ Done: ' + ids.length + ' numbers from range "' + it.range.name + '" have been allocated to you (' + cycleLabel(it.cycle) + ' cycle). They will appear on the Numbers page.', ok: true };
   }
   const err = String(captured.j.error || 'rejected (' + captured.code + ')').slice(0, 90);
   return { reply: 'Allocation rejected by panel: ' + err, ok: false };
@@ -281,7 +280,7 @@ function register(app, ctx) {
   /* chat — SIRF AGENT (owner requirement #1) */
   const agentGate = (req, res, next) => {
     if (!ENABLED()) return res.status(503).json({ error: 'Assistant disabled' });
-    if (req.user.role !== 'agent') return res.status(403).json({ error: 'Assistant sirf Agent panel ke liye hai' });
+    if (req.user.role !== 'agent') return res.status(403).json({ error: 'The assistant is only available on the Agent panel' });
     next();
   };
 
@@ -350,7 +349,7 @@ function register(app, ctx) {
     const uid = req.user.id;
     const text = String((req.body || {}).text || '').slice(0, 500).trim();
     if (!text) return res.status(400).json({ error: 'text required' });
-    if (tooMany(uid)) return res.status(429).json({ error: 'Assistant busy, thori dair baad koshish karein.' });
+    if (tooMany(uid)) return res.status(429).json({ error: 'The assistant is busy — please try again shortly.' });
     const agent = db.get('SELECT id,username,name,parent_id,payment_type FROM users WHERE id=?', [uid]) || req.user;
     const pc = agentPoolContext(agent);
 
@@ -382,33 +381,33 @@ function register(app, ctx) {
           return res.json({ reply: 'Wrong range. This range is not currently available.' + (names ? ' Available ranges: ' + names + '.' : ''), flow: 'alloc-range' });
         }
         it.range = r; it.step = 'qty';
-        return res.json({ reply: 'Kitne numbers chahiye? (max ' + aiAllocMax() + ' per range)', flow: 'alloc-qty' });
+        return res.json({ reply: 'How many numbers do you need? (max ' + aiAllocMax() + ' per range)', flow: 'alloc-qty' });
       }
       if (it.step === 'qty') {
-        if (CANCEL.test(text.trim())) { intents.delete(uid); return res.json({ reply: 'Theek — allocation cancel kar diya.', flow: null }); }
+        if (CANCEL.test(text.trim())) { intents.delete(uid); return res.json({ reply: 'Understood — the allocation has been cancelled.', flow: null }); }
         const q = parseQty(text);
-        if (!q || q <= 0) return res.json({ reply: 'Valid quantity likhen (e.g. 100).', flow: 'alloc-qty' });
+        if (!q || q <= 0) return res.json({ reply: 'Please enter a valid quantity (e.g. 100).', flow: 'alloc-qty' });
         if (q > aiAllocMax()) return res.json({ reply: 'The maximum I can provide is ' + aiAllocMax() + ' numbers per range.', flow: 'alloc-qty' });
         const avail = poolCount(it.range.id, pc.cond);
-        if (avail < 0) { intents.delete(uid); return res.json({ reply: 'Availability check failed — thori dair baad koshish karein.', flow: null }); }
+        if (avail < 0) { intents.delete(uid); return res.json({ reply: 'Availability check failed — please try again in a little while.', flow: null }); }
         if (avail < q) {
-          return res.json({ reply: 'Is range me aap ke liye sirf ' + avail + ' number' + (avail === 1 ? '' : 's') + ' available ' + (avail === 1 ? 'hai' : 'hain') + ' (' + pc.label + ' ke pool me). Zyada ke liye ' + pc.shortContact + '.', flow: 'alloc-qty' });
+          return res.json({ reply: 'Only ' + avail + ' number' + (avail === 1 ? '' : 's') + ' currently available to you in this range (from ' + pc.label + "'s pool). For more, " + pc.shortContact + '.', flow: 'alloc-qty' });
         }
         it.qty = q; it.step = 'cycle';
-        return res.json({ reply: 'Payment cycle kya rakhen? Daily, Weekly, ya Monthly?', flow: 'alloc-cycle' });
+        return res.json({ reply: 'Which payment cycle would you like? Daily, Weekly, or Monthly?', flow: 'alloc-cycle' });
       }
       if (it.step === 'cycle') {
-        if (CANCEL.test(text.trim())) { intents.delete(uid); return res.json({ reply: 'Theek — allocation cancel kar diya.', flow: null }); }
+        if (CANCEL.test(text.trim())) { intents.delete(uid); return res.json({ reply: 'Understood — the allocation has been cancelled.', flow: null }); }
         const c = parseCycle(text);
-        if (!c) return res.json({ reply: 'Daily, Weekly ya Monthly mein se koi aik likhen.', flow: 'alloc-cycle' });
+        if (!c) return res.json({ reply: 'Please type one of: Daily, Weekly, or Monthly.', flow: 'alloc-cycle' });
         it.cycle = c; it.step = 'confirm';
-        return res.json({ reply: 'Range: ' + it.range.name + '\nQuantity: ' + it.qty + '\nTarget: Aap khud (' + agent.username + ')\nPayment cycle: ' + cycleLabel(it.cycle) + '\n\nConfirm allocation? Yes/No', flow: 'alloc-confirm' });
+        return res.json({ reply: 'Range: ' + it.range.name + '\nQuantity: ' + it.qty + '\nTarget: You (' + agent.username + ')\nPayment cycle: ' + cycleLabel(it.cycle) + '\n\nConfirm allocation? Yes/No', flow: 'alloc-confirm' });
       }
       if (it.step === 'confirm') {
         intents.delete(uid);
-        if (!YES.has(norm(text))) return res.json({ reply: 'Theek — allocation cancel kar diya.', flow: null });
+        if (!YES.has(norm(text))) return res.json({ reply: 'Understood — the allocation has been cancelled.', flow: null });
         /* P19: confirm-time re-check — agar admin ne beech me limit kam kar di ho */
-        if ((it.qty | 0) > aiAllocMax()) { intents.delete(uid); return res.json({ reply: 'The maximum I can provide is ' + aiAllocMax() + ' numbers per range. Kam quantity se dobara shuru karein.', flow: null }); }
+        if ((it.qty | 0) > aiAllocMax()) { intents.delete(uid); return res.json({ reply: 'The maximum I can provide is ' + aiAllocMax() + ' numbers per range. Please start again with a smaller quantity.', flow: null }); }
         const out = executeAllocation(agent, it, pc);
         return res.json({ reply: out.reply, flow: null, done: out.ok });
       }
@@ -418,7 +417,7 @@ function register(app, ctx) {
     const t0 = norm(text);
     if (/(i need numbers|numbers chahiye|number chahiye|need numbers|mujhe numbers|allocate numbers|numbers allocate|numbers mangwa)/.test(t0)) {
       intents.set(uid, { step: 'range', at: Date.now(), key: 'ai-alloc-' + uid + '-' + Date.now() });
-      return res.json({ reply: 'Which range do you need? Range ka naam likhen.', flow: 'alloc-range' });
+      return res.json({ reply: 'Which range do you need? Please type the range name.', flow: 'alloc-range' });
     }
 
     /* ------- availability (#5) ------- */
@@ -433,7 +432,7 @@ function register(app, ctx) {
     const asksRanges = /(which range|kon sa range|konse range|ranges available|available range|range list|range naam|kya ranges)/.test(t0);
     if (asksRanges) {
       const names = rangesRows().slice(0, 12).map((x) => x.name);
-      return res.json({ reply: 'Currently configured ranges: ' + (names.join(', ') || 'koi nahi') + '.', source: 'ranges' });
+      return res.json({ reply: 'Currently configured ranges: ' + (names.join(', ') || 'none') + '.', source: 'ranges' });
     }
 
     /* ------- Tier-1 knowledge ------- */
@@ -442,20 +441,20 @@ function register(app, ctx) {
 
     /* ------- payment schedule guard ------- */
     if (/(payment kab|payment dates|payment schedule|kab milenge|kab milte)/.test(t0)) {
-      if (rpv('payment_enabled', '0') !== '1') return res.json({ reply: 'Payment schedule ki exact information mujhe abhi confirm nahi hai — Galaxy SMS team aap ko bata degi.', source: 'guard' });
+      if (rpv('payment_enabled', '0') !== '1') return res.json({ reply: "I don't have the exact payment schedule confirmed yet — the Galaxy SMS team will share it with you.", source: 'guard' });
       const pm = kbRows().find((x) => x.enabled === 1 && x.category === 'payment');
       if (pm) return res.json({ reply: pm.answer, source: 'knowledge' });
     }
 
     /* ------- greeting with username recognition (#1) ------- */
     if (/^(hi+|hello|hey|salam|assalam( o )?alaikum|aoa|good (morning|evening|afternoon)|kya haal|kaise ho)\b/.test(t0)) {
-      return res.json({ reply: 'Hello ' + (agent.name || agent.username) + '! Main Galaxy SMS assistant hoon. Rates, numbers availability, ya allocation ke liye poochein.', source: 'greeting' });
+      return res.json({ reply: 'Hello ' + (agent.name || agent.username) + '! I am the Galaxy SMS assistant. Ask me about rates, number availability, or allocations.', source: 'greeting' });
     }
 
     /* ------- Tier-2 LLM / fallback ------- */
     const llm = await llmCall(text);
     if (llm) return res.json({ reply: llm, source: 'llm' });
-    return res.json({ reply: 'Main ye confirm nahi kar sakta. Likhen: "rate" (sab rates), "available numbers" (availability), ya "I need numbers" (allocation).', source: 'fallback' });
+    return res.json({ reply: 'I cannot answer that. Try: "rate" (all rates), "available numbers" (availability), or "I need numbers" (allocation).', source: 'fallback' });
   });
 }
 

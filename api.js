@@ -717,11 +717,11 @@
         const btn = document.createElement('button');
         btn.id = 'gxAssistantBtn'; btn.type = 'button'; btn.title = 'Galaxy SMS Assistant'; btn.textContent = '\u{1F916}';
         const win = document.createElement('div'); win.id = 'gxAssistantWin';
-        win.innerHTML = '<div id="gxHead"><span>Galaxy SMS Assistant</span><button type="button" id="gxClose">\u2715</button></div><div id="gxMsgs"></div><form id="gxForm"><input id="gxIn" autocomplete="off" placeholder="Message likhen..."><button type="submit" id="gxSend">Send</button></form>';
+        win.innerHTML = '<div id="gxHead"><span>Galaxy SMS Assistant</span><button type="button" id="gxClose">\u2715</button></div><div id="gxMsgs"></div><form id="gxForm"><input id="gxIn" autocomplete="off" placeholder="Type your message..."><button type="submit" id="gxSend">Send</button></form>';
         document.body.appendChild(btn); document.body.appendChild(win);
         const msgs = win.querySelector('#gxMsgs');
         const add = (t, who) => { const d = document.createElement('div'); d.className = who === 'u' ? 'gxU' : 'gxA'; d.textContent = t; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; };
-        btn.onclick = () => { win.classList.toggle('open'); if (win.classList.contains('open') && !msgs.children.length) add('Hello! How can I help you? Main Galaxy SMS assistant hoon \u2014 rates, ranges, ya numbers ke liye poochein.', 'a'); };
+        btn.onclick = () => { win.classList.toggle('open'); if (win.classList.contains('open') && !msgs.children.length) add('Hello! How can I help you? I am the Galaxy SMS assistant \u2014 ask me about rates, ranges, or numbers.', 'a'); };
         win.querySelector('#gxClose').onclick = () => win.classList.remove('open');
         let busy = false;
         win.querySelector('#gxForm').onsubmit = async (e) => {

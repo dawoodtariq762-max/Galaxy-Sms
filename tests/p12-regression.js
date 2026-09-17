@@ -1,7 +1,9 @@
 /* P12 REGRESSION SUITE — AI Assistant + Per-Allocation Payment Cycles */
 /* P12 REGRESSION SUITE — chalane ka tareeqa:
    1) fresh DB copy banayen, users ke passwords set karein
-   2) DB_FILE=<copy> PORT=8091 node backend/server.js
+   2) DB_FILE=<copy> PORT=8091 ASSISTANT_USER_RPM=25 node backend/server.js
+      (default RPM=10 flow ke 11th message par 429 kar deta hai; 25 par flow (~19 msgs)
+       aur per-user 429 limit test dono pass hote hain)
    3) P12_DB=<copy> node tests/p12-regression.js
    (carrier integration test DB me direct enable hoti hai — lock feature API se nahi) */
 const BASE = process.env.P12_BASE || 'http://127.0.0.1:8091';
@@ -43,13 +45,20 @@ async function sms(number, id) {
   t('AI message client: 403', (await api('/api/assistant/message', 'POST', { text: 'hi' }, cli)).status === 403);
   t('AI message unauthenticated: denied', (await api('/api/assistant/message', 'POST', { text: 'hi' })).status >= 400);
 
+  /* fresh-DB setup: #4/#5 need one configured range; #3 flow expects alloc_max=500
+     (default 100 — P19). Both were previously masked by reused DB state. */
+  await api('/api/ranges', 'POST', { name: 'P12SEED', prefix: '92188', currency: 'USD', rate_1_1: '0.01', rate_7_1: '0.02', rate_7_7: '0.03', rate_30_45: '0.04', payment_type: 'weekly', status: 'Active' }, adm);
+  await api('/api/numbers/import', 'POST', { range_name: 'P12SEED', prefix: '92188', numbers: ['92188000001'], payterm: 'weekly_7_1', payout: '0' }, adm);
+  await api('/api/assistant/knowledge-settings', 'PUT', { alloc_max: 500 }, adm);
+  await new Promise(r => setTimeout(r, 700));
+
   /* ================= TIER-1: greeting/rates/availability/knowledge ================= */
   const hello = await api('/api/assistant/message', 'POST', { text: 'hi' }, agt);
   t('#1 greeting: username recognized', hello.status === 200 && /demo_agt|demo agent/i.test(hello.j.reply || ''), (hello.j.reply || '').slice(0, 70));
   const rates = await api('/api/assistant/message', 'POST', { text: 'rate' }, agt);
   t('#4 rates: "rate" -> configured rates', rates.status === 200 && /Daily/i.test(rates.j.reply || '') && /Weekly/i.test(rates.j.reply || ''), (rates.j.reply || '').slice(0, 60));
   const avail = await api('/api/assistant/message', 'POST', { text: 'kitne numbers available hain?' }, agt);
-  t('#5 availability: pool answer', avail.status === 200 && /available/i.test(avail.j.reply || '') && (/Total|\d|se contact karein/.test(avail.j.reply || '')), (avail.j.reply || '').slice(0, 60));
+  t('#5 availability: pool answer', avail.status === 200 && /available/i.test(avail.j.reply || '') && (/Total|\d|please contact/.test(avail.j.reply || '')), (avail.j.reply || '').slice(0, 60));
   const kb1 = await api('/api/assistant/message', 'POST', { text: 'What is Galaxy SMS?' }, agt);
   t('Tier1: knowledge answer', kb1.status === 200 && kb1.j.source === 'knowledge', (kb1.j.reply || '').slice(0, 50));
   const kbList = await api('/api/assistant/knowledge', 'GET', null, adm);
@@ -57,7 +66,7 @@ async function sms(number, id) {
   t('payment knowledge DISABLED by default', kbList.j.settings && kbList.j.settings.payment_enabled === '0', JSON.stringify(kbList.j.settings));
   t('knowledge GET agent DENIED', (await api('/api/assistant/knowledge', 'GET', null, agt)).status === 403);
   const payQ = await api('/api/assistant/message', 'POST', { text: 'payment kab milte hain?' }, agt);
-  t('payment schedule -> guard, no invented dates', payQ.status === 200 && /confirm nahi|team/i.test(payQ.j.reply || ''), (payQ.j.reply || '').slice(0, 60));
+  t('payment schedule -> guard, no invented dates', payQ.status === 200 && /team/i.test(payQ.j.reply || ''), (payQ.j.reply || '').slice(0, 60));
   const kbAdd = await api('/api/assistant/knowledge', 'POST', { category: 'general', question: 'Refund kaise milega?', answer: 'Refund ke liye team se rabta karein.' }, adm);
   t('knowledge ADD admin OK', kbAdd.status === 200 && kbAdd.j.id > 0, 'id ' + kbAdd.j.id);
   t('knowledge ADD agent DENIED', (await api('/api/assistant/knowledge', 'POST', { question: 'x', answer: 'y' }, agt)).status === 403);
@@ -176,12 +185,12 @@ async function sms(number, id) {
   const A = (text) => api('/api/assistant/message', 'POST', { text }, agt);
   t('#3 flow: intent', /range/i.test((await A('I need numbers')).j.reply || ''));
   t('#3 flow: wrong range rejected', /wrong range/i.test((await A('zzz-nonexistent-xyz')).j.reply || ''));
-  t('#3 flow: valid range -> qty', /kitne numbers/i.test((await A('P12C')).j.reply || ''));
+  t('#3 flow: valid range -> qty', /how many numbers/i.test((await A('P12C')).j.reply || ''));
   t('#3 flow: 700 -> 500-cap', /maximum I can provide is 500/i.test((await A('700')).j.reply || ''));
   t('#3 flow: over-pool -> manager contact', /manager.*contact|contact.*manager/i.test((await A('500')).j.reply || ''));
   t('#3 flow: qty 2 -> cycle', /daily|weekly|monthly/i.test((await A('2')).j.reply || ''));
   const conf = await A('daily');
-  t('#1 flow: confirmation self-target + cycle', /Aap khud \(demo_agt\)/.test(conf.j.reply || '') && /Daily/.test(conf.j.reply || ''), (conf.j.reply || '').slice(0, 90));
+  t('#1 flow: confirmation self-target + cycle', /You \(demo_agt\)/.test(conf.j.reply || '') && /Daily/.test(conf.j.reply || ''), (conf.j.reply || '').slice(0, 90));
   const yes = await A('haan');
   t('#2/#3 AI alloc: executed (existing logic, no fetch-fail)', yes.status === 200 && /✅/.test(yes.j.reply || ''), (yes.j.reply || '').slice(0, 90));
   t('#3 AI alloc: agent_id + manager chain + payterm daily', dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE range_id=? AND agent_id=? AND manager_id=? AND payterm='daily'").get(rC.id, ag.id, mg.id).c === 2);

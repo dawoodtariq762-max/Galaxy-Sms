@@ -145,7 +145,7 @@ async function bootPanel(pagePath, { token, role, user, name }) {
       t('UI-A4 FIX#1 UI save path (set 120, backend reflects)', after === '120' && P.alerts.some(a => /120/.test(a)), 'after=' + after + ' alerts=' + JSON.stringify(P.alerts.slice(-1)));
       am.value = 'abc';
       await w.saveAiAllocMax(); await sleep(300);
-      t('UI-A5 FIX#1 invalid UI value blocked client-side', P.alerts.some(a => /1 se 5000/.test(a)), JSON.stringify(P.alerts.slice(-1)));
+      t('UI-A5 FIX#1 invalid UI value blocked client-side', P.alerts.some(a => /1 se 5000|between 1 and 5000/.test(a)), JSON.stringify(P.alerts.slice(-1)));
       am.value = before; await w.saveAiAllocMax(); await sleep(500); // restore
     }
 
@@ -180,7 +180,7 @@ async function bootPanel(pagePath, { token, role, user, name }) {
     /* FIX#4 — elements + E2E */
     t('UI-A12 FIX#4 aaRate + hint + allocRate + refresh exist', !!(d.getElementById('aaRate') && d.getElementById('aaRateHint') && d.getElementById('allocRate') && (typeof w.allocRateRefresh === 'function')));
     const hintTxt = (d.getElementById('aaRateHint') || {}).textContent || '';
-    t('UI-A13 FIX#4 hint text (override-only message)', /Default rate Rate Management se aata hai/.test(hintTxt) && /sirf YEH allocation override/.test(hintTxt), hintTxt.slice(0, 90));
+    t('UI-A13 FIX#4 hint text (override-only message)', /default rate comes from Rate Management/i.test(hintTxt) && /only overrides the rate for THIS allocation/i.test(hintTxt), hintTxt.slice(0, 90));
 
     /* numbers page -> select unallocated R2 number -> allocAll modal */
     await w.showPageByName('numbers'); await sleep(400);

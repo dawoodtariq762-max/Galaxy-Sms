@@ -253,12 +253,24 @@ function createTables() {
   if (!db.get("SELECT value FROM assistant_settings WHERE key='alloc_max'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('alloc_max','100')");
   if (!db.get('SELECT id FROM assistant_knowledge LIMIT 1')) {
     const insKb = (c,q,a,e,so) => db.run('INSERT INTO assistant_knowledge (category,question,answer,enabled,sort_order) VALUES (?,?,?,?,?)',[c,q,a,e,so]);
-    insKb('general', 'What is Galaxy SMS?', 'Galaxy SMS ek SMS management platform hai — panels, numbers, allocation, traffic aur rates manage karne ke liye.', 1, 1);
-    insKb('general', 'How can I get numbers?', 'Numbers page se ranges select kar ke allocate karein, ya mujhe likhen "I need numbers" — main guided allocation karwa dunga.', 1, 2);
-    insKb('payment', 'When are payments made?', 'Payments aap ke payment cycle ke mutabiq process hote hain. Exact schedule Admin panel ke payment settings me configured hai.', 0, 1);
-    insKb('payment', 'What does weekly mean?', 'Weekly cycle har Tuesday se shuru hone wale 7-din ke cycle par payments calculate hoti hain.', 0, 2);
-    insKb('payment', 'What does daily mean?', 'Daily cycle par har din ki earning agle din eligible hoti hai.', 0, 3);
-    insKb('payment', 'What does monthly mean?', 'Monthly (30x45) cycle me 30-din ka work cycle hota hai jo 30+45 din baad eligible hota hai.', 0, 4);
+    insKb('general', 'What is Galaxy SMS?', 'Galaxy SMS is an SMS management platform — for managing panels, numbers, allocations, traffic and rates.', 1, 1);
+    insKb('general', 'How can I get numbers?', 'Allocate numbers by selecting ranges on the Numbers page, or simply type "I need numbers" — I will guide you through the allocation.', 1, 2);
+    insKb('payment', 'When are payments made?', 'Payments are processed according to your payment cycle. The exact schedule is configured in the Admin panel payment settings.', 0, 1);
+    insKb('payment', 'What does weekly mean?', 'The Weekly cycle calculates payments on 7-day cycles starting every Tuesday.', 0, 2);
+    insKb('payment', 'What does daily mean?', 'On the Daily cycle, each day\'s earnings become eligible the next day.', 0, 3);
+    insKb('payment', 'What does monthly mean?', 'The Monthly (30x45) cycle uses a 30-day work cycle that becomes eligible after 30+45 days.', 0, 4);
+  }
+  /* P19j language task: existing databases still carry the OLD Roman-Urdu seed answers.
+     Idempotent migration — rewrites ONLY rows that still match the original seed text EXACTLY
+     (any answer the admin has edited/customised is left untouched). Previous behaviour: Urdu seed text. */
+  {
+    const reKb = (oldA, newA) => db.run('UPDATE assistant_knowledge SET answer=?, updated_at=datetime(\'now\') WHERE answer=?', [newA, oldA]);
+    reKb('Galaxy SMS ek SMS management platform hai — panels, numbers, allocation, traffic aur rates manage karne ke liye.', 'Galaxy SMS is an SMS management platform — for managing panels, numbers, allocations, traffic and rates.');
+    reKb('Numbers page se ranges select kar ke allocate karein, ya mujhe likhen "I need numbers" — main guided allocation karwa dunga.', 'Allocate numbers by selecting ranges on the Numbers page, or simply type "I need numbers" — I will guide you through the allocation.');
+    reKb('Payments aap ke payment cycle ke mutabiq process hote hain. Exact schedule Admin panel ke payment settings me configured hai.', 'Payments are processed according to your payment cycle. The exact schedule is configured in the Admin panel payment settings.');
+    reKb('Weekly cycle har Tuesday se shuru hone wale 7-din ke cycle par payments calculate hoti hain.', 'The Weekly cycle calculates payments on 7-day cycles starting every Tuesday.');
+    reKb('Daily cycle par har din ki earning agle din eligible hoti hai.', 'On the Daily cycle, each day\'s earnings become eligible the next day.');
+    reKb('Monthly (30x45) cycle me 30-din ka work cycle hota hai jo 30+45 din baad eligible hota hai.', 'The Monthly (30x45) cycle uses a 30-day work cycle that becomes eligible after 30+45 days.');
   }
 
   db.run(`CREATE TABLE IF NOT EXISTS payment_notifications_v2 (
@@ -404,6 +416,11 @@ function createTables() {
   ensureColumn('provider_payments', 'prev_unpaid', "TEXT DEFAULT '0'");
   ensureColumn('provider_payments', 'remaining_unpaid', "TEXT DEFAULT '0'");
   ensureColumn('provider_payments', 'period', "TEXT DEFAULT ''");
+  /* P19j: Binance UID replaces USDT TRC20 wallet address in the active payment flow.
+     ADDITIVE migration — wallet_address columns/values are kept untouched (immutable history);
+     new agent saves and new payment requests store binance_uid. */
+  ensureColumn('agent_wallets', 'binance_uid', "TEXT DEFAULT ''");
+  ensureColumn('payment_requests_v2', 'binance_uid', "TEXT DEFAULT ''");
   db.run(`CREATE INDEX IF NOT EXISTS idx_provider_payments_name ON provider_payments(provider_name)`);
   ensureColumn('sms_records', 'is_test', 'INTEGER DEFAULT 0');
   ensureColumn('sms_records', 'test_batch_id', "TEXT DEFAULT ''");

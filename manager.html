@@ -695,7 +695,7 @@
   <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('agentModal')">Cancel</button><button class="btn btn-teal" onclick="saveAgent()">Save</button></div>
 </div></div>
 
-<script src="/api.js?v=20260914-agent-manager-allocation-final"></script><script src="/assets/chat.js?v=gxchat2"></script>
+<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat3"></script>
 <script>
 if(window.API){ API.guard('manager'); }
 /* ===== NAV ===== */
@@ -803,7 +803,7 @@ async function openAllocAll(){const ids=selIds();if(!ids.length){alert('Please s
   if(!agentsData.length)agentsData=await API.get('/users/agent');
   document.getElementById('aaAgent').innerHTML='<option value="">Please Select</option>'+agentsData.map(a=>`<option value="${a.id}">${a.username}</option>`).join('');
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
-  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — Agent ko allocate honge.`;
+  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the Agent.`;
   document.getElementById('allocAllModal').classList.add('show');}
 async function confirmAllocAll(){const ids=selIds();const a=document.getElementById('aaAgent').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;if(!a){alert('Select an agent.');return;}
   try{await API.post('/numbers/allocate',{ids,target_id:+a,payterm:pt,payout:po});closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
@@ -868,7 +868,7 @@ function viewAgent(id){const r=findAgent(id)||{};alert(`👤 Agent\n\nUsername: 
 /* ===== CLIENTS (ownership tracking, read-only-ish) ===== */
 function buildClients(){document.getElementById('page-clients').innerHTML=`
   <div class="page-head"><div><h2>Clients</h2><div class="breadcrumb"><b>User Management</b> › Clients (per Agent)</div></div></div>
-  <div class="toolbar"><div class="filter-row"><select class="sel-lg" id="clAgentF" onchange="renderClients()"><option value="">All Agents</option>${myAgents.map(a=>`<option>${a}</option>`).join('')}</select><span class="muted" style="font-size:12.5px">Client ownership tracking — kaun sa client kis agent ka</span></div></div>
+  <div class="toolbar"><div class="filter-row"><select class="sel-lg" id="clAgentF" onchange="renderClients()"><option value="">All Agents</option>${myAgents.map(a=>`<option>${a}</option>`).join('')}</select><span class="muted" style="font-size:12.5px">Client ownership tracking — which client belongs to which agent</span></div></div>
   <div class="table-wrap" style="padding:15px 17px;margin-top:0"><div class="table-controls">
     <div class="tc-left"><label>Show Records:</label><select id="clLen" onchange="renderClients()"><option>10</option><option selected>25</option><option value="All">All</option></select>
     <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
@@ -947,7 +947,7 @@ function buildSmsDetail(){
     <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
     <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters()"> Agent</label>
     <button class="btn btn-teal" onclick="renderSmsDetail()">Apply Filter</button><button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button></div>
-    <div class="hint">Tick karne par results me us dimension ki values (current data se, SMS count + payout) list hoti hain — value par click karo to sirf usi ke results. Filters combinable (AND).</div>
+    <div class="hint">Ticking a dimension lists its values in the results (from current data: SMS count + payout) — click a value to see only its results. Filters combine (AND).</div>
     <div id="sdChips" style="display:flex;flex-wrap:wrap;align-items:center"></div>
   </div>
   <div class="table-wrap" style="padding:15px 17px;margin-top:0"><div class="table-controls">

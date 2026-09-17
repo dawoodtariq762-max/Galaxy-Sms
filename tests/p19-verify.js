@@ -207,7 +207,7 @@ function openDb() {
   const beforeAi = dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE agent_id=(SELECT id FROM users WHERE username='p19a2')").get().c;
   rep = await ai('yes', a2Tok);
   const afterAi = dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE agent_id=(SELECT id FROM users WHERE username='p19a2')").get().c;
-  t('F1-11 AI allocates 3 numbers (limit 5)', /ho gaya/i.test(rep.reply || '') && afterAi === beforeAi + 3, `before=${beforeAi} after=${afterAi} reply=${(rep.reply || '').slice(0, 60)}`);
+  t('F1-11 AI allocates 3 numbers (limit 5)', /Done:/i.test(rep.reply || '') && afterAi === beforeAi + 3, `before=${beforeAi} after=${afterAi} reply=${(rep.reply || '').slice(0, 60)}`);
   rep = await ai('i need numbers', a2Tok); rep = await ai('P19R2', a2Tok); rep = await ai('6', a2Tok);
   t('F1-12 qty 6 refused under limit 5', /maximum i can provide is 5/i.test(rep.reply || ''), (rep.reply || '').slice(0, 80));
 

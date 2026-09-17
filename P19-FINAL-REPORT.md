@@ -731,7 +731,7 @@ Aaj bhi poora panel plain HTTP par chalta hai (existing /panel-login bhi). Is sy
 - Public form sirf name/email/username bhejta hai — **password form par hota hi nahi** (setup-link method isi wajah se chuna).
 - OTP email se aata hai (out-of-band) — network sniffing se safe.
 - **Genuinely insecure point:** `/set-password` page naya password plain HTTP par bhejta hai, aur existing panel login bhi yahi karta hai — koi network-level attacker (same WiFi/ISP path) password dekh sakta hai. YE FIX KARNE KE LIYE HTTPS genuinely required hai.
-- **Zero-cost HTTPS path (jab chaho):** free subdomain (DuckDNS / No-IP — $0) + **Let's Encrypt certificate ($0)** + reverse proxy (Caddy/Nginx). Domain kharidna zaroori NAHI. Jab tak HTTPS na ho,敏感 credentials HTTP par jayenge — yeh limitation silently chhupayi nahi gayi, yahan clearly likhi hai.
+- **Zero-cost HTTPS path (jab chaho):** free subdomain (DuckDNS / No-IP — $0) + **Let's Encrypt certificate ($0)** + reverse proxy (Caddy/Nginx). Domain kharidna zaroori NAHI. Jab tak HTTPS na ho, sensitive credentials HTTP par jayenge — yeh limitation silently chhupayi nahi gayi, yahan clearly likhi hai.
 - Email links me `PUBLIC_BASE_URL` use hota hai — VPS IP set karo to links `http://IP/...` banenge.
 
 ### J) Future (agar volume badhe)
@@ -750,3 +750,153 @@ npm install --omit=dev         # nodemailer naya dep
 pm2 restart galaxy
 ```
 Verify: `http://VPS-IP/panel-request` khulna chahiye (branded form). Test request bhejo → Gmail inbox me "Galaxy SMS — Email Verification Code" aana chahiye (Spam check karein) → OTP verify → Admin Panel › User Management › Panel Requests me request dikhegi → Approve → customer ko welcome email → link se password set → `/panel-login` se login.
+
+---
+
+## P19j — TEEN CHANGES: (1) Full English UI (2) Binance UID payments (3) Floating Chat button
+
+**Date:** 2026-09-17 · **Tarball:** `galaxy-sms-p19-fixes.tar.gz` (32 files) · **Test suite:** `tests/p19j-verify.js` — **69/69 PASS ×2 consecutive stable runs**
+
+---
+
+### A) Change #1 — POORA user-visible text professional English me
+
+**Kya badla (har jagah):**
+| File | Kya |
+|---|---|
+| `admin.html` | 40+ strings: hints, alerts, confirms, empty states, rebuild-stats confirm, delete-warning, panel-request hints, AI-knowledge hints, payMgmt schedule text, rate hints, tooltips |
+| `manager.html` / `agent.html` / `client.html` | allocation counters, drill-down hint, date-filter hint, ownership-tracking hint |
+| `public-request.html` | hero text, 4 feature bullets, step subtitles, OTP/resent/duplicate messages, success text |
+| `set-password.html` | page subtitle, success/error messages |
+| `assets/chat.js` (chat UI) | empty states ("No chats found.", "No messages yet — send the first message."), complaint modal placeholder/hint, validation alerts |
+| `api.js` (AI assistant widget) | placeholder "Type your message...", greeting |
+| `backend/assistant.js` | SAARI assistant replies English (greeting, rates, availability, allocation flow, cancel, guard, fallback, 403/429 errors) |
+| `backend/pubreq.js` | OTP email body, welcome email body, footer note, dry-run log, 2 validation errors |
+| `backend/schema.js` | 6 seeded AI knowledge-base answers (fresh DBs ke liye English seed) |
+
+**Existing DB ke liye migration:** `schema.js` me idempotent `UPDATE` — sirf wo rows jinka answer EXACT purane Urdu seed text se match karta hai unhe English se replace karta hai. Admin ne jo answers khud edit/customize kiye hain wo BILKUL untouched.
+
+**Jo NAHI badla (owner rule ke mutabiq):** code identifiers, API routes, DB field names, env vars, internal developer comments, aur **Urdu INPUT understanding** — assistant ab bhi Urdu input samajhta hai ('haan', 'nahi', 'kitne numbers', 'rate' waghera) lekin jawab hamesha English me deta hai. Ye feature hai, visible text nahi.
+
+**Verification:** p19j test G1 — automated audit jo 13 files me comments strip kar ke string-literals + HTML text-nodes scan karta hai (95+ Roman-Urdu indicator words) → **0 visible Urdu hits**. Input-parsing lines (assistant ke YES/CANCEL/intent regexes) explicitly allowlisted hain.
+
+---
+
+### B) Change #2 — Payment: Wallet Address → **Binance UID**
+
+**Agent panel (Payment page):**
+- Card title: "Binance UID" · sub: "Save your Binance UID to receive payments through Binance Pay."
+- Label: **Binance UID** · Placeholder: **"Enter your Binance UID"** · numeric inputmode
+- Save button: "Save Binance UID"
+- **Help modal: "How to find your Binance UID"** — Step 1 (open Binance app) → Step 2 (profile icon) → Step 3 (UID under your name, 8–12 digits) → Step 4 (copy + paste here) + **Binance website method** (binance.com → profile icon → UID in dropdown)
+- **Warning text (card + modal):** "Warning: Payments are sent to the Binance UID you save here. Please double-check your UID before saving — entering an incorrect UID can result in funds being sent to the wrong account. You are responsible for the accuracy of your Binance UID." *(Ye text maine professional English me draft kiya hai — agar aap ka paas exact wording thi to bhejein, main verbatim swap kar dunga.)*
+- Payment History table: column "Binance UID"; naye requests me UID dikhta hai; **purane wallet requests me purana address + "legacy wallet" tag** dikhta hai (history intact)
+
+**Server-side validation (naya `binanceUidValid`):** required + trim, empty/whitespace → 400, sirf numeric **8–12 digits** (Binance UID ka real format — overly restrictive nahi), invalid → 400 with clear English error. Backend enforce karta hai, frontend par trust nahi.
+
+**DB (additive, non-destructive):**
+```sql
+ensureColumn('agent_wallets', 'binance_uid', "TEXT DEFAULT ''");
+ensureColumn('payment_requests_v2', 'binance_uid', "TEXT DEFAULT ''");
+```
+- `wallet_address` columns/data **kabhi delete/overwrite nahi hote** — purane records 100% safe
+- `agent_wallets.network` = 'BINANCE_UID' (naye saves par); purane rows 'USDT_TRC20' rehte hain
+- Payment request INSERT me naye rows: `binance_uid` = UID, `wallet_address` = '' (column NOT NULL hai isliye empty string)
+- `payment_audit_logs` me UID `details` JSON me record hota hai (`wallet_address` column as-is)
+
+**Admin review (naya — pehle sirf API thi, koi UI nahi thi):** Admin → Payment Mgmt me ab **"Payment Requests"** card hai (existing hi endpoints use karta hai — koi naya API nahi):
+- Status filter (Pending/Paid/Rejected/All) + count
+- Table: ID, Agent, Manager, Type, Amount, **Binance UID** (ya purana wallet + "legacy wallet" tag), Status, Requested
+- View modal: poori details; Pending requests par **Mark as Paid** (TXID + optional notes + optional screenshot — multipart existing `/pay` endpoint) aur **Reject** (reason — existing `/reject` endpoint)
+
+**Kya UNCHANGED hai:** saari calculations (ledger sum), eligibility (eligible_at), minimums, pending-duplicate 409 rule, reject→ledger-reopen flow, notifications, per-type checks. Test D1–D5/D10 in sab ko verify karta hai.
+
+**Old wallet records ka behaviour:** legacy agent (sirf TRC20 wallet, koi UID nahi) request submit kare → 400 "Save your Binance UID first (Payment page)." Uska wallet_address data DB me intact rehta hai (test C1–C5).
+
+---
+
+### C) Change #3 — Floating Chat shortcut button
+
+- **`#gxChatFab`** — 52px circular button, bottom-right (`right:18px; bottom:82px` — AI assistant button ke UPAR stacked; client panel par assistant nahi hota to button khud `bottom:18px` par aa jata hai — `gx-fab-solo` class)
+- Click → panel ka **apna existing router** trigger hota hai (`[data-page="chat"]` nav click → `showPage('chat')` → `GXChat.open('chat')`) — koi naya/duplicate chat system NAHI
+- **Unread badge** existing tracking se: wahi `/chat/unread-count` + wahi SSE engine (`refreshBadges` ab sidebar badge AUR floating badge dono update karta hai — ek hi source of truth, koi doosra counter system nahi)
+- `chat.js` load hote hi `startRealtime()` (existing engine, `S.started` guard) + ek `refreshBadges()` — isliye badge ab HAR page par live hai (pehle sirf chat page visit ke baad hota tha)
+- Responsive: `@media(max-width:480px)` par `right:12px` adjust; z-index 9998 (assistant window 9999 — overlap nahi)
+- Sidebar chat, conversations, permissions (server-enforced role rules), sounds — sab unchanged
+- AI assistant button ke sath visual overlap nahi (stacked + auto-reposition check 1.5s/4s par, kyunki assistant button async banta hai)
+
+---
+
+### D) Tests (sirf woh jo ACTUALLY run hue)
+
+| Suite | Result |
+|---|---|
+| **`tests/p19j-verify.js` (NAYA — 69 assertions)** | **69 PASS / 0 FAIL ×2 consecutive runs** |
+| `tests/p19-verify.js` | 112 PASS / 0 FAIL (final state par re-run) |
+| `tests/p19b-verify.js` | 35 PASS / 0 FAIL |
+| `tests/p19c-verify.js` | 57 PASS / 0 FAIL |
+| `tests/p19d-verify.js` | 63 PASS / 0 FAIL |
+| `tests/p19e-chat-verify.js` | 94 PASS / 0 FAIL (final state par re-run) |
+| `tests/p19f-verify.js` | 35 PASS / 0 FAIL |
+| `tests/p19g-verify.js` | 35 PASS / 0 FAIL (final state par re-run) |
+| `tests/p19i-verify.js` | 95 PASS / 0 FAIL |
+| `tests/p12-regression.js` | 67 PASS / 0 FAIL |
+| `tests/p19-ui-verify.js` | 36 PASS / 0 FAIL |
+| `scripts/check-html-scripts.js` ×6 HTML | 0 FAIL |
+| `node --check` ×7 JS files | OK |
+
+**Total: 796 assertions, 0 failures.**
+
+p19j ke sections: A (15 code markers) · B (9 validation/save tests) · C (5 legacy-record tests) · D (15 request+admin flow tests, real HTTP + real SQLite) · E (8 jsdom agent-panel UI tests, real server) · F (12 floating-button tests — agent + client panels, live SSE, real unread badge) · G (3 language audit tests) · H (server health).
+
+**Test-harness fixes (product nahi, tests):** p12 (fresh-DB setup + `ASSISTANT_USER_RPM=25` env documented — default 10 RPM flow ke 11th message par 429 karta tha; assertion `/kitne numbers/i` → `/how many numbers/i`), p19 (`/ho gaya/i` → `/Done:/i`), p19g (`?v=gxchat2` → `gxchat3`), p19-ui (2 assertions nayi English strings par).
+
+---
+
+### E) Files changed (is round me)
+
+**Panels/UI:** `admin.html`, `manager.html`, `agent.html`, `client.html`, `public-request.html`, `set-password.html`, `api.js`, `assets/chat.js`
+**Backend:** `backend/server.js`, `backend/schema.js`, `backend/pubreq.js`, `backend/assistant.js`
+**Tests:** `tests/p19j-verify.js` (NAYA), `tests/p12-regression.js`, `tests/p19-verify.js`, `tests/p19g-verify.js`, `tests/p19-ui-verify.js`
+**Version bumps:** `api.js?v=20260917-english-binance-chatfab` + `chat.js?v=gxchat3` — charo role panels me.
+
+---
+
+### F) Deploy (VPS — same as before)
+
+```bash
+# PC: tarball extract → git add -A → push
+# VPS:
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev        # koi NAYA dependency NAHI hai is baar
+pm2 restart galaxy
+```
+**Deploy ke baad pehli boot par:** schema migration khud chal jayegi (2 ensureColumn + KB-answer UPDATEs — additive, existing data safe). Admin/agent panels me `Ctrl+Shift+R` (cache bust) — `?v=` bumps isi liye hain.
+
+---
+
+### G) Owner manual test checklist (desktop + mobile dono par)
+
+**Change #2 — Payment:**
+1. Agent login → Payment page → "Binance UID" card dikhe (wallet address kahin nahi) → Help button → 4 steps + web method
+2. Khali/invalid UID save karne par error; valid 8–12 digit UID save ho + refresh par yaad rahe
+3. Request Payment → Admin login → Payment Mgmt → "Payment Requests" me request + Binance UID dikhe → View → Mark as Paid (TXID) → Agent panel me status Paid
+4. Purani (wallet wali) requests me purana address + "legacy wallet" tag dikhe
+
+**Change #3 — Chat button:**
+5. Agent panel: bottom-right par AI button ke upar Chat button → click → chat page khule → koi conversation khol kar message bhejo
+6. Manager se message bhejo → Agent doosre page par rahe → floating button par red unread count dikhe (sidebar badge ke barabar) → click karne par chat khule
+7. Client panel: Chat button dikhe (AI button nahi hota wahan) → click → chat khule
+8. Mobile (phone browser): button bottom-right me thumb ke paas, AI button se upar, koi overlap nahi
+
+**Change #1 — Language:**
+9. Charo panels + /panel-request + /set-password + emails — kahin bhi Urdu/Roman-Urdu nazar na aaye (buttons, labels, errors, empty states, tooltips, AI assistant replies, OTP/welcome emails)
+
+---
+
+### H) Rollback notes
+
+- **Binance UID:** `server.js` PUT-wallet handler me comment me purana handler (TRC20) documented hai; `binance_uid` columns additive hain — rollback par bas purana handler wapas + panels me `?v=` bump.
+- **Chat FAB:** `chat.js` ke aakhri `fabInit()` block + `ensureChatFab/positionChatFab` functions hatane se poora feature off — baaki chat system untouched.
+- **Language:** string-level changes hain — koi logic change nahi; p19j G1 audit in sabko verify karta hai.

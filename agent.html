@@ -538,11 +538,11 @@
           <div class="stat-card dash-metric d-orange"><div class="stat-info"><p>Monthly Balance</p><h3 id="agtMonthlyBal">$0</h3><span id="agtMonthlyMin">Minimum: $0</span></div><div class="dash-go">M</div></div>
         </div>
         <div class="grid2">
-          <div class="card"><div class="card-head"><div><h3>USDT (TRC20) Wallet</h3><div class="sub">Save your Binance USDT TRC20 deposit address.</div></div><button class="btn btn-blue btn-sm" onclick="openWalletHelp()">Help</button></div><div class="form-group"><label>Wallet Address</label><input id="agtWallet" placeholder="Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"></div><div class="hint">Warning: Using the wrong network or wallet address is the user's responsibility.</div><button class="btn btn-blue" style="margin-top:12px" onclick="saveAgentWallet()">Save Wallet</button></div>
+          <div class="card"><div class="card-head"><div><h3>Binance UID</h3><div class="sub">Save your Binance UID to receive payments through Binance Pay.</div></div><button class="btn btn-blue btn-sm" onclick="openWalletHelp()">Help</button></div><div class="form-group"><label>Binance UID</label><input id="agtWallet" placeholder="Enter your Binance UID" inputmode="numeric" autocomplete="off"></div><div class="hint" style="color:var(--red,#e5484d)">Warning: Payments are sent to the Binance UID you save here. Please double-check your UID before saving — entering an incorrect UID can result in funds being sent to the wrong account. You are responsible for the accuracy of your Binance UID.</div><button class="btn btn-blue" style="margin-top:12px" onclick="saveAgentWallet()">Save Binance UID</button></div>
           <div class="card"><div class="card-head"><div><h3>Request Payment</h3><div class="sub">Only eligible balances can be requested.</div></div></div><div id="agtRequestButtons" class="row"></div><div id="agtPayNotifications" class="hint" style="margin-top:12px"></div></div>
         </div>
         <div class="table-wrap" style="padding:15px 17px;margin-top:16px"><div class="table-controls"><div class="tc-left"><label>Payment History</label></div><div class="tc-right"><button type="button" class="gx-btn gx-blue"  onclick="loadAgentPayment()" data-tip="Refresh" title="Refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button></div></div></div>
-        <div class="table-wrap"><div class="tscroll"><table><thead><tr><th>ID</th><th>Type</th><th>Amount</th><th>Wallet</th><th>Status</th><th>Requested</th><th>TXID</th><th>Proof</th></tr></thead><tbody id="agtPayBody"></tbody></table></div><div class="table-foot"><div class="info" id="agtPayInfo"></div></div></div>
+        <div class="table-wrap"><div class="tscroll"><table><thead><tr><th>ID</th><th>Type</th><th>Amount</th><th>Binance UID</th><th>Status</th><th>Requested</th><th>TXID</th><th>Proof</th></tr></thead><tbody id="agtPayBody"></tbody></table></div><div class="table-foot"><div class="info" id="agtPayInfo"></div></div></div>
       </section>
     </div>
   </div>
@@ -591,8 +591,8 @@
 </div></div>
 
 
-<div class="modal-overlay" id="walletHelpModal"><div class="modal" style="max-width:720px"><div class="modal-head"><h3>How to copy Binance USDT (TRC20) wallet</h3><button class="modal-close" onclick="closeModal('walletHelpModal')">×</button></div><div class="modal-body"><div class="hint" style="margin-bottom:12px"><b>Warning:</b> Using the wrong network or wallet address is the user's responsibility.</div><div class="card"><b>Step 1</b><div class="hint">Open Binance → Wallet → Spot/Funding → Deposit.</div><div style="border:1px solid #ddd6fe;border-radius:12px;padding:12px;margin-top:8px;background:#faf5ff">Example Screenshot: Deposit → Select USDT</div></div><div class="card"><b>Step 2</b><div class="hint">Choose coin: USDT. Choose network: TRC20 / Tron.</div><div style="border:1px solid #ddd6fe;border-radius:12px;padding:12px;margin-top:8px;background:#faf5ff">Example Screenshot: Network TRC20 selected</div></div><div class="card"><b>Step 3</b><div class="hint">Copy the address starting with T and paste it here.</div><div style="border:1px solid #ddd6fe;border-radius:12px;padding:12px;margin-top:8px;background:#faf5ff">Example: Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</div></div></div></div></div>
-<script src="/api.js?v=20260914-agent-manager-allocation-final"></script><script src="/assets/chat.js?v=gxchat2"></script>
+<div class="modal-overlay" id="walletHelpModal"><div class="modal" style="max-width:720px"><div class="modal-head"><h3>How to find your Binance UID</h3><button class="modal-close" onclick="closeModal('walletHelpModal')">×</button></div><div class="modal-body"><div class="hint" style="margin-bottom:12px"><b>Warning:</b> Payments are sent to the Binance UID you save here. Please double-check your UID before saving — entering an incorrect UID can result in funds being sent to the wrong account. You are responsible for the accuracy of your Binance UID.</div><div class="card"><b>Step 1 — Open the Binance app</b><div class="hint">Log in to the Binance app on your phone.</div></div><div class="card"><b>Step 2 — Go to your Profile</b><div class="hint">Tap the profile icon (top left on the home screen).</div></div><div class="card"><b>Step 3 — Find your UID</b><div class="hint">Your Binance UID is shown on the profile page, right under your name (a number of 8–12 digits).</div></div><div class="card"><b>Step 4 — Copy and paste it here</b><div class="hint">Copy the full number and paste it into the Binance UID field, then save.</div></div><div class="card"><b>Using the Binance website instead</b><div class="hint">Log in at binance.com → hover over your profile icon (top right) → your Binance UID is displayed in the dropdown menu under your email. Copy that number and paste it here.</div></div></div></div></div>
+<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat3"></script>
 <script>
 if(window.API){ API.guard('agent'); }
 /* NAV */
@@ -678,7 +678,7 @@ async function openAllocAll(){const ids=selIds();if(!ids.length){alert('Please s
   if(!clientsData.length)clientsData=await API.get('/users/client');
   document.getElementById('aaClient').innerHTML='<option value="">Please Select</option>'+clientsData.map(c=>`<option value="${c.id}">${c.username}</option>`).join('');
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
-  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — Client ko allocate honge.`;
+  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the Client.`;
   document.getElementById('allocAllModal').classList.add('show');}
 async function confirmAllocAll(){const ids=selIds();const c=document.getElementById('aaClient').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;if(!c){alert('Select a client.');return;}
   try{await API.post('/numbers/allocate',{ids,target_id:+c,payterm:pt,payout:po});closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
@@ -801,7 +801,7 @@ function buildSmsDetail(){
     <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
     <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters()"> Client</label>
     <button class="btn btn-blue" onclick="renderSmsDetail()">Apply Filter</button><button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button></div>
-    <div class="hint">Tick karne par results me us dimension ki values (current data se, SMS count + payout) list hoti hain — value par click karo to sirf usi ke results. Filters combinable (AND).</div>
+    <div class="hint">Ticking a dimension lists its values in the results (from current data: SMS count + payout) — click a value to see only its results. Filters combine (AND).</div>
     <div id="sdChips" style="display:flex;flex-wrap:wrap;align-items:center"></div>
   </div>
   <div class="table-wrap" style="padding:15px 17px;margin-top:0"><div class="table-controls">
@@ -975,7 +975,7 @@ function openWalletHelp(){document.getElementById('walletHelpModal').classList.a
 function payBal(b,type){return (b||[]).find(x=>x.payment_type===type)||{available_balance:'0',minimum:'0',can_request:false,label:type}}
 async function loadAgentPayment(){
   const data=await API.get('/payment-v2/agent/summary');
-  if(document.getElementById('agtWallet')) agtWallet.value=data.wallet?.wallet_address||'';
+  if(document.getElementById('agtWallet')) agtWallet.value=data.wallet?.binance_uid||''; /* P19j: Binance UID (was wallet_address) */
   const d=payBal(data.balances,'daily'), w=payBal(data.balances,'weekly'), m=payBal(data.balances,'monthly_30x45');
   /* P17: card = TOTAL earned (available + not-yet-eligible) — ledger source of truth, dashboard-consistent.
      Sub-line: minimum + abhi-available + kab eligible. Request gating (eligible-only) UNCHANGED. */
@@ -986,10 +986,10 @@ async function loadAgentPayment(){
   agtMonthlyBal.textContent='$'+_tot(m);agtMonthlyMin.textContent=_sub(m);
   agtRequestButtons.innerHTML=[d,w,m].map(x=>`<button class="btn ${x.can_request?'btn-green':'btn-ghost'}" ${x.can_request?'':'disabled'} onclick="requestPayment('${x.payment_type}')">Request ${x.label}</button>`).join(' ');
   const rows=await API.get('/payment-v2/agent/requests');
-  agtPayBody.innerHTML=rows.map(r=>`<tr><td>#${r.id}</td><td>${r.payment_type}</td><td class="cell-money">$${r.amount}</td><td class="mono">${r.wallet_address}</td><td>${r.status}</td><td>${(r.requested_at||'').slice(0,19)}</td><td>${r.txid||'—'}</td><td>${r.screenshot_url?`<a href="${r.screenshot_url}" target="_blank">View</a>`:'—'}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:20px">No payment history</td></tr>`;agtPayInfo.textContent=`${rows.length} request(s)`;
+  agtPayBody.innerHTML=rows.map(r=>`<tr><td>#${r.id}</td><td>${r.payment_type}</td><td class="cell-money">$${r.amount}</td><td class="mono">${r.binance_uid||(r.wallet_address?r.wallet_address+' <span class="tag tag-gray" style="font-size:10px">legacy wallet</span>':'—')}</td><td>${r.status}</td><td>${(r.requested_at||'').slice(0,19)}</td><td>${r.txid||'—'}</td><td>${r.screenshot_url?`<a href="${r.screenshot_url}" target="_blank">View</a>`:'—'}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:20px">No payment history</td></tr>`;agtPayInfo.textContent=`${rows.length} request(s)`;
   const notes=await API.get('/payment-v2/agent/notifications').catch(()=>[]);agtPayNotifications.innerHTML=(notes||[]).slice(0,3).map(n=>`<div>• ${(n.created_at||'').slice(0,19)} — ${n.message}</div>`).join('')||'No payment notifications';
 }
-async function saveAgentWallet(){try{await API.put('/payment-v2/agent/wallet',{wallet_address:agtWallet.value.trim()});alert('✅ Wallet saved');loadAgentPayment();}catch(e){alert('❌ '+e.message)}}
+async function saveAgentWallet(){try{await API.put('/payment-v2/agent/wallet',{binance_uid:agtWallet.value.trim()});alert('✅ Binance UID saved');loadAgentPayment();}catch(e){alert('❌ '+e.message)}}
 async function requestPayment(type){if(!confirm('Submit '+type+' payment request?'))return;try{await API.post('/payment-v2/agent/request',{payment_type:type});alert('✅ Payment request submitted');loadAgentPayment();}catch(e){alert('❌ '+e.message)}}
 
 

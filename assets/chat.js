@@ -127,7 +127,7 @@
         <div class="gxc-list" id="gxcList"></div>
       </div>
       <div class="gxc-main" id="gxcMain">
-        <div class="gxc-empty">Koi conversation open nahi hai — list se select karo ya <b>+ New</b> se shuru karo.</div>
+        <div class="gxc-empty">No conversation is open yet — select one from the list or start a new one with <b>+ New</b>.</div>
       </div>
     </div>
     <div class="gxc-emoji-pop" id="gxcEmojiPop"></div>`;
@@ -183,7 +183,7 @@
       const names = S.scope === 'all' ? [c.user_a, c.user_b] : [c.other];
       return names.some(u => u && (u.name.toLowerCase().includes(S.q) || u.username.toLowerCase().includes(S.q))) || (c.last_message_text || '').toLowerCase().includes(S.q);
     });
-    el.innerHTML = rows.length ? '' : '<div class="gxc-empty">Koi chat nahi mili.</div>';
+    el.innerHTML = rows.length ? '' : '<div class="gxc-empty">No chats found.</div>';
     rows.forEach(c => {
       const who = S.scope === 'all' ? null : c.other;
       const title = who ? who.name : `${c.user_a.name} ↔ ${c.user_b.name}`;
@@ -223,7 +223,7 @@
     const list = $('gxcContactList'); if (!list) return;
     try {
       const users = await API.get('/chat/contacts?q=' + encodeURIComponent(q || '')) || [];
-      list.innerHTML = users.length ? '' : '<div class="gxc-empty">Koi permitted user nahi mila.</div>';
+      list.innerHTML = users.length ? '' : '<div class="gxc-empty">No permitted users found.</div>';
       users.forEach(u => {
         const d = document.createElement('div'); d.className = 'gxc-contact';
         d.innerHTML = `<div class="gxc-av a-${esc(u.role)}">${esc(u.name.charAt(0).toUpperCase())}</div>
@@ -235,7 +235,7 @@
         });
         list.appendChild(d);
       });
-    } catch (e) { list.innerHTML = '<div class="gxc-empty">Contacts load nahi hue.</div>'; }
+    } catch (e) { list.innerHTML = '<div class="gxc-empty">Contacts could not be loaded.</div>'; }
   }
   function ovRemove(id) { const el = $(id); if (el) el.remove(); }
   function closeModalIfAny(id) { ovRemove(id); }
@@ -295,7 +295,7 @@
       const b = document.createElement('button'); b.className = 'btn btn-ghost gxc-older'; b.textContent = 'Load older messages';
       b.addEventListener('click', loadOlder); el.appendChild(b);
     }
-    if (!msgs.length && fresh) { el.innerHTML += '<div class="gxc-empty">Abhi koi message nahi — pehla message bhejo.</div>'; return; }
+    if (!msgs.length && fresh) { el.innerHTML += '<div class="gxc-empty">No messages yet — send the first message.</div>'; return; }
     let lastDay = '';
     msgs.forEach(m => {
       const day = fmtDay(m.created_at);
@@ -487,6 +487,9 @@
          (SSE mode me per-message dingOnce pehle hi ho chuka hota hai; 2s throttle double ko rokta hai.) */
       if (prev !== null && b.chat > prev) playDing();
       setBadge('gxChatBadge', b.chat); setBadge('gxCompBadge', b.complaints);
+      /* P19j: floating Chat shortcut badge — same numbers as the sidebar badge (no separate tracking) */
+      const fb = $('gxChatFabBadge');
+      if (fb) { fb.textContent = b.chat > 99 ? '99+' : String(b.chat); fb.classList.toggle('show', b.chat > 0); }
     } catch (e) {}
   }
 
@@ -596,8 +599,8 @@
       <div class="modal-head"><h3>New Complaint</h3><button class="modal-close">×</button></div>
       <div class="modal-body">
         <div class="form-group"><label>Subject *</label><input type="text" id="gxcCSubject" maxlength="200" placeholder="Short subject"/></div>
-        <div class="form-group"><label>Complaint *</label><textarea id="gxcCBody" rows="5" maxlength="4000" style="width:100%" placeholder="Apni problem detail me likhein..."></textarea></div>
-        <div class="hint">Complaint seedha Admin ko jati hai. Range/number/rate requests yahan NAHI — wo apne panel pages se hote hain.</div>
+        <div class="form-group"><label>Complaint *</label><textarea id="gxcCBody" rows="5" maxlength="4000" style="width:100%" placeholder="Describe your issue in detail..."></textarea></div>
+        <div class="hint">Complaints go directly to the Admin team. Range/number/rate requests are NOT handled here — please use the relevant pages in your panel.</div>
       </div>
       <div class="modal-foot"><button class="btn btn-ghost" id="gxcCCancel">Cancel</button><button class="btn btn-blue" id="gxcCSend">Submit Complaint</button></div></div>`;
     document.body.appendChild(ov);
@@ -605,8 +608,8 @@
     $('gxcCCancel').addEventListener('click', () => ov.remove());
     $('gxcCSend').addEventListener('click', async () => {
       const subject = $('gxcCSubject').value.trim(), body = $('gxcCBody').value.trim();
-      if (!subject || !body) { alert('Subject aur message dono required hain.'); return; }
-      try { const r = await API.post('/complaints', { subject, body }); ov.remove(); alert('✅ Complaint #' + r.id + ' submitted — Admin ko mil gayi.'); loadComplaints(); refreshBadges(); }
+      if (!subject || !body) { alert('Both a subject and a message are required.'); return; }
+      try { const r = await API.post('/complaints', { subject, body }); ov.remove(); alert('✅ Complaint #' + r.id + ' submitted — it has been forwarded to the Admin team.'); loadComplaints(); refreshBadges(); }
       catch (e) { alert('❌ ' + e.message); }
     });
   }
@@ -626,7 +629,7 @@
         ${IS_ADMIN ? `<div class="form-group"><label>Update Status</label><div style="display:flex;gap:8px">
           <select id="gxcCStatus" style="width:auto"><option>Open</option><option>In Progress</option><option>Resolved</option></select>
           <button class="btn btn-blue" id="gxcCStatusBtn">Update Status</button></div></div>` : ''}
-        <div class="form-group"><label>Reply</label><textarea id="gxcCReply" rows="3" maxlength="4000" style="width:100%" placeholder="Reply likhein..."></textarea></div>
+        <div class="form-group"><label>Reply</label><textarea id="gxcCReply" rows="3" maxlength="4000" style="width:100%" placeholder="Write your reply..."></textarea></div>
       </div>
       <div class="modal-foot"><button class="btn btn-ghost" id="gxcCClose2">Close</button><button class="btn btn-blue" id="gxcCReplyBtn">Send Reply</button></div></div>`;
     document.body.appendChild(ov);
@@ -644,7 +647,7 @@
     if (!(c.replies || []).length) rep.innerHTML = '<div class="muted">No replies yet.</div>';
     $('gxcCReplyBtn').addEventListener('click', async () => {
       const body = $('gxcCReply').value.trim();
-      if (!body) { alert('Reply empty hai.'); return; }
+      if (!body) { alert('Your reply is empty.'); return; }
       try { await API.post(`/complaints/${c.id}/replies`, { body }); alert('✅ Reply sent'); openComplaint(c.id); }
       catch (e) { alert('❌ ' + e.message); }
     });
@@ -657,6 +660,44 @@
     }
   }
 
+  /* ================= P19j: floating Chat shortcut (bottom-right, stacked above the AI assistant button) =================
+     - Opens the EXISTING chat system (clicks the panel's own [data-page="chat"] nav item -> GXChat.open('chat')).
+     - Role permissions unchanged (server already enforces them); sidebar chat unchanged.
+     - Unread badge uses the EXISTING /chat/unread-count tracking (refreshBadges / SSE), not a second system. */
+  function positionChatFab() {
+    const fab = $('gxChatFab'); if (!fab) return;
+    const ai = document.getElementById('gxAssistantBtn');
+    const aiVisible = ai && window.getComputedStyle && window.getComputedStyle(ai).display !== 'none';
+    if (aiVisible) fab.classList.remove('gx-fab-solo'); else fab.classList.add('gx-fab-solo');
+  }
+  function ensureChatFab() {
+    if ($('gxChatFab')) return;
+    if (!document.querySelector('[data-page="chat"]')) return; /* panel without chat nav -> no shortcut */
+    const st = document.createElement('style');
+    st.id = 'gxChatFabCss';
+    st.textContent = '#gxChatFab{position:fixed;right:18px;bottom:82px;z-index:9998;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#25D9A4,#0EA5E9);color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;transition:transform .15s ease,box-shadow .15s ease}'
+      + '#gxChatFab:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.42)}'
+      + '#gxChatFab:focus-visible{outline:2px solid #30ABED;outline-offset:2px}'
+      + '#gxChatFab svg{width:24px;height:24px}'
+      + '#gxChatFab.gx-fab-solo{bottom:18px}'
+      + '#gxChatFabBadge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#FF5C7A;color:#fff;font-size:11.5px;font-weight:700;display:none;align-items:center;justify-content:center;border:2px solid rgba(7,13,31,.9)}'
+      + '#gxChatFabBadge.show{display:flex}'
+      + '@media(max-width:480px){#gxChatFab{right:12px;bottom:78px}#gxChatFab.gx-fab-solo{bottom:12px}}';
+    document.head.appendChild(st);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.id = 'gxChatFab'; btn.title = 'Chats'; btn.setAttribute('aria-label', 'Open chats');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span id="gxChatFabBadge"></span>';
+    btn.addEventListener('click', () => {
+      const nav = document.querySelector('[data-page="chat"]');
+      if (nav) nav.click(); /* panel's own router -> showPage('chat') -> GXChat.open('chat') */
+      else if (window.GXChat) GXChat.open('chat');
+    });
+    document.body.appendChild(btn);
+    positionChatFab();
+    /* AI assistant button (api.js) appears async after /assistant/status — re-check stacking */
+    setTimeout(positionChatFab, 1500); setTimeout(positionChatFab, 4000);
+  }
+
   /* ================= public API ================= */
   window.GXChat = {
     open(page) {
@@ -667,4 +708,17 @@
     refresh: () => { refreshBadges(); loadConvs(); },
     _state: S,
   };
+
+  /* P19j: floating Chat shortcut + live unread badge on every page (existing engine only).
+     startRealtime() is the EXISTING SSE/poll engine (guarded by S.started) — starting it on load
+     keeps the sidebar badge AND the floating badge live everywhere, exactly like after a chat visit.
+     Rollback: remove this block and bump ?v= back — nothing else depends on it. */
+  function fabInit() {
+    if (!ME.id) return; /* not logged in — api.js guard handles redirect */
+    ensureChatFab();
+    startRealtime();
+    refreshBadges();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fabInit);
+  else fabInit();
 })();

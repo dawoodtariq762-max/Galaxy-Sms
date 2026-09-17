@@ -1308,7 +1308,9 @@ function paymentCycleInfo(type, earnedAt){
   const per=schedulePeriodFor(type, date);
   return {cycle_key:per.start, eligible_at:utcSqlFromMs(per.payMs)};
 }
-function walletValid(v){ return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(v||'').trim()); }
+function walletValid(v){ return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(v||'').trim()); } /* legacy TRC20 check — pre-P19j records only */
+/* P19j: Binance UID = 8-12 digit numeric ID (Binance Pay profile). Deliberately not overly restrictive. */
+function binanceUidValid(v){ return /^\d{8,12}$/.test(String(v||'').trim()); }
 function agentManagerId(agentId){ return db.get("SELECT parent_id FROM users WHERE id=? AND role='agent'",[agentId])?.parent_id || null; }
 function recordPaymentLedgerForSms(smsId, persist=true){
   /* P16: priority 1) sms.payment_type (ingestion snapshot) 2) numbers.payterm (allocation)
@@ -3407,26 +3409,34 @@ app.put('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res
   rows.forEach(r=>{ const t=normalizePaymentType(r.payment_type); db.run('UPDATE payment_v2_settings SET min_withdrawal=?, updated_at=datetime(\'now\') WHERE payment_type=?',[normalizeDecimalString(r.min_withdrawal)||'0',t]); paymentAudit(req,'update_minimum',{payment_type:t,amount:r.min_withdrawal,status:'settings'}); });
   res.json({ok:true,settings:paymentTypesSettings()});
 });
-app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{wallet_address:'',network:'USDT_TRC20'}}));
-app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), (req,res)=>res.json(db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{wallet_address:'',network:'USDT_TRC20'}));
+app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}}));
+app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), (req,res)=>res.json(db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}));
 app.put('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), (req,res)=>{
-  const wallet=String(req.body?.wallet_address||'').trim(); if(!walletValid(wallet)) return res.status(400).json({error:'Invalid USDT TRC20 wallet. It should start with T and be 34 characters.'});
+  /* P19j: Binance UID replaces the USDT TRC20 wallet address. PREVIOUS behaviour: accepted
+     wallet_address, validated with walletValid() (T + 33 chars) and upserted agent_wallets.wallet_address
+     with network='USDT_TRC20'. Rollback: restore the old handler body below. Old wallet_address values
+     are NEVER deleted or overwritten — only binance_uid/network/updated_at are written now. */
+  const uid=String(req.body?.binance_uid ?? req.body?.wallet_address ?? '').trim();
+  if(!uid) return res.status(400).json({error:'Binance UID is required.'});
+  if(!binanceUidValid(uid)) return res.status(400).json({error:'Invalid Binance UID. It must be the 8-12 digit numeric UID from your Binance account.'});
   const ex=db.get('SELECT agent_id FROM agent_wallets WHERE agent_id=?',[req.user.id]);
-  if(ex) db.run('UPDATE agent_wallets SET wallet_address=?,network=\'USDT_TRC20\',updated_at=datetime(\'now\') WHERE agent_id=?',[wallet,req.user.id]);
-  else db.run('INSERT INTO agent_wallets (agent_id,wallet_address,network) VALUES (?,?,\'USDT_TRC20\')',[req.user.id,wallet]);
-  paymentAudit(req,'update_wallet',{agent_id:req.user.id,wallet_address:wallet,status:'saved'});
-  res.json({ok:true,wallet_address:wallet,network:'USDT_TRC20'});
+  if(ex) db.run("UPDATE agent_wallets SET binance_uid=?,network='BINANCE_UID',updated_at=datetime('now') WHERE agent_id=?",[uid,req.user.id]);
+  else db.run("INSERT INTO agent_wallets (agent_id,binance_uid,network) VALUES (?,?,'BINANCE_UID')",[req.user.id,uid]);
+  paymentAudit(req,'update_wallet',{agent_id:req.user.id,wallet_address:'',status:'saved',details:{binance_uid:uid}});
+  res.json({ok:true,binance_uid:uid,network:'BINANCE_UID'});
 });
 app.post('/api/payment-v2/agent/request', authRequired, requireRole('agent'), (req,res)=>{
+  /* P19j: request now requires a saved Binance UID (was: valid TRC20 wallet). Calculations, eligibility,
+     pending-duplicate and approval flow are UNCHANGED. PREVIOUS: walletValid(wallet.wallet_address) gate + wallet_address in INSERT. */
   const type=normalizePaymentType(req.body?.payment_type); const wallet=db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id]);
-  if(!wallet || !walletValid(wallet.wallet_address)) return res.status(400).json({error:'Save a valid USDT (TRC20) wallet first.'});
+  if(!wallet || !binanceUidValid(wallet.binance_uid)) return res.status(400).json({error:'Save your Binance UID first (Payment page).'});
   if(db.get("SELECT id FROM payment_requests_v2 WHERE agent_id=? AND payment_type=? AND status='Pending'",[req.user.id,type])) return res.status(409).json({error:'A pending request already exists for this payment type.'});
   const amount=paymentOpenBalance(req.user.id,type,true); const min=paymentMinimum(type); if(cents(amount)<=0 || cents(amount)<cents(min)) return res.status(400).json({error:`Minimum withdrawal not reached. Available ${amount}, minimum ${min}.`});
   const rows=db.all("SELECT id FROM payment_ledger WHERE agent_id=? AND payment_type=? AND status='open' AND eligible_at<=?",[req.user.id,type,utcSqlFromMs(Date.now())]); if(!rows.length) return res.status(400).json({error:'No eligible balance found.'});
   try{ db.execNoSave('BEGIN');
-    const ins=db.runNoSave(`INSERT INTO payment_requests_v2 (agent_id,manager_id,payment_type,amount,wallet_address,status) VALUES (?,?,?,?,?,'Pending')`,[req.user.id,agentManagerId(req.user.id),type,amount,wallet.wallet_address]);
+    const ins=db.runNoSave(`INSERT INTO payment_requests_v2 (agent_id,manager_id,payment_type,amount,wallet_address,binance_uid,status) VALUES (?,?,?,?,?,?, 'Pending')`,[req.user.id,agentManagerId(req.user.id),type,amount,'',wallet.binance_uid]);
     const ph=rows.map(()=>'?').join(','); db.runNoSave(`UPDATE payment_ledger SET status='requested',request_id=? WHERE id IN (${ph})`,[ins.lastInsertRowid,...rows.map(r=>r.id)]);
-    db.execNoSave('COMMIT'); db.save(); paymentNotify(req.user.id,ins.lastInsertRowid,'submitted',`${paymentTypeLabel(type)} payment request submitted: $${amount}`); paymentAudit(req,'request_submitted',{request_id:ins.lastInsertRowid,agent_id:req.user.id,manager_id:agentManagerId(req.user.id),payment_type:type,amount,wallet_address:wallet.wallet_address,status:'Pending'}); res.json({ok:true,id:ins.lastInsertRowid,amount,status:'Pending'});
+    db.execNoSave('COMMIT'); db.save(); paymentNotify(req.user.id,ins.lastInsertRowid,'submitted',`${paymentTypeLabel(type)} payment request submitted: $${amount}`); paymentAudit(req,'request_submitted',{request_id:ins.lastInsertRowid,agent_id:req.user.id,manager_id:agentManagerId(req.user.id),payment_type:type,amount,wallet_address:'',status:'Pending',details:{binance_uid:wallet.binance_uid}}); res.json({ok:true,id:ins.lastInsertRowid,amount,status:'Pending'});
   }catch(e){ try{db.execNoSave('ROLLBACK')}catch(_){} res.status(500).json({error:e.message}); }
 });
 app.get('/api/payment-v2/agent/requests', authRequired, requireRole('agent'), (req,res)=>res.json(db.all('SELECT * FROM payment_requests_v2 WHERE agent_id=? ORDER BY id DESC LIMIT 300',[req.user.id])));
@@ -3448,12 +3458,12 @@ app.get('/api/payment-v2/admin/requests', authRequired, requireRole('admin'), (r
 });
 app.post('/api/payment-v2/admin/requests/:id/reject', authRequired, requireRole('admin'), (req,res)=>{
   const id=+req.params.id; const r=db.get("SELECT * FROM payment_requests_v2 WHERE id=? AND status='Pending'",[id]); if(!r)return res.status(404).json({error:'Pending request not found'});
-  try{db.execNoSave('BEGIN'); db.runNoSave("UPDATE payment_requests_v2 SET status='Rejected',reject_reason=?,processed_by=?,rejected_at=datetime('now'),admin_notes=? WHERE id=?",[req.body?.reason||'',req.user.id,req.body?.notes||'',id]); db.runNoSave("UPDATE payment_ledger SET status='open',request_id=NULL WHERE request_id=?",[id]); db.execNoSave('COMMIT'); db.save(); paymentNotify(r.agent_id,id,'rejected',`${paymentTypeLabel(r.payment_type)} payment request rejected.`); paymentAudit(req,'request_rejected',{request_id:id,agent_id:r.agent_id,manager_id:r.manager_id,payment_type:r.payment_type,amount:r.amount,wallet_address:r.wallet_address,status:'Rejected',details:{reason:req.body?.reason||''}}); res.json({ok:true});}catch(e){try{db.execNoSave('ROLLBACK')}catch(_){} res.status(500).json({error:e.message});}
+  try{db.execNoSave('BEGIN'); db.runNoSave("UPDATE payment_requests_v2 SET status='Rejected',reject_reason=?,processed_by=?,rejected_at=datetime('now'),admin_notes=? WHERE id=?",[req.body?.reason||'',req.user.id,req.body?.notes||'',id]); db.runNoSave("UPDATE payment_ledger SET status='open',request_id=NULL WHERE request_id=?",[id]); db.execNoSave('COMMIT'); db.save(); paymentNotify(r.agent_id,id,'rejected',`${paymentTypeLabel(r.payment_type)} payment request rejected.`); paymentAudit(req,'request_rejected',{request_id:id,agent_id:r.agent_id,manager_id:r.manager_id,payment_type:r.payment_type,amount:r.amount,wallet_address:r.wallet_address,status:'Rejected',details:{reason:req.body?.reason||'',binance_uid:r.binance_uid||''}}); res.json({ok:true});}catch(e){try{db.execNoSave('ROLLBACK')}catch(_){} res.status(500).json({error:e.message});}
 });
 app.post('/api/payment-v2/admin/requests/:id/pay', authRequired, requireRole('admin'), upload.single('screenshot'), (req,res)=>{
   const id=+req.params.id; const r=db.get("SELECT * FROM payment_requests_v2 WHERE id=? AND status='Pending'",[id]); if(!r)return res.status(404).json({error:'Pending request not found'});
   let screenshotUrl=''; if(req.file&&req.file.buffer){ const dir=path.join(FRONTEND_ROOT,'uploads','payment-screenshots'); fs.mkdirSync(dir,{recursive:true}); const ext=(path.extname(req.file.originalname||'')||'.png').toLowerCase(); const file=`payment-${id}-${Date.now()}${ext}`; fs.writeFileSync(path.join(dir,file),req.file.buffer); screenshotUrl='/uploads/payment-screenshots/'+file; }
-  try{db.execNoSave('BEGIN'); db.runNoSave("UPDATE payment_requests_v2 SET status='Paid',processed_by=?,paid_at=datetime('now'),txid=?,screenshot_url=?,admin_notes=? WHERE id=?",[req.user.id,req.body?.txid||'',screenshotUrl,req.body?.notes||'',id]); db.runNoSave("UPDATE payment_ledger SET status='paid' WHERE request_id=?",[id]); db.execNoSave('COMMIT'); db.save(); paymentNotify(r.agent_id,id,'paid',`${paymentTypeLabel(r.payment_type)} payment sent: $${r.amount}`); paymentAudit(req,'payment_sent',{request_id:id,agent_id:r.agent_id,manager_id:r.manager_id,payment_type:r.payment_type,amount:r.amount,wallet_address:r.wallet_address,status:'Paid',details:{txid:req.body?.txid||'',screenshot_url:screenshotUrl,notes:req.body?.notes||''}}); res.json({ok:true,screenshot_url:screenshotUrl});}catch(e){try{db.execNoSave('ROLLBACK')}catch(_){} res.status(500).json({error:e.message});}
+  try{db.execNoSave('BEGIN'); db.runNoSave("UPDATE payment_requests_v2 SET status='Paid',processed_by=?,paid_at=datetime('now'),txid=?,screenshot_url=?,admin_notes=? WHERE id=?",[req.user.id,req.body?.txid||'',screenshotUrl,req.body?.notes||'',id]); db.runNoSave("UPDATE payment_ledger SET status='paid' WHERE request_id=?",[id]); db.execNoSave('COMMIT'); db.save(); paymentNotify(r.agent_id,id,'paid',`${paymentTypeLabel(r.payment_type)} payment sent: $${r.amount}`); paymentAudit(req,'payment_sent',{request_id:id,agent_id:r.agent_id,manager_id:r.manager_id,payment_type:r.payment_type,amount:r.amount,wallet_address:r.wallet_address,status:'Paid',details:{txid:req.body?.txid||'',screenshot_url:screenshotUrl,notes:req.body?.notes||'',binance_uid:r.binance_uid||''}}); res.json({ok:true,screenshot_url:screenshotUrl});}catch(e){try{db.execNoSave('ROLLBACK')}catch(_){} res.status(500).json({error:e.message});}
 });
 app.get('/api/payment-v2/admin/audit-logs', authRequired, requireRole('admin'), (req,res)=>res.json(db.all('SELECT * FROM payment_audit_logs ORDER BY id DESC LIMIT 1000')));
 

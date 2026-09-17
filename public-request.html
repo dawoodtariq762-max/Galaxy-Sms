@@ -55,12 +55,12 @@
     <div class="hero">
       <div class="pill"><span class="dot"></span> NEW CUSTOMER ONBOARDING</div>
       <h2>Get your Galaxy SMS panel account</h2>
-      <p>Simple 3-step process — request submit karein, email verify karein, aur hamari team review ke baad aap ka account ready kar degi.</p>
+      <p>A simple 3-step process — submit your request, verify your email, and our team prepares your account after review.</p>
       <div class="features">
-        <div class="feature"><b>✓ Email Verified</b><span>OTP se email ownership proof</span></div>
-        <div class="feature"><b>✓ Admin Reviewed</b><span>Har request manually approve hoti hai</span></div>
-        <div class="feature"><b>✓ Secure Setup</b><span>Password one-time secure link se set hota hai</span></div>
-        <div class="feature"><b>✓ Quick Turnaround</b><span>Approval ke baad foran access</span></div>
+        <div class="feature"><b>✓ Email Verified</b><span>Prove email ownership with a one-time code</span></div>
+        <div class="feature"><b>✓ Admin Reviewed</b><span>Every request is manually approved</span></div>
+        <div class="feature"><b>✓ Secure Setup</b><span>Your password is set via a one-time secure link</span></div>
+        <div class="feature"><b>✓ Quick Turnaround</b><span>Immediate access once approved</span></div>
       </div>
     </div>
   </div>
@@ -71,7 +71,7 @@
       <!-- STEP 1: request form -->
       <div id="stepForm">
         <h2>Request an account</h2>
-        <div class="sub">Apni details bharein — verification code email par aayega.</div>
+        <div class="sub">Fill in your details — a verification code will be sent to your email.</div>
         <div class="msg" id="fmsg"></div>
         <div class="field"><label>Full Name *</label><input type="text" id="fName" maxlength="80" placeholder="Your full name" autocomplete="name"/></div>
         <div class="field"><label>Email Address *</label><input type="email" id="fEmail" maxlength="190" placeholder="you@example.com" autocomplete="email"/></div>
@@ -85,7 +85,7 @@
           </select>
         </div>
         <div class="field"><label>Contact <span class="hint">(optional — WhatsApp/Telegram/phone)</span></label><input type="text" id="fContact" maxlength="60" placeholder="Optional"/></div>
-        <div style="font-size:12px;color:var(--muted);margin:14px 0 18px">Password aap khud approval email ke secure link se set karenge — abhi password enter karne ki zaroorat nahi.</div>
+        <div style="font-size:12px;color:var(--muted);margin:14px 0 18px">You will set your own password using the secure link in the approval email — no password is needed at this step.</div>
         <button class="btn" id="fSubmit" type="button">Send Verification Code</button>
         <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--muted)">Already have an account? <a href="/panel-login">Login here</a></div>
       </div>
@@ -94,7 +94,7 @@
       <div id="stepOtp" style="display:none">
         <div class="steps"><div class="st on"><span class="n">1</span> Request</div><i></i><div class="st on"><span class="n">2</span> Verify Email</div><i></i><div class="st"><span class="n">3</span> Review</div></div>
         <h2>Verify your email</h2>
-        <div class="sub">Hum ne 6-digit code bheja hai <b id="otpEmail"></b> par. Wo code neeche enter karein.</div>
+        <div class="sub">We have sent a 6-digit code to <b id="otpEmail"></b>. Enter that code below.</div>
         <div class="msg" id="omsg"></div>
         <div class="otp-box">
           <input type="text" inputmode="numeric" maxlength="1" class="oc"/><input type="text" inputmode="numeric" maxlength="1" class="oc"/><input type="text" inputmode="numeric" maxlength="1" class="oc"/><input type="text" inputmode="numeric" maxlength="1" class="oc"/><input type="text" inputmode="numeric" maxlength="1" class="oc"/><input type="text" inputmode="numeric" maxlength="1" class="oc"/>
@@ -108,7 +108,7 @@
       <div class="success" id="stepDone">
         <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
         <h2>Request submitted!</h2>
-        <div class="sub" style="margin-top:10px">Aap ka email verify ho gaya ✅<br/>Request <b id="doneId"></b> hamari team ke review me hai.<br/>Approval ke baad <b>welcome email</b> aap ke email par aayega jis me panel URL, username aur password setup link hoga.</div>
+        <div class="sub" style="margin-top:10px">Your email has been verified ✅<br/>Request <b id="doneId"></b> is now with our team for review.<br/>Once approved, a <b>welcome email</b> with the panel URL, your username and a password setup link will arrive in your inbox.</div>
       </div>
     </div>
   </div>
@@ -137,7 +137,7 @@
       document.querySelector('.oc').focus();
     } catch(e) {
       if (e.data && e.data.needs_otp && e.data.request_id) { /* pehla OTP re-request case */
-        REQ_ID = e.data.request_id; $('otpEmail').textContent = $('fEmail').value.trim(); show('stepOtp'); startResendCountdown(); msg('omsg','Is email ke liye request pehle se pending hai — naya code mangne ke liye Resend use karein.','err');
+        REQ_ID = e.data.request_id; $('otpEmail').textContent = $('fEmail').value.trim(); show('stepOtp'); startResendCountdown(); msg('omsg','A request for this email is already pending — use Resend to get a new code.','err');
       } else msg('fmsg', e.message, 'err');
     }
     busy = false; $('fSubmit').disabled = false;
@@ -151,7 +151,7 @@
   });
   $('oVerify').addEventListener('click', async function(){
     if (busy || !REQ_ID) return; var code = boxes.map(function(b){return b.value;}).join('');
-    if (!/^\d{6}$/.test(code)) { msg('omsg','6-digit code enter karein.','err'); return; }
+    if (!/^\d{6}$/.test(code)) { msg('omsg','Please enter the 6-digit code.','err'); return; }
     busy = true; $('oVerify').disabled = true; msg('omsg','');
     try {
       await call('/pubreq/otp/verify', { request_id: REQ_ID, otp: code });
@@ -175,7 +175,7 @@
   }
   $('resendLink').addEventListener('click', async function(e){
     e.preventDefault(); if (busy || !REQ_ID) return; busy = true; msg('omsg','');
-    try { var j = await call('/pubreq/otp/resend', { request_id: REQ_ID }); TTL = j.ttl_minutes || TTL; msg('omsg','Naya code bhej diya gaya — email check karein.','ok'); startResendCountdown(); }
+    try { var j = await call('/pubreq/otp/resend', { request_id: REQ_ID }); TTL = j.ttl_minutes || TTL; msg('omsg','A new code has been sent — please check your email.','ok'); startResendCountdown(); }
     catch(err){ msg('omsg', err.message, 'err'); }
     busy = false;
   });
