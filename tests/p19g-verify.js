@@ -129,10 +129,10 @@ async function bootPanel(page, tok, user, withSSE) {
   for (const f of ['admin.html', 'manager.html', 'agent.html', 'client.html']) {
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
     if (!s.includes('/assets/chat.js?v=gxchat')) panelsOk = false;
-    if (!s.includes('/assets/chat.js?v=gxchat3')) verOk = false;
+    if (!s.includes('/assets/chat.js?v=gxchat4')) verOk = false;
   }
   t('A5 all 4 panels load chat.js (cache-busted ?v=)', panelsOk);
-  t('A6 all 4 panels bumped to ?v=gxchat2', verOk);
+  t('A6 all 4 panels bumped to ?v=gxchat4 (P19k responsive update)', verOk);
   const srvSrc = fs.readFileSync(path.join(ROOT, 'backend/chat.js'), 'utf8');
   t('A7 backend heartbeat emits named event (hb) — old clients ignore, new watchdog use', srvSrc.includes("sseSend(res, 'hb'"));
 

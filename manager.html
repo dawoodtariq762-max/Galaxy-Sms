@@ -695,7 +695,7 @@
   <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('agentModal')">Cancel</button><button class="btn btn-teal" onclick="saveAgent()">Save</button></div>
 </div></div>
 
-<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat3"></script>
+<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat4"></script>
 <script>
 if(window.API){ API.guard('manager'); }
 /* ===== NAV ===== */
@@ -942,11 +942,19 @@ function buildSmsDetail(){
   <div class="toolbar">
     <div class="filter-row"><label><input type="checkbox" id="sdUseDate" checked style="width:auto" onchange="renderSmsDetail()"> Date</label><input type="date" id="sdDateFrom" title="From date" onchange="renderSmsDetail()" /> <span class="muted" style="align-self:center">to</span> <input type="date" id="sdDateTo" title="To date" onchange="renderSmsDetail()" />
     <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="toggleDetailFilters()"> Time</label><input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
-    <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters()"> CLI</label>
-    <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters()"> Number-wise</label>
-    <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
-    <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters()"> Agent</label>
+    <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters('cli')"> CLI</label>
+    <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters('number')"> Number-wise</label>
+    <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters('range')"> Range</label>
+    <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters('agent')"> Agent</label>
     <button class="btn btn-teal" onclick="renderSmsDetail()">Apply Filter</button><button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button></div>
+    <!-- P19k #2: DIRECT multi-filter selects (CLI + Range + Agent) — AND-combine, Date/Time ke
+         saath bhi. Provider filter admin-only hai (backend bhi enforce karta hai). -->
+    <div class="filter-row" style="margin-top:6px">
+      <label style="min-width:34px">Filters</label>
+      <select class="sel-lg" id="sdSelCli" onchange="sdSelPick('cli',this.value)"><option value="">All CLIs</option></select>
+      <select class="sel-lg" id="sdSelRange" onchange="sdSelPick('range',this.value)"><option value="">All Ranges</option></select>
+      <select class="sel-lg" id="sdSelAgent" onchange="sdSelPick('agent',this.value)"><option value="">All Agents</option></select>
+    </div>
     <div class="hint">Ticking a dimension lists its values in the results (from current data: SMS count + payout) — click a value to see only its results. Filters combine (AND).</div>
     <div id="sdChips" style="display:flex;flex-wrap:wrap;align-items:center"></div>
   </div>
@@ -954,20 +962,68 @@ function buildSmsDetail(){
     <div class="tc-left"><label>Show Records:</label><select id="sdLen" onchange="renderSmsDetail()"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option><option>1000</option><option>10000</option><option value="All">All</option></select>${eb()}</div>
     <div class="tc-right"><label>Search:</label><input type="text" id="sdSearch" oninput="renderSmsDetail()" placeholder="Search..."/></div></div></div>
   <div class="table-wrap"><div class="tscroll"><table><thead id="sdHead"></thead><tbody id="sdBody"></tbody></table></div>
-    <div class="table-foot"><div class="info" id="sdInfo"></div><div class="info" id="sdPayoutInfo"></div><div class="pagination"></div></div></div>`;var _f3=document.getElementById('sdDateFrom'),_t3=document.getElementById('sdDateTo');if(_f3)_f3.value='';if(_t3)_t3.value='';renderSmsDetail();}
+    <div class="table-foot"><div class="info" id="sdInfo"></div><div class="info" id="sdPayoutInfo"></div><div class="pagination"></div></div></div>`;var _f3=document.getElementById('sdDateFrom'),_t3=document.getElementById('sdDateTo');if(_f3)_f3.value='';if(_t3)_t3.value='';renderSmsDetail();fillSdFilterSelects();}
 /* P19 facet state (manager): dims = cli, number, range, agent */
 function sdActiveTicks(){ const m=[]; if(typeof sdUseCli!=='undefined'&&sdUseCli&&sdUseCli.checked)m.push('cli'); if(typeof sdUseNumber!=='undefined'&&sdUseNumber&&sdUseNumber.checked)m.push('number'); if(typeof sdUseRange!=='undefined'&&sdUseRange&&sdUseRange.checked)m.push('range'); if(typeof sdUseUser!=='undefined'&&sdUseUser&&sdUseUser.checked)m.push('agent'); return m; }
 function sdSelParams(exclude){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',agent:''}); const out={}; for(const k of ['cli','number','range','agent']){ if(k!==exclude&&sel[k]) out[k]=sel[k]; } return out; }
 function sdPick(dim,val){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',agent:''}); sel[dim]=val; window.__sdDrill=dim; renderSmsDetail(); }
 function sdUnpick(dim){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',agent:''}); sel[dim]=''; if(window.__sdDrill===dim)window.__sdDrill=''; renderSmsDetail(); }
 function sdChipsHtml(){ const sel=window.__sdSel||{}; const lbl={cli:'CLI',number:'Number',range:'Range',agent:'Agent'}; const out=[]; for(const k of ['cli','number','range','agent']){ if(sel[k]){ const v=String(sel[k]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); out.push(`<span class="gx-chip">${lbl[k]}: <b>${v}</b> <span class="x" onclick="sdUnpick('${k}')" title="Remove filter">&#10005;</span></span>`); } } return out.join(''); }
-function toggleDetailFilters(){
-  /* P19: selects gone — facet design. Checkbox sirf Time gate karta hai; tick change drill reset. */
+function toggleDetailFilters(dim){
+  /* P19: checkbox Time gate karta hai; tick change drill reset. */
+  /* P19k #2: dim arg ke saath tick-ORDER track — facet list ab LAST ticked dim dikhati hai. */
   const _t=document.getElementById('sdUseTime').checked;document.getElementById('sdTimeFrom').disabled=!_t;document.getElementById('sdTimeTo').disabled=!_t;
+  if(dim){
+    window.__sdTickOrder=(window.__sdTickOrder||[]).filter(d=>d!==dim);
+    const cb={cli:'sdUseCli',number:'sdUseNumber',range:'sdUseRange',agent:'sdUseUser'}[dim];
+    const el=document.getElementById(cb);
+    if(el&&el.checked)window.__sdTickOrder.push(dim);
+  }
   window.__sdDrill='';
   renderSmsDetail();
 }
-function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',agent:''};gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
+/* P19k #2: dropdown direct pick — facet-click wahi pick state share karta hai (chips). */
+function sdSelPick(dim,val){
+  const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',agent:''});
+  sel[dim]=String(val||'');
+  window.__sdDrill='';
+  renderSmsDetail();
+}
+function sdSyncFilterSelects(){
+  const sel=window.__sdSel||{};
+  const map={cli:'sdSelCli',range:'sdSelRange',agent:'sdSelAgent'};
+  for(const k of Object.keys(map)){
+    const el=document.getElementById(map[k]);
+    if(el){const want=String(sel[k]||'');if(el.value!==want)el.value=want;}
+  }
+}
+/* P19k #2: selects populate — Range (scoped /api/ranges), CLI (existing /api/sms/clis),
+   Agent (existing /api/users/agent). Provider NAHI (admin-only). */
+async function fillSdFilterSelects(){
+  const escOpt=(v)=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  try{
+    const rsel=document.getElementById('sdSelRange');
+    if(rsel&&rsel.options.length<=1){
+      const ranges=await API.get('/ranges');
+      rsel.innerHTML='<option value="">All Ranges</option>'+((ranges||[]).map(r=>`<option value="${escOpt(r.name)}">${escOpt(r.name)}</option>`).join(''));
+    }
+    const csel=document.getElementById('sdSelCli');
+    if(csel&&csel.options.length<=1){
+      try{const rj=await API.get('/sms/clis?from=1970-01-01&to=2099-12-31');
+        const items=(rj.items&&rj.items.length)?rj.items:(rj.clis||[]).map(c=>({cli:c,count:null}));
+        csel.innerHTML='<option value="">All CLIs</option>'+items.map(x=>`<option value="${escOpt(x.cli)}">${escOpt(x.cli)}${x.count!=null?' ('+x.count+' OTPs)':''}</option>`).join('');
+      }catch(e){csel.innerHTML='<option value="">All CLIs</option>';}
+    }
+    const asel=document.getElementById('sdSelAgent');
+    if(asel&&asel.options.length<=1){
+      if(!agentsData.length){try{agentsData=await API.get('/users/agent');}catch(e){}}
+      const names=unique((agentsData||[]).map(a=>a.username));
+      asel.innerHTML='<option value="">All Agents</option>'+names.map(n=>`<option value="${escOpt(n)}">${escOpt(n)}</option>`).join('');
+    }
+    sdSyncFilterSelects();
+  }catch(e){console.warn(e)}
+}
+function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',agent:''};window.__sdTickOrder=[];gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
 function groupRows(rows,key,label){const map={};rows.forEach(r=>{const k=r[key]||'—';if(!map[k])map[k]={name:k,sms:0,pay:'0'};map[k].sms++;map[k].pay=decAdd(map[k].pay,r.payout_amount||r.payout_rate||0);});const arr=Object.values(map);return {head:`<tr><th>${label}</th><th>Total OTPs</th><th>Total Payout</th></tr>`,rows:arr.map(x=>`<tr><td><span class="tag tag-agt">${x.name}</span></td><td class="cell-money">${x.sms}</td><td class="cell-money">${money(x.pay)}</td></tr>`)};}
 function inSmsDateRange(receivedAt){
   var d = ukDateOf(receivedAt || '');
@@ -1119,7 +1175,14 @@ function pxPickRate(r){
   return 'NA';
 }
 function rebuildBa(){baData=(rateCard||[]).map(r=>{const nums=(numData||[]).filter(n=>n.range===r.range);const alloc=nums.filter(n=>n.agent).length;return{id:r.id,range:r.range,total:nums.length,alloc,avail:nums.length-alloc,rate:pxPickRate(r)};});}
-async function loadRateCard(){ try{const ranges=await API.get('/ranges'); rateCard=ranges.map(r=>({id:r.id,range:r.name,prefix:r.prefix,cur:r.currency,r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,test_number:r.test_number})); rangeNames=rateCard.map(r=>r.range) }catch(e){ rateCard=[]; rangeNames=[]; testNumbers=[]; } renderRateCard(); fillSel('numRange',rangeNames); fillSel('testRange',rangeNames); }
+async function loadRateCard(){
+  /* P19k #8: Rate Card = SAB configured ranges (/api/rate-card, public fields only).
+     numRange/testRange selectors scoped /api/ranges se (P19f inventory visibility untouched). */
+  try{ rateCard=(await API.get('/rate-card')).map(r=>({range:r.name,prefix:r.prefix,cur:r.currency,r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type})); }catch(e){ rateCard=[]; }
+  renderRateCard();
+  try{ const scoped=await API.get('/ranges'); rangeNames=(scoped||[]).map(r=>r.name); }catch(e){ rangeNames=[]; }
+  fillSel('numRange',rangeNames); fillSel('testRange',rangeNames);
+}
 async function loadNumbers(){ return renderNumbers(); }
 async function loadAgents(){ try{ agentsData=await API.get('/users/agent'); }catch(e){ agentsData=[]; } refreshAgentClientMaps(); fillSel('numAgent',myAgents);fillSel('bulkAgent',myAgents);fillSel('baAgent',myAgents); renderAgents(); if(document.getElementById('clBody')) renderClients(); if(document.getElementById('sdAgent')){fillSel('sdAgent',myAgents);document.getElementById('sdAgent').children[0].textContent='Filter Agent';} }
 async function loadClients(){ try{ clientsData=await API.get('/users/client'); }catch(e){ clientsData=[]; } refreshAgentClientMaps(); if(document.getElementById('clBody')) {buildClients();} }
@@ -1167,7 +1230,7 @@ async function loadManagerPageData(page){
     if(page==='agents'){ buildAgents(); return loadAgents(); }
     if(page==='clients'){ buildClients(); return loadClients(); }
     if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return loadSms(); }
-    if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); return loadSms(); }
+    if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); fillSdFilterSelects(); return loadSms(); }
     if(['clientStats','agentStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'Body')) buildEntity(k); return loadSms(); }
     if(['rangeStats','numberStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'Body')) buildDrill(k); return loadSms(); }
     if(page==='test'){ await loadRateCard(); await loadTestNumbers(); return renderTest(); }
@@ -1207,8 +1270,11 @@ async function renderSmsDetail(){if(!document.getElementById('sdBody'))return;
   /* P19 FACET: tick+no-drill => dim values list (stats-summary, server-scoped); drill/no-tick => detail rows */
   const ticks=sdActiveTicks(); const drill=window.__sdDrill||'';
   const dimLabel={cli:'CLI',number:'Number',range:'Range',agent:'Agent'};
+  sdSyncFilterSelects();
   if(!drill && ticks.length){
-    const by=ticks[0]; /* priority: cli > number > range > agent */
+    /* P19k #2: LAST ticked dimension (fallback: pehla ticked) */
+    const order=(window.__sdTickOrder||[]).filter(d=>ticks.includes(d));
+    const by=order.length?order[order.length-1]:ticks[0];
     const fp=sdSelParams(by);
     const params=new URLSearchParams({from:dateFrom,to:dateTo});
     if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal); if(search)params.set('search',search);

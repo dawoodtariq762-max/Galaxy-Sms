@@ -592,7 +592,7 @@
 
 
 <div class="modal-overlay" id="walletHelpModal"><div class="modal" style="max-width:720px"><div class="modal-head"><h3>How to find your Binance UID</h3><button class="modal-close" onclick="closeModal('walletHelpModal')">×</button></div><div class="modal-body"><div class="hint" style="margin-bottom:12px"><b>Warning:</b> Payments are sent to the Binance UID you save here. Please double-check your UID before saving — entering an incorrect UID can result in funds being sent to the wrong account. You are responsible for the accuracy of your Binance UID.</div><div class="card"><b>Step 1 — Open the Binance app</b><div class="hint">Log in to the Binance app on your phone.</div></div><div class="card"><b>Step 2 — Go to your Profile</b><div class="hint">Tap the profile icon (top left on the home screen).</div></div><div class="card"><b>Step 3 — Find your UID</b><div class="hint">Your Binance UID is shown on the profile page, right under your name (a number of 8–12 digits).</div></div><div class="card"><b>Step 4 — Copy and paste it here</b><div class="hint">Copy the full number and paste it into the Binance UID field, then save.</div></div><div class="card"><b>Using the Binance website instead</b><div class="hint">Log in at binance.com → hover over your profile icon (top right) → your Binance UID is displayed in the dropdown menu under your email. Copy that number and paste it here.</div></div></div></div></div>
-<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat3"></script>
+<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat4"></script>
 <script>
 if(window.API){ API.guard('agent'); }
 /* NAV */
@@ -796,11 +796,18 @@ function buildSmsDetail(){
   <div class="toolbar">
     <div class="filter-row"><label><input type="checkbox" id="sdUseDate" checked style="width:auto" onchange="renderSmsDetail()"> Date</label><input type="date" id="sdDateFrom" title="From date" onchange="renderSmsDetail()" /> <span class="muted" style="align-self:center">to</span> <input type="date" id="sdDateTo" title="To date" onchange="renderSmsDetail()" />
     <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="toggleDetailFilters()"> Time</label><input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
-    <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters()"> CLI</label>
-    <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters()"> Number-wise</label>
-    <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
-    <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters()"> Client</label>
+    <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters('cli')"> CLI</label>
+    <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters('number')"> Number-wise</label>
+    <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters('range')"> Range</label>
+    <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters('client')"> Client</label>
     <button class="btn btn-blue" onclick="renderSmsDetail()">Apply Filter</button><button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button></div>
+    <!-- P19k #2: DIRECT multi-filter selects (CLI + Range + Client) — AND-combine, Date/Time ke saath. Provider admin-only hai. -->
+    <div class="filter-row" style="margin-top:6px">
+      <label style="min-width:34px">Filters</label>
+      <select class="sel-lg" id="sdSelCli" onchange="sdSelPick('cli',this.value)"><option value="">All CLIs</option></select>
+      <select class="sel-lg" id="sdSelRange" onchange="sdSelPick('range',this.value)"><option value="">All Ranges</option></select>
+      <select class="sel-lg" id="sdSelClient" onchange="sdSelPick('client',this.value)"><option value="">All Clients</option></select>
+    </div>
     <div class="hint">Ticking a dimension lists its values in the results (from current data: SMS count + payout) — click a value to see only its results. Filters combine (AND).</div>
     <div id="sdChips" style="display:flex;flex-wrap:wrap;align-items:center"></div>
   </div>
@@ -815,13 +822,58 @@ function sdSelParams(exclude){ const sel=(window.__sdSel=window.__sdSel||{cli:''
 function sdPick(dim,val){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',client:''}); sel[dim]=val; window.__sdDrill=dim; renderSmsDetail(); }
 function sdUnpick(dim){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',client:''}); sel[dim]=''; if(window.__sdDrill===dim)window.__sdDrill=''; renderSmsDetail(); }
 function sdChipsHtml(){ const sel=window.__sdSel||{}; const lbl={cli:'CLI',number:'Number',range:'Range',client:'Client'}; const out=[]; for(const k of ['cli','number','range','client']){ if(sel[k]){ const v=String(sel[k]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); out.push(`<span class="gx-chip">${lbl[k]}: <b>${v}</b> <span class="x" onclick="sdUnpick('${k}')" title="Remove filter">&#10005;</span></span>`); } } return out.join(''); }
-function toggleDetailFilters(){
-  /* P19: selects gone — facet design. Checkbox sirf Time gate karta hai; tick change drill reset. */
+function toggleDetailFilters(dim){
+  /* P19k #2: dim arg ke saath tick-ORDER track — facet list ab LAST ticked dim dikhati hai. */
   const _t=document.getElementById('sdUseTime').checked;document.getElementById('sdTimeFrom').disabled=!_t;document.getElementById('sdTimeTo').disabled=!_t;
+  if(dim){
+    window.__sdTickOrder=(window.__sdTickOrder||[]).filter(d=>d!==dim);
+    const cb={cli:'sdUseCli',number:'sdUseNumber',range:'sdUseRange',client:'sdUseUser'}[dim];
+    const el=document.getElementById(cb);
+    if(el&&el.checked)window.__sdTickOrder.push(dim);
+  }
   window.__sdDrill='';
   renderSmsDetail();
 }
-function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',client:''};gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
+/* P19k #2: dropdown direct pick — facet-click wahi pick state (chips) share karta hai. */
+function sdSelPick(dim,val){
+  const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',client:''});
+  sel[dim]=String(val||'');
+  window.__sdDrill='';
+  renderSmsDetail();
+}
+function sdSyncFilterSelects(){
+  const sel=window.__sdSel||{};
+  const map={cli:'sdSelCli',range:'sdSelRange',client:'sdSelClient'};
+  for(const k of Object.keys(map)){
+    const el=document.getElementById(map[k]);
+    if(el){const want=String(sel[k]||'');if(el.value!==want)el.value=want;}
+  }
+}
+async function fillSdFilterSelects(){
+  const escOpt=(v)=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  try{
+    const rsel=document.getElementById('sdSelRange');
+    if(rsel&&rsel.options.length<=1){
+      const ranges=await API.get('/ranges');
+      rsel.innerHTML='<option value="">All Ranges</option>'+((ranges||[]).map(r=>`<option value="${escOpt(r.name)}">${escOpt(r.name)}</option>`).join(''));
+    }
+    const csel=document.getElementById('sdSelCli');
+    if(csel&&csel.options.length<=1){
+      try{const rj=await API.get('/sms/clis?from=1970-01-01&to=2099-12-31');
+        const items=(rj.items&&rj.items.length)?rj.items:(rj.clis||[]).map(c=>({cli:c,count:null}));
+        csel.innerHTML='<option value="">All CLIs</option>'+items.map(x=>`<option value="${escOpt(x.cli)}">${escOpt(x.cli)}${x.count!=null?' ('+x.count+' OTPs)':''}</option>`).join('');
+      }catch(e){csel.innerHTML='<option value="">All CLIs</option>';}
+    }
+    const cll=document.getElementById('sdSelClient');
+    if(cll&&cll.options.length<=1){
+      if(!clientsData.length){try{clientsData=await API.get('/users/client');}catch(e){}}
+      refreshClients();
+      cll.innerHTML='<option value="">All Clients</option>'+unique(myClients||[]).map(n=>`<option value="${escOpt(n)}">${escOpt(n)}</option>`).join('');
+    }
+    sdSyncFilterSelects();
+  }catch(e){console.warn(e)}
+}
+function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',client:''};window.__sdTickOrder=[];gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
 function groupRows(rows,key,label){const map={};rows.forEach(r=>{const k=r[key]||'—';if(!map[k])map[k]={name:k,sms:0,pay:'0'};map[k].sms++;map[k].pay=decAdd(map[k].pay,r.payout_amount||r.payout_rate||0);});const arr=Object.values(map);return {head:`<tr><th>${label}</th><th>Total OTPs</th><th>Total Payout</th></tr>`,rows:arr.map(x=>`<tr><td><span class="tag tag-cli">${x.name}</span></td><td class="cell-money">${x.sms}</td><td class="cell-money">${money(x.pay)}</td></tr>`)};}
 function inSmsDateRange(receivedAt){
   var d = ukDateOf(receivedAt || '');
@@ -962,7 +1014,15 @@ function pxPickRate(r){
   return 'NA';
 }
 function rebuildBa(){baData=(rateCard||[]).map(r=>{const nums=(numData||[]).filter(n=>n.range===r.range);const alloc=nums.filter(n=>n.client).length;return{id:r.id,range:r.range,total:nums.length,alloc,avail:nums.length-alloc,rate:pxPickRate(r)};});}
-async function loadRateCard(){ try{const ranges=await API.get('/ranges'); rateCard=ranges.map(r=>({id:r.id,range:r.name,cur:r.currency,r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,test_number:r.test_number})); rangeNames=rateCard.map(r=>r.range) }catch(e){ rateCard=[]; rangeNames=[]; testNumbers=[]; } renderRateCard(); fillSel('numRange',rangeNames); }
+async function loadRateCard(){
+  /* P19k #8: Rate Card ab SAB configured ranges dikhata hai (inventory scope NAHI — naya
+     /api/rate-card, public fields only). Selectors (numRange) scoped /api/ranges se hi
+     bharte hain (P19f inventory visibility untouched). */
+  try{ rateCard=(await API.get('/rate-card')).map(r=>({range:r.name,cur:r.currency,r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type})); }catch(e){ rateCard=[]; }
+  renderRateCard();
+  try{ const scoped=await API.get('/ranges'); rangeNames=(scoped||[]).map(r=>r.name); }catch(e){ rangeNames=[]; }
+  fillSel('numRange',rangeNames);
+}
 async function loadNumbers(){ return renderNumbers(); }
 async function loadClients(){ try{ clientsData=await API.get('/users/client'); }catch(e){ clientsData=[]; } refreshClients(); refreshClientSelects(); renderClients(); }
 async function loadSms(){ try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; } cdr=(smsRecords||[]).map(smsToCdr); recentTests=(smsRecords||[]).slice(0,50).map(r=>({date:(r.received_at||'').slice(0,19),range:r.range_name||'—',num:r.number||'',cli:r.cli||'',msg:r.message||''})); refreshClients(); const byCli={};smsRecords.forEach(r=>{const c=r.client_name||'—';byCli[c]=(byCli[c]||0)+1;});const b=document.getElementById('clSumBody');if(b)b.innerHTML=Object.keys(byCli).map(c=>`<tr><td><span class="tag tag-cli">${c}</span></td><td class="cell-money">${byCli[c]}</td><td class="cell-money" style="color:#86efac">$ ${sumPay((smsRecords||[]).filter(r=>r.client_name===c))}</td></tr>`).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:16px">No records found</td></tr>`; if(document.getElementById('srBody'))renderSmsReport();if(document.getElementById('sdBody'))renderSmsDetail();if(document.getElementById('csBody'))renderClientStats();['range','number'].forEach(k=>{if(document.getElementById(k+'Body')){renderDrill(k);}});}
@@ -1003,7 +1063,7 @@ async function loadAgentPageData(page){
     if(page==='chat') return window.GXChat?GXChat.open('chat'):null;
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
     if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return loadSms(); }
-    if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); return loadSms(); }
+    if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); fillSdFilterSelects(); return loadSms(); }
     if(page==='clientStats'){ if(!document.getElementById('csBody')) buildClientStats(); return loadSms(); }
     if(['rangeStats','numberStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'Body')) buildDrill(k); return loadSms(); }
     if(page==='payment') return loadAgentPayment();
@@ -1040,9 +1100,12 @@ async function renderSmsDetail(){if(!document.getElementById('sdBody'))return;
   /* P19 FACET: tick+no-drill => dim values list (stats-summary, server-scoped); drill/no-tick => detail rows.
      P19: Time window (tfrom/tto) ab agent me bhi manager/admin jaisa kaam karta hai (pehle checkbox vestigial tha). */
   const ticks=sdActiveTicks(); const drill=window.__sdDrill||'';
+  sdSyncFilterSelects();
   const dimLabel={cli:'CLI',number:'Number',range:'Range',client:'Client'};
   if(!drill && ticks.length){
-    const by=ticks[0]; /* priority: cli > number > range > client */
+    /* P19k #2: LAST ticked dimension (fallback: pehla ticked) */
+    const _ord=(window.__sdTickOrder||[]).filter(d=>ticks.includes(d));
+    const by=_ord.length?_ord[_ord.length-1]:ticks[0];
     const fp=sdSelParams(by);
     const params=new URLSearchParams({from:dateFrom,to:dateTo});
     if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);

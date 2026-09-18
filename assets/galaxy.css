@@ -165,6 +165,10 @@ a:hover{color:var(--accent)}
 .gx-dash-grid{display:grid;grid-template-columns:repeat(4,minmax(210px,1fr));gap:14px}
 .gx-dash-grid .stat-card{min-height:104px}
 .gx-dash-sub{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 4px}
+/* P19k #1 (responsive): payout/provider-cost chips — 4-chip rows balanced wrap
+   (tablet par 2-col, mobile par 1-col). Pehle sirf 480px par 100% tha. */
+.gx-dash-sub .gx-pay-chip{flex:1 1 220px;min-width:0}
+@media(max-width:620px){.gx-dash-sub .gx-pay-chip{flex:1 1 100%}}
 .gx-pay-chip{flex:1 1 220px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
 .gx-pay-chip .t{color:var(--muted);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700}
 .gx-pay-chip .v{font-size:22px;font-weight:750;color:#fff;font-variant-numeric:tabular-nums;margin-top:4px}

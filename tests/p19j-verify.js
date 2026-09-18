@@ -155,9 +155,9 @@ async function bootPanel(page, tok, user, opts = {}) {
   let verOk = true;
   for (const f of ['admin.html', 'manager.html', 'agent.html', 'client.html']) {
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
-    if (!s.includes('/assets/chat.js?v=gxchat3')) verOk = false;
+    if (!s.includes('/assets/chat.js?v=gxchat4')) verOk = false;
   }
-  t('A12 all 4 panels bumped ?v=gxchat3 (chat.js changed)', verOk);
+  t('A12 all 4 panels bumped ?v=gxchat4 (P19k responsive update)', verOk);
   t('A13 chat.js: floating shortcut exists, opens EXISTING chat via panel nav router', chatSrc.includes('gxChatFab') && chatSrc.includes('nav.click()'));
   t('A14 chat.js: FAB badge fed by EXISTING unread tracking (no second system)', chatSrc.includes("setBadge('gxChatBadge', b.chat)") && chatSrc.includes('gxChatFabBadge') && !/unread-count-fab|fab-unread/.test(chatSrc));
   t('A15 chat.js: responsive rule + stacked above AI assistant button', chatSrc.includes('@media(max-width:480px){#gxChatFab') && chatSrc.includes('gxAssistantBtn'));

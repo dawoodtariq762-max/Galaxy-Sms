@@ -34,7 +34,12 @@
 
   /* ================= CSS (scoped, Galaxy theme) ================= */
   const CSS = `
-#page-chat .gx-chat,#page-complaints .gx-comp{height:calc(100vh - 132px);min-height:420px}
+/* P19k #1 (responsive): dvh (dynamic viewport) + tuned offsets.
+   Purane values: desktop calc(100vh - 132px), mobile calc(100vh - 118px) — mobile par
+   topbar 2-line wrap (P14 date row) + page-head ke saath ~150-170px hota hai, to chat
+   grid viewport se bahar jata tha aur input bar fold ke neeche chhup jati thi.
+   dvh = mobile browser URL-bar ke saath sahi; purane browsers ko vh fallback milta hai. */
+#page-chat .gx-chat,#page-complaints .gx-comp{height:calc(100vh - 132px);height:calc(100dvh - 132px);min-height:420px}
 #page-chat .gx-chat{display:grid;grid-template-columns:330px 1fr;gap:14px}
 .gxc-side{display:flex;flex-direction:column;border:1px solid var(--px-border,rgba(120,140,190,.25));border-radius:16px;background:var(--px-surface,#0D142C);overflow:hidden}
 .gxc-tabs{display:flex;gap:6px;padding:10px 10px 0}
@@ -70,6 +75,8 @@
 .gxc-row.theirs{align-self:flex-start;align-items:flex-start}
 .gxc-sender{font-size:10.5px;font-weight:700;color:var(--px-accent,#30ABED);margin:0 4px 2px}
 .gxc-bubble{padding:8px 12px;border-radius:14px;font-size:13.5px;line-height:1.45;word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;max-width:100%}
+/* P19k #1: pathological long unbroken strings (URLs/keys) — bubble width ke andar hi wrap */
+.gxc-bubble{overflow-wrap:anywhere}
 .gxc-row.mine .gxc-bubble{background:linear-gradient(135deg,rgba(48,171,237,.22),rgba(127,24,179,.20));border:1px solid rgba(48,171,237,.30);border-bottom-right-radius:4px;color:var(--px-text,#E7EAF8)}
 .gxc-row.theirs .gxc-bubble{background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));border-bottom-left-radius:4px;color:var(--px-text,#E7EAF8)}
 .gxc-mmeta{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--px-dim,#7A83A8);margin:2px 4px 0}
@@ -98,7 +105,9 @@
 .gxc-citem{cursor:pointer}
 .gx-comp{display:flex;flex-direction:column;gap:12px}
 @media(max-width:900px){
-  #page-chat .gx-chat{grid-template-columns:1fr;height:calc(100vh - 118px)}
+  /* P19k #1: 78+16+62+12 ≈ 168px header stack (wrapped topbar + page-head + paddings) */
+  #page-chat .gx-chat,#page-complaints .gx-comp{height:calc(100vh - 170px);height:calc(100dvh - 170px);min-height:300px}
+  #page-chat .gx-chat{grid-template-columns:1fr;height:calc(100vh - 170px);height:calc(100dvh - 170px)}
   .gxc-main{display:none}
   .gxc-side{height:100%}
   #page-chat .gx-chat.conv-open .gxc-main{display:flex;position:fixed;inset:0;z-index:1200;border-radius:0;height:100%}
@@ -106,6 +115,23 @@
   .gxc-back{display:flex;align-items:center;justify-content:center}
   .gxc-row{max-width:88%}
   .gxc-emoji-pop{left:8px;right:8px;bottom:70px}
+}
+/* P19k #1: short landscape phones/tablets — min-height 420 yahan layout todta tha
+   (page fold ke neeche input), ab compact aur scroll-free */
+@media(max-width:900px) and (max-height:560px){
+  #page-chat .gx-chat,#page-complaints .gx-comp{height:calc(100vh - 140px);height:calc(100dvh - 140px);min-height:220px}
+  .gxc-av{width:30px;height:30px;min-width:30px;font-size:12px}
+  .gxc-item{padding:7px 9px}
+  .gxc-msgs{padding:8px}
+  .gxc-input{min-height:34px;font-size:12.5px;padding:6px 10px}
+  .gxc-send{height:34px;min-width:34px;padding:0 10px;font-size:12px}
+  .gxc-emojibtn{width:32px;height:32px;min-width:32px}
+  .gxc-head{padding:6px 10px}
+}
+@media(max-width:480px){
+  .gxc-row{max-width:92%}
+  .gxc-search{padding:8px}
+  .gxc-list{padding:2px 4px 8px}
 }`;
 
   function ensureStyle() { if (!$('gx-chat-style')) { const st = document.createElement('style'); st.id = 'gx-chat-style'; st.textContent = CSS; document.head.appendChild(st); } }
@@ -244,6 +270,7 @@
   async function openConv(conv, isAdminAllView) {
     S.convId = conv.id; S.other = conv.other || null; S.isAdminAll = !!isAdminAllView;
     const root = $('gxcRoot'); if (root) root.classList.add('conv-open');
+    updateFabVisibility();
     const main = $('gxcMain');
     const who = S.other ? S.other : (conv.user_a && conv.user_b ? (conv.user_a.id === ME.id ? conv.user_b : conv.user_a) : null);
     const title = (S.isAdminAll && conv.user_a && conv.user_b) ? (conv.user_a.name + ' ↔ ' + conv.user_b.name) : (who ? who.name : 'Conversation #' + conv.id);
@@ -261,7 +288,7 @@
         <textarea class="gxc-input" id="gxcInput" rows="1" maxlength="2000" placeholder="Type a message..."></textarea>
         <button class="gxc-send" id="gxcSend" type="button">Send</button>
       </div>`;
-    $('gxcBack').addEventListener('click', () => { root.classList.remove('conv-open'); S.convId = null; renderConvList(); });
+    $('gxcBack').addEventListener('click', () => { root.classList.remove('conv-open'); S.convId = null; updateFabVisibility(); renderConvList(); });
     $('gxcEmojibtn').addEventListener('click', (e) => { e.stopPropagation(); $('gxcEmojiPop').classList.toggle('show'); });
     const inp = $('gxcInput');
     inp.addEventListener('input', () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 110) + 'px'; $('gxcSend').disabled = !inp.value.trim(); });
@@ -670,6 +697,32 @@
     const aiVisible = ai && window.getComputedStyle && window.getComputedStyle(ai).display !== 'none';
     if (aiVisible) fab.classList.remove('gx-fab-solo'); else fab.classList.add('gx-fab-solo');
   }
+  /* P19k #1 (responsive): FAB ko hide karo jab chat/complaints page ACTIVE ho ya mobile par
+     fullscreen conversation khula ho. Pehle FAB (z 9998) open conversation (z 1200) ke UPAR
+     float karta tha aur chat page par input/send area ke upar baitha rehta tha.
+     Panel-agnostic: .page.active class changes par MutationObserver (kisi bhi panel ke
+     apne router par depend nahi). Rollback: observer disconnect + CSS class hatayein. */
+  function chatPageActive() {
+    const pg = document.querySelector('.page.active');
+    if (!pg) return false;
+    const id = (pg.id || '').toLowerCase();
+    return id === 'page-chat' || id === 'page-complaints';
+  }
+  function updateFabVisibility() {
+    const fab = $('gxChatFab'); if (!fab) return;
+    const root = $('gxcRoot');
+    const hide = chatPageActive() || !!(root && root.classList.contains('conv-open'));
+    fab.classList.toggle('gx-fab-hidden', hide);
+  }
+  let fabObserverStarted = false;
+  function startFabVisibilityObserver() {
+    if (fabObserverStarted) return; fabObserverStarted = true;
+    try {
+      const mo = new MutationObserver(() => updateFabVisibility());
+      mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+      updateFabVisibility();
+    } catch (e) { /* jsdom/purane engines — fallback: sirf open/close par update */ }
+  }
   function ensureChatFab() {
     if ($('gxChatFab')) return;
     if (!document.querySelector('[data-page="chat"]')) return; /* panel without chat nav -> no shortcut */
@@ -680,6 +733,7 @@
       + '#gxChatFab:focus-visible{outline:2px solid #30ABED;outline-offset:2px}'
       + '#gxChatFab svg{width:24px;height:24px}'
       + '#gxChatFab.gx-fab-solo{bottom:18px}'
+      + '#gxChatFab.gx-fab-hidden{display:none}'
       + '#gxChatFabBadge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#FF5C7A;color:#fff;font-size:11.5px;font-weight:700;display:none;align-items:center;justify-content:center;border:2px solid rgba(7,13,31,.9)}'
       + '#gxChatFabBadge.show{display:flex}'
       + '@media(max-width:480px){#gxChatFab{right:12px;bottom:78px}#gxChatFab.gx-fab-solo{bottom:12px}}';
@@ -694,6 +748,7 @@
     });
     document.body.appendChild(btn);
     positionChatFab();
+    startFabVisibilityObserver();
     /* AI assistant button (api.js) appears async after /assistant/status — re-check stacking */
     setTimeout(positionChatFab, 1500); setTimeout(positionChatFab, 4000);
   }

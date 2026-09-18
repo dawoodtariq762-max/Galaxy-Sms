@@ -1244,6 +1244,20 @@ function payoutRateForPaymentCycle(row, cycle){
   return '0';
 }
 function payoutRateForPaymentType(row, type){ return payoutRateForPaymentCycle(row, type); }
+/* P19k #4: Provider Rate for a payment cycle — payoutRateForPaymentCycle ke EXACT candidate
+   order wala mirror (daily: 1/1 -> 7/1 -> 30/45; weekly_7_7: 7/7 -> 7/1 -> ...; waghera),
+   lekin sirf provider_rate_* columns se (number-level override provider rate pe lagu
+   NAHI hota — provider rate range-level internal cost hai). NA/0 => '0' => cost me hissa
+   nahi. Admin-internal: sirf Real Provider Cost calculation use karta hai. */
+function providerRateForPaymentCycle(row, cycle){
+  cycle = normalizePaymentCycle(cycle);
+  const candidates = cycle==='daily' ? [row.provider_rate_1_1,row.provider_rate_7_1,row.provider_rate_30_45]
+    : (cycle==='weekly_7_7' ? [row.provider_rate_7_7,row.provider_rate_7_1,row.provider_rate_30_45,row.provider_rate_1_1]
+    : (cycle==='monthly_30x45' ? [row.provider_rate_30_45,row.provider_rate_7_1,row.provider_rate_1_1]
+    : [row.provider_rate_7_1,row.provider_rate_7_7,row.provider_rate_30_45,row.provider_rate_1_1]));
+  for (const c of candidates) { const v = normalizeDecimalString(c); if (isPositiveDecimal(v)) return v; }
+  return '0';
+}
 function cents(v){ return Math.round((parseFloat(normalizeDecimalString(v)||'0')||0)*100); }
 function moneyFromCents(c){ return (Math.max(0, Math.round(c||0))/100).toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'); }
 function ukParts(date=new Date()){
@@ -1371,27 +1385,53 @@ app.get('/api/ranges', authRequired, (req, res) => cachedJson(req, res, 5000, ()
     scopeIds = new Set(db.all(`SELECT DISTINCT n.range_id FROM numbers n WHERE n.range_id IS NOT NULL AND ${sc.where}`, sc.params).map(r => r.range_id));
     if (!scopeIds.size) return [];
   }
+  /* P19k #4: provider_rate_* columns ab SELECT me hain, lekin response jaane se pehle
+     NON-ADMIN ke liye strip ho jati hain (admin-internal field — Rate Management only). */
+  const stripProviderRates = (rows) => {
+    if (!req.user || req.user.role === 'admin') return rows;
+    return (rows || []).map(r => {
+      const c = { ...r };
+      delete c.provider_rate_1_1; delete c.provider_rate_7_1; delete c.provider_rate_7_7; delete c.provider_rate_30_45;
+      return c;
+    });
+  };
   if (!includeTests) {
-    return db.all(`SELECT r.id,r.name,r.prefix,r.currency,r.rate_1_1,r.rate_7_1,r.rate_7_7,r.rate_30_45,r.memo,r.payment_type,r.created_at,r.deleted_at,r.country,r.provider,r.currency_rate,r.cli_limit,r.range_start,r.range_end,r.status,'' AS test_number,'' AS test_numbers
+    return stripProviderRates(db.all(`SELECT r.id,r.name,r.prefix,r.currency,r.rate_1_1,r.rate_7_1,r.rate_7_7,r.rate_30_45,r.memo,r.payment_type,r.created_at,r.deleted_at,r.country,r.provider,r.currency_rate,r.cli_limit,r.range_start,r.range_end,r.status,r.provider_rate_1_1,r.provider_rate_7_1,r.provider_rate_7_7,r.provider_rate_30_45,'' AS test_number,'' AS test_numbers
       FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`)
-      .filter(r => !scopeIds || scopeIds.has(r.id));
+      .filter(r => !scopeIds || scopeIds.has(r.id)));
   }
-  const rows = db.all(`SELECT r.*,
+  const rows = stripProviderRates(db.all(`SELECT r.*,
     COALESCE((SELECT GROUP_CONCAT(test_number, ', ') FROM range_test_numbers t WHERE t.range_id=r.id AND t.active=1), r.test_number, '') AS test_numbers
     FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`)
-    .filter(r => !scopeIds || scopeIds.has(r.id));
+    .filter(r => !scopeIds || scopeIds.has(r.id)));
   rows.forEach(r => { if (r.test_numbers) r.test_number = r.test_numbers; });
   return rows;
 }));
+
+/* P19k #8: SMS Rate Card data — SAB configured (non-deleted) ranges, chahe unme inventory
+   ho ya na ho. Owner rule: Rate Card me inventory-restricted visibility NAHI lagti (wo
+   sirf baaki selectors me hai — /api/ranges role-scope P19f jaisa hi hai, untouched).
+   Sirf wahi roles jinke panels me Rate Card page hai (admin/manager/agent). Client nahi.
+   Response PUBLIC fields only: provider rates / memo / internal flags yahan kabhi nahi. */
+app.get('/api/rate-card', authRequired, (req, res) => {
+  if (!['admin', 'manager', 'agent'].includes(req.user.role)) return res.status(403).json({ error: 'Not allowed' });
+  return cachedJson(req, res, 5000, () => {
+    return db.all(`SELECT r.id, r.name, r.prefix, r.currency, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45, r.payment_type
+      FROM ranges r WHERE COALESCE(r.deleted_at,'')='' ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`);
+  }, 'numbers_ver');
+});
+
 // only admin can set rates / create ranges
 app.post('/api/ranges', authRequired, requireRole('admin'), (req, res) => {
   const b = req.body || {};
   if (!b.name) return res.status(400).json({ error: 'Range name required' });
-  const ins = db.run(`INSERT INTO ranges (name,prefix,test_number,currency,rate_1_1,rate_7_1,rate_7_7,rate_30_45,memo,payment_type,country,provider,currency_rate,cli_limit,range_start,range_end,status)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  /* P19k #4: provider_rate_* (admin-internal, 'NA' default — ranges.rate_* convention) */
+  const ins = db.run(`INSERT INTO ranges (name,prefix,test_number,currency,rate_1_1,rate_7_1,rate_7_7,rate_30_45,memo,payment_type,country,provider,currency_rate,cli_limit,range_start,range_end,status,provider_rate_1_1,provider_rate_7_1,provider_rate_7_7,provider_rate_30_45)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [b.name, b.prefix || '', '', b.currency || 'USD',
      b.rate_1_1 || 'NA', b.rate_7_1 || 'NA', b.rate_7_7 || 'NA', b.rate_30_45 || 'NA', b.memo || '', normalizePaymentType(b.payment_type || b.payterm || 'weekly'),
-     b.country || '', b.provider || '', b.currency_rate || '', b.cli_limit || '', b.range_start || '', b.range_end || '', b.status || 'Active']);
+     b.country || '', b.provider || '', b.currency_rate || '', b.cli_limit || '', b.range_start || '', b.range_end || '', b.status || 'Active',
+     b.provider_rate_1_1 || 'NA', b.provider_rate_7_1 || 'NA', b.provider_rate_7_7 || 'NA', b.provider_rate_30_45 || 'NA']);
   const newRange = db.get('SELECT id FROM ranges WHERE name=? ORDER BY id DESC LIMIT 1', [b.name]);
   syncRangeTestNumbers(newRange ? newRange.id : ins.lastInsertRowid, b.test_numbers || b.test_number || '');
   logAction(req,'create_range','ranges',b.name);
@@ -1622,10 +1662,12 @@ app.post('/api/ranges/import', authRequired, requireRole('admin'), (req,res)=>{
 });
 app.put('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => {
   const b = req.body || {};
-  db.run(`UPDATE ranges SET name=?,prefix=?,currency=?,rate_1_1=?,rate_7_1=?,rate_7_7=?,rate_30_45=?,memo=?,payment_type=?,country=?,provider=?,currency_rate=?,cli_limit=?,range_start=?,range_end=?,status=? WHERE id=?`,
+  /* P19k #4: provider_rate_* bhi admin hi set kar sakta hai (route admin-only hai) */
+  db.run(`UPDATE ranges SET name=?,prefix=?,currency=?,rate_1_1=?,rate_7_1=?,rate_7_7=?,rate_30_45=?,memo=?,payment_type=?,country=?,provider=?,currency_rate=?,cli_limit=?,range_start=?,range_end=?,status=?,provider_rate_1_1=?,provider_rate_7_1=?,provider_rate_7_7=?,provider_rate_30_45=? WHERE id=?`,
     [b.name, b.prefix || '', b.currency || 'USD',
      b.rate_1_1 || 'NA', b.rate_7_1 || 'NA', b.rate_7_7 || 'NA', b.rate_30_45 || 'NA', b.memo || '', normalizePaymentType(b.payment_type || 'weekly'),
-     b.country || '', b.provider || '', b.currency_rate || '', b.cli_limit || '', b.range_start || '', b.range_end || '', b.status || 'Active', +req.params.id]);
+     b.country || '', b.provider || '', b.currency_rate || '', b.cli_limit || '', b.range_start || '', b.range_end || '', b.status || 'Active',
+     b.provider_rate_1_1 || 'NA', b.provider_rate_7_1 || 'NA', b.provider_rate_7_7 || 'NA', b.provider_rate_30_45 || 'NA', +req.params.id]);
   syncRangeTestNumbers(+req.params.id, b.test_numbers || b.test_number || '');
   logAction(req,'update_range','ranges',{id:+req.params.id});
   try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
@@ -1640,12 +1682,17 @@ app.delete('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => 
   let rangeSmsDeleted = 0, rangeSmsPreserved = 0;
   const rangeSmsCount = db.get('SELECT COUNT(*) c FROM sms_records WHERE range_id=?', [rangeId])?.c || 0;
   if (deleteSms) {
-    /* P19b FIX: ye orphan SMS rows (inki numbers pehle delete ho chuki thin, is liye
-       upar wale deleteNumbersWhere ne inhe nahi chhoda) stats me abhi bhi ginti hoti
-       thin — dashboard par deleted data dikhta rehta tha. Ab delete se pehle unka
-       stats-decrement ho jata hai (wahi shared DST-safe helper). */
-    try { decrementSmsDailyStats('range_id=?', [rangeId]); } catch (e) { console.warn('[DELETE-RANGE] stats decrement failed:', e.message); }
+    /* P19b FIX (P19k #5 me resync-based upgrade): ye orphan SMS rows (inki numbers pehle
+       delete ho chuki thin, is liye upar wale deleteNumbersWhere ne inhe nahi chhoda)
+       stats me abhi bhi ginti hoti thin — ab delete se pehle affected keys collect hoti
+       hain aur records delete hone ke BAAD exact-resync unhe remaining records se
+       recompute karta hai (pre-existing drift bhi heal). */
+    let affKeys = [];
+    try { affKeys = planSmsStatsResync('range_id=?', [rangeId]); } catch (e) { console.warn('[DELETE-RANGE] stats key collection failed:', e.message); }
     db.run('DELETE FROM sms_records WHERE range_id=?', [rangeId]);
+    let res = { deferred: false };
+    try { res = resyncStatsKeys(affKeys); } catch (e) { console.warn('[DELETE-RANGE] stats resync failed:', e.message); }
+    if (res.deferred) scheduleStatsFullRebuild('range-delete');
     rangeSmsDeleted = rangeSmsCount;
   } else {
     rangeSmsPreserved = rangeSmsCount;
@@ -2368,29 +2415,95 @@ function truthy(v) { return v === true || v === 1 || v === '1' || String(v || ''
    karti (edge/mismatch), to negative row insert hoti hai aur neeche wali cleanup use hata
    deti hai — stats KABHI inflate nahi hoti (purana code missing-key par POSITIVE phantom
    row bana deta tha). */
-function decrementSmsDailyStats(whereSql, params = []) {
-  const statRows = db.all(`SELECT received_at, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
-      COALESCE(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL),0) pay
+/* P19k #5 (CRITICAL): delete-path stats EXACT-RESYNC.
+   Purana decrementSmsDailyStats (deleted rows ko subtract karna) tabhi sahi tha jab
+   sms_daily_stats pehle se bilkul sahi thi. Live DB me purane (pre-P18/P19) deletes ka
+   drift baaqi reh gaya tha — dashboard ab bhi deleted SMS gin raha tha aur decrement
+   drift ko kabhi theek nahi karta tha (sirf aur-minus karta tha).
+   Ab: delete se PEHLE affected keys (stat_date|manager|agent|client|cli) collect hoti
+   hain; sms_records delete hone ke BAAD har affected key ko BAAKI sms_records se
+   AUTHORITATIVELY recompute karke exact value likhi jaati hai:
+     - stale/over-count rows -> sahi ho jati hain (drift heal)
+     - lost/under-count rows -> wapas create hoti hain
+     - zero-remaining keys -> row remove ho jati hai
+   Keying wahi hai jo ingest (recordSmsStats/ukStatDate) use karta hai.
+   Rollback: purana decrement body wapas la dein (statAgg negative VALUES +
+   'sms_count<=0' cleanup) — lekin phir pre-existing drift heal nahi hoga. */
+const STATS_RESYNC_MAX_KEYS = 4000; /* is se zyada keys => inline O(keys) queries bajaye background full rebuild */
+function affectedStatsKeys(whereSql, params = []) {
+  const rows = db.all(`SELECT received_at, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli
     FROM sms_records WHERE COALESCE(is_test,0)=0 AND (${whereSql})`, params);
-  const statAgg = new Map();
-  for (const r of statRows) {
+  const seen = new Map();
+  for (const r of rows) {
     const sd = ukStatDate(r.received_at); /* same conversion as recordSmsStats at ingest */
     const k = sd + '|' + r.mgr + '|' + r.ag + '|' + r.cl + '|' + r.cli;
-    const cur = statAgg.get(k);
-    if (cur) { cur.c += 1; cur.pay += r.pay; }
-    else statAgg.set(k, { sd, mgr: r.mgr, ag: r.ag, cl: r.cl, cli: r.cli, c: 1, pay: r.pay });
+    if (!seen.has(k)) seen.set(k, { sd, mgr: r.mgr, ag: r.ag, cl: r.cl, cli: r.cli });
   }
-  statAgg.forEach(m => {
-    db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
-      VALUES (?,?,?,?,?,-?,-?)
-      ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
-      DO UPDATE SET sms_count = sms_count + excluded.sms_count,
-                    payout_sum = payout_sum + excluded.payout_sum`,
-      [m.sd, m.mgr, m.ag, m.cl, m.cli, m.c, m.pay]);
-  });
-  db.runNoSave(`DELETE FROM sms_daily_stats WHERE sms_count <= 0`);
-  return statRows.length;
+  return [...seen.values()];
 }
+/** Har affected key ko remaining sms_records se exact recompute karke likhta hai.
+ *  Return: { keys, corrected, deferred } — deferred=true => caller ko background full
+ *  rebuild schedule karna hai (bohat zyada keys the, inline skip). */
+function resyncStatsKeys(keys) {
+  if (!keys || !keys.length) return { keys: 0, corrected: 0, deferred: false };
+  if (keys.length > STATS_RESYNC_MAX_KEYS) return { keys: keys.length, corrected: 0, deferred: true };
+  let corrected = 0;
+  for (const k of keys) {
+    /* UK-day bucket = [uk-midnight(sd), uk-midnight(sd+1)) — ukStatDate ke exact equivalent,
+       DST-safe (har din apne offset se convert hota hai — ukLocalDateToUtcSql). */
+    const wFrom = ukLocalDateToUtcSql(k.sd, 0);
+    const wTo = ukLocalDateToUtcSql(k.sd, 1);
+    const truth = db.get(`SELECT COUNT(*) c, COALESCE(SUM(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL)),0) p
+      FROM sms_records
+      WHERE COALESCE(is_test,0)=0
+        AND COALESCE(manager_id,-1)=? AND COALESCE(agent_id,-1)=? AND COALESCE(client_id,-1)=?
+        AND COALESCE(cli,'')=? AND received_at >= ? AND received_at < ?`,
+      [k.mgr, k.ag, k.cl, k.cli, wFrom, wTo]);
+    const existing = db.get(`SELECT sms_count, payout_sum FROM sms_daily_stats
+      WHERE stat_date=? AND manager_id=? AND agent_id=? AND client_id=? AND cli=?`,
+      [k.sd, k.mgr, k.ag, k.cl, k.cli]);
+    const wantC = truth ? (truth.c || 0) : 0;
+    const wantP = truth ? (truth.p || 0) : 0;
+    const curC = existing ? existing.sms_count : null;
+    const curP = existing ? existing.payout_sum : null;
+    const same = existing && curC === wantC && Math.abs((curP || 0) - wantP) < 1e-9;
+    if (same) continue;
+    corrected++;
+    if (wantC > 0) {
+      db.runNoSave(`INSERT INTO sms_daily_stats (stat_date,manager_id,agent_id,client_id,cli,sms_count,payout_sum)
+        VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(stat_date,manager_id,agent_id,client_id,cli)
+        DO UPDATE SET sms_count = excluded.sms_count, payout_sum = excluded.payout_sum`,
+        [k.sd, k.mgr, k.ag, k.cl, k.cli, wantC, wantP]);
+    } else if (existing) {
+      db.runNoSave(`DELETE FROM sms_daily_stats
+        WHERE stat_date=? AND manager_id=? AND agent_id=? AND client_id=? AND cli=?`,
+        [k.sd, k.mgr, k.ag, k.cl, k.cli]);
+    }
+  }
+  return { keys: keys.length, corrected, deferred: false };
+}
+/** Bohat bade deletes ke liye: poora sms_daily_stats table background me authoritative
+ *  rebuild (existing chunked backfill engine — reset semantics). Request inline nahi rukti. */
+function scheduleStatsFullRebuild(reason = 'delete') {
+  setImmediate(() => {
+    try {
+      if (backfillRunning) return; /* already running — wo hi authoritative rebuild hai */
+      console.log('[STATS-RESYNC] large delete -> background full rebuild (' + reason + ')');
+      db.runNoSave('DELETE FROM sms_daily_stats');
+      setMeta('stats_backfill_max_id', '0');
+      setMeta('stats_backfill_done', '0');
+      backfillSmsStats(null).then(r => {
+        try { logAction({}, 'stats_full_rebuild', 'system', { reason, ...r }); } catch (_) {}
+      }).catch(e => console.error('[STATS-RESYNC] rebuild failed:', e.message));
+    } catch (e) { console.error('[STATS-RESYNC] schedule failed:', e.message); }
+  });
+}
+/** Compat wrapper: delete flows isko call karte hain — keys collect, (caller delete karta
+ *  hai), phir exact resync. Yahan dono ek saath: rows delete hone se PEHLE keys nikaal kar
+ *  return karta hai; resyncStatsKeys caller DELETE ke baad chalata hai. */
+function planSmsStatsResync(whereSql, params = []) { return affectedStatsKeys(whereSql, params); }
+
 
 function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = false) {
   const cleanRows = (rows || [])
@@ -2400,6 +2513,7 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
   if (!count) return { deleted: 0, deleted_sms: 0, preserved_sms: 0, vacuum: false };
 
   let smsCount = 0;
+  let deferredRebuild = false;
   try {
     db.execNoSave('BEGIN TRANSACTION');
     db.execNoSave('DROP TABLE IF EXISTS tmp_delete_numbers');
@@ -2412,20 +2526,21 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
       WHERE number_id IN (SELECT id FROM tmp_delete_numbers)
          OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`)?.c || 0;
     if (deleteSms) {
-      /* P18: pre-aggregated dashboard/stats counters bhi isi transaction mein kam karo,
-        taake deleted SMS dashboard totals / CVR / stats se foran gayab ho jayen.
+      /* P18: pre-aggregated dashboard/stats counters bhi isi transaction mein theek hote hain,
+        taake deleted SMS dashboard totals / stats se foran gayab ho jayen.
         Sirf non-test rows (wahi stats mein ginti hoti hai). */
-      /* P19 FIX: stat_date ki keying ab INGEST jaisi per-row DST-safe hai (ukStatDate).
-        Purana code SQL date(received_at, '<current-offset>') use karta tha — jab delete
-        UK DST boundary ke paar wale purane SMS par chalta tha (e.g. July ka data November
-        me delete), to key mismatch hota tha: decrement naye (galat) key par row banata,
-        'sms_count<=0' cleanup usse hata deta, aur ASLI stats row UNCHANGED reh jati —
-        deleted SMS dashboard/stats me dikhte rehte the. Rollback: purana GROUP BY SQL. */
-      decrementSmsDailyStats(`number_id IN (SELECT id FROM tmp_delete_numbers)
-           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`);
-      db.runNoSave(`DELETE FROM sms_records
-        WHERE number_id IN (SELECT id FROM tmp_delete_numbers)
-           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`);
+      /* P19k #5 FIX: decrement ki jagah EXACT-RESYNC — delete se pehle affected keys
+        collect, records delete hone ke baad har key ko remaining sms_records se
+        authoritative recompute. Pre-existing drift (purane deletes ka leftover) bhi
+        isi delete par heal ho jata hai — dashboard hamesha remaining records se derive
+        hota hai. Rollback: purana decrementSmsDailyStats + DELETE (P19 comment history). */
+      const delWhere = `number_id IN (SELECT id FROM tmp_delete_numbers)
+           OR number IN (SELECT number FROM tmp_delete_numbers WHERE number<>'')`;
+      const affKeys = planSmsStatsResync(delWhere);
+      db.runNoSave(`DELETE FROM sms_records WHERE ${delWhere}`);
+      let res = { deferred: false };
+      try { res = resyncStatsKeys(affKeys); } catch (e) { console.warn('[DELETE-NUMBERS] stats resync failed:', e.message); }
+      if (res.deferred) { deferredRebuild = true; }
       /* Note: payment_ledger rows jaan-boojh kar rakhi (historical immutability) — balances Sahi rehte hain */
     }
     db.runNoSave('DELETE FROM numbers WHERE id IN (SELECT id FROM tmp_delete_numbers)');
@@ -2436,6 +2551,7 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
     try { db.execNoSave('ROLLBACK'); } catch (_) {}
     throw e;
   }
+  if (deferredRebuild) scheduleStatsFullRebuild('numbers-delete');
 
   // Do not VACUUM after every delete; it rewrites the whole DB and makes small delete/range actions feel frozen.
   const vacuum = false;
@@ -2692,7 +2808,10 @@ function buildSmsPagedQuery(user, q = {}) {
   if (q.number) { where.push('s.number=?'); params.push(String(q.number)); }
   if (q.cli) { where.push('s.cli=?'); params.push(String(q.cli)); }
   /* P14: Provider = ranges.provider (real existing relationship). Admin-only UI exposure. */
-  if (q.provider) { where.push("COALESCE(r.provider,'')=?"); params.push(String(q.provider)); }
+  /* P19k #3: ab BACKEND bhi enforce karta hai — Manager/Agent/Client se aaya provider
+     param silently ignore hota hai (sirf UI hide karna kaafi nahi). Client scope to
+     smsScopeWhere pehle hi laagu hai; ye provider dimension ko admin-only rakhta hai. */
+  if (q.provider && user && user.role === 'admin') { where.push("COALESCE(r.provider,'')=?"); params.push(String(q.provider)); }
   /* P14: Time-of-day window in UK wall-clock, applied per day of the from..to range
      (DST-safe: each day converts with its own UK offset). Default day = UK today. */
   if (q.tfrom || q.tto) {
@@ -3199,7 +3318,45 @@ app.get('/api/dashboard', authRequired, (req, res) => cachedJson(req, res, 10000
     sms_by_country = Object.values(agg).sort((a,b) => b.count - a.count);
   } catch(e) {}
   /* ===== /GALAXY ===== */
-  return { sms_today: today, otp_today: today, successful_otp_today: successToday, failed_otp_today: failedToday, failed_sms_today: failedToday, total_sms: totalSms, failed_total: failedTotal, sms_yesterday: yesterday, sms_7d: d7, sms_month: month, payout_7d: payout7, payout_month: payoutMonth, managers, agents, clients, numbers, daily7, recent, sms_year: smsYear, payout_week: payoutWeek, over_limit_today, over_limit_week, sms_by_country };
+  /* P19k #4: Real Provider Cost (ADMIN-ONLY) — Provider Rate × ELIGIBLE SMS count.
+     Eligibility = ingest-time engine ka AUTHORITATIVE result (payout_amount > 0 — yani
+     rate-limit/zero-rate ke BAAD jo paid bacha; "first N paid OTPs then zero" wahi
+     existing logic — koi doosri OTP-limit calculation NAHI).
+     Periods = existing dashboard windows: today / Monday-start UK week (payout_week
+     jaisa) / month / year. Cost per SMS = providerRateForPaymentCycle(range,
+     s.payment_type) — payoutRateForPaymentCycle ke candidate-order wala mirror.
+     Rollback: ye block + return ke 4 keys delete kar dein. */
+  let provider_cost_today, provider_cost_week, provider_cost_month, provider_cost_year;
+  if (u.role === 'admin') {
+    const provRateCache = new Map();
+    const rangeRowOf = (rid) => {
+      if (!provRateCache.has(rid)) provRateCache.set(rid, db.get(
+        'SELECT rate_1_1,rate_7_1,rate_7_7,rate_30_45,provider_rate_1_1,provider_rate_7_1,provider_rate_7_7,provider_rate_30_45 FROM ranges WHERE id=?', [rid]) || null);
+      return provRateCache.get(rid);
+    };
+    const costForWindow = (dFrom, dTo) => {
+      try {
+        const fromSql = ukLocalDateToUtcSql(dFrom, 0), toSql = ukLocalDateToUtcSql(dTo, 1);
+        const groups = db.all(`SELECT s.range_id rid, COALESCE(NULLIF(s.payment_type,''),'weekly') pt, COUNT(*) c
+          FROM sms_records s
+          WHERE COALESCE(s.is_test,0)=0 AND CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL)>0
+            AND s.received_at >= ? AND s.received_at < ? AND s.range_id IS NOT NULL
+          GROUP BY 1,2`, [fromSql, toSql]);
+        let cost = 0;
+        for (const g of groups) {
+          const r = rangeRowOf(g.rid); if (!r) continue;
+          const rate = parseFloat(providerRateForPaymentCycle(r, g.pt)) || 0;
+          if (rate > 0) cost += rate * (g.c || 0);
+        }
+        return normalizeDecimalString(cost) || '0';
+      } catch (e) { return '0'; }
+    };
+    provider_cost_today = costForWindow(dToday, dToday);
+    provider_cost_week = costForWindow(ukTodayDateStr(-dowMon), dToday);
+    provider_cost_month = costForWindow(monthStart, dToday);
+    provider_cost_year = costForWindow(dToday.slice(0, 4) + '-01-01', dToday);
+  }
+  return { sms_today: today, otp_today: today, successful_otp_today: successToday, failed_otp_today: failedToday, failed_sms_today: failedToday, total_sms: totalSms, failed_total: failedTotal, sms_yesterday: yesterday, sms_7d: d7, sms_month: month, payout_7d: payout7, payout_month: payoutMonth, managers, agents, clients, numbers, daily7, recent, sms_year: smsYear, payout_week: payoutWeek, over_limit_today, over_limit_week, sms_by_country, provider_cost_today, provider_cost_week, provider_cost_month, provider_cost_year };
 }, 'numbers_ver'));
 
 
@@ -4672,4 +4829,65 @@ const PORT = process.env.PORT || 4000;
   /* P12: AI Assistant (independent limits, ASSISTANT_ENABLED kill-switch) */
   try { require('./assistant').register(app, { allocate: handleAllocate }); console.log('• AI Assistant registered (agent panel)'); } catch (e) { console.error('[ASSISTANT] register failed:', e.message); }
   app.listen(PORT, () => console.log(`\n✅ Galaxy SMS backend running: http://localhost:${PORT}\n`));
+
+  /* ===== P19k #5: one-time startup stats reconciliation =====
+     Owner report: purane deletes (pre-fix code) ke baad dashboard (SMS This Month /
+     Payout This Month / This Year) ab bhi deleted records gin raha tha — sms_daily_stats
+     me stale rows permanently baaqi thi. Delete-path ab exact-resync karta hai, lekin
+     LIVE DB ka EXISTING drift heal karne ke liye boot par EK BAAR authoritative verify
+     chalta hai: sms_records ka full aggregation vs sms_daily_stats — mismatch milne par
+     poora stats table background me rebuild (existing chunked backfill engine).
+     Non-blocking (chunked + setImmediate), meta flag se sirf ek baar chalta hai.
+     Manual "Rebuild Dashboard Stats" button pehle jaisa hi kaam karta hai. */
+  (async function reconcileStatsAtBoot() {
+    try {
+      if (getMetaRaw('p19k_stats_reconciled')) return; /* already done */
+      if (backfillRunning) return;
+      const maxId = db.get('SELECT COALESCE(MAX(id),0) m FROM sms_records')?.m || 0;
+      if (!maxId) { setMeta('p19k_stats_reconciled', '1'); return; }
+      console.log('[STATS-RECONCILE] one-time verification of sms_daily_stats vs sms_records ...');
+      const truth = new Map(); /* key -> {c, pay} */
+      const keyOf = (r) => r.sd + '|' + r.mgr + '|' + r.ag + '|' + r.cl + '|' + r.cli;
+      let last = 0;
+      while (last < maxId) {
+        const hi = Math.min(last + 100000, maxId);
+        const rows = db.all(`SELECT received_at, COALESCE(manager_id,-1) mgr, COALESCE(agent_id,-1) ag, COALESCE(client_id,-1) cl, COALESCE(cli,'') cli,
+            COALESCE(CAST(COALESCE(NULLIF(payout_amount,''),'0') AS REAL),0) pay
+          FROM sms_records WHERE id > ? AND id <= ? AND COALESCE(is_test,0)=0`, [last, hi]);
+        for (const r of rows) {
+          const k = keyOf({ ...r, sd: ukStatDate(r.received_at) });
+          const cur = truth.get(k);
+          if (cur) { cur.c += 1; cur.pay += r.pay; }
+          else truth.set(k, { c: 1, pay: r.pay });
+        }
+        last = hi;
+        await new Promise(r => setImmediate(r)); /* event loop kabhi block nahi */
+      }
+      const statsRows = db.all('SELECT stat_date, manager_id, agent_id, client_id, cli, sms_count, payout_sum FROM sms_daily_stats');
+      let mismatch = 0;
+      const seenKeys = new Set();
+      for (const s of statsRows) {
+        const k = s.stat_date + '|' + s.manager_id + '|' + s.agent_id + '|' + s.client_id + '|' + s.cli;
+        seenKeys.add(k);
+        const t = truth.get(k);
+        if (!t || t.c !== s.sms_count || Math.abs((t.pay || 0) - (s.payout_sum || 0)) > 1e-6) mismatch++;
+      }
+      for (const k of truth.keys()) if (!seenKeys.has(k)) mismatch++;
+      if (!mismatch) {
+        setMeta('p19k_stats_reconciled', '1');
+        console.log('[STATS-RECONCILE] OK — sms_daily_stats matches sms_records exactly (' + statsRows.length + ' keys).');
+        return;
+      }
+      console.warn('[STATS-RECONCILE] MISMATCH found (' + mismatch + ' keys) — rebuilding sms_daily_stats from authoritative sms_records ...');
+      db.runNoSave('DELETE FROM sms_daily_stats');
+      setMeta('stats_backfill_max_id', '0');
+      setMeta('stats_backfill_done', '0');
+      const r = await backfillSmsStats(null);
+      setMeta('p19k_stats_reconciled', '1');
+      try { logAction({}, 'stats_boot_reconcile', 'system', { mismatchedKeys: mismatch, backfill: r }); } catch (_) {}
+      console.log('[STATS-RECONCILE] rebuild done:', JSON.stringify(r));
+    } catch (e) {
+      console.error('[STATS-RECONCILE] failed (will retry next boot):', e.message);
+    }
+  })();
 })();

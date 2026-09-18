@@ -470,6 +470,9 @@
       <div class="page-head"><div><h2>SMS Dashboard</h2><div class="breadcrumb"><b>Admin</b> › Dashboard</div></div></div>
       <div class="gx-dash-grid" id="gxDashCards"></div>
       <div class="gx-dash-sub" id="gxPayRow"></div>
+      <!-- P19k #4: Real Provider Cost (admin-only) — Provider Rate × eligible (paid) SMS/OTP,
+           existing dashboard periods (Today / This Week / This Month / This Year). -->
+      <div class="gx-dash-sub" id="gxProvCostRow" style="display:none"></div>
       <div class="grid2 dash-row">
         <div class="card dash-note-card"><div class="card-head"><div><h3>Last 7 Days SMS & Payouts</h3><div class="sub">Summarized stats & reports</div></div><span class="chip">Live</span></div><div class="chart" id="weekChart"></div></div>
         <div class="card dash-note-card gx-map-card"><div class="card-head"><div><h3>SMS by Country — Today</h3><div class="sub">Hover a country for today's SMS count</div></div><span class="chip">Live</span></div><div id="gxMap"></div></div>
@@ -711,6 +714,14 @@
       <div class="form-group"><label>Rate 7/7</label><input type="text" id="r3" placeholder="0.013 or NA" /></div>
       <div class="form-group"><label>Rate 30/45</label><input type="text" id="r4" placeholder="0.013 or NA" /></div>
     </div>
+    <!-- P19k #4: Provider Rate (ADMIN-INTERNAL — per payment-cycle period, ranges.rate_* convention).
+         Sirf Real Provider Cost (admin dashboard) use karta hai; Manager/Agent/Client ko kabhi expose nahi hota. -->
+    <div class="form-grid">
+      <div class="form-group"><label>Provider Rate 1/1 <span class="muted" style="font-weight:400">(internal)</span></label><input type="text" id="pr1" placeholder="0.008 or NA" /></div>
+      <div class="form-group"><label>Provider Rate 7/1 <span class="muted" style="font-weight:400">(internal)</span></label><input type="text" id="pr2" placeholder="0.008 or NA" /></div>
+      <div class="form-group"><label>Provider Rate 7/7 <span class="muted" style="font-weight:400">(internal)</span></label><input type="text" id="pr3" placeholder="0.008 or NA" /></div>
+      <div class="form-group"><label>Provider Rate 30/45 <span class="muted" style="font-weight:400">(internal)</span></label><input type="text" id="pr4" placeholder="0.008 or NA" /></div>
+    </div>
     <div class="form-group"><label>Memo</label><input type="text" id="rMemo" placeholder="Optional note" /></div>
   </div>
   <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('rateModal')">Cancel</button><button class="btn btn-purple" onclick="saveRate()">Save Rate</button></div>
@@ -749,7 +760,7 @@
 </div></div>
 
 
-<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat3"></script>
+<script src="/api.js?v=20260917-english-binance-chatfab"></script><script src="/assets/chat.js?v=gxchat4"></script>
 <script>
 /* auth guard — admin only */
 if(window.API){ API.guard('admin'); }
@@ -901,11 +912,15 @@ function renderRates(){
 }
 let editRateId=-1;
 function openRateModal(id){editRateId=id;document.getElementById('rateModalTitle').textContent=id<0?'Add Range':'Set Range Rate';
-  const r=id<0?{name:'',prefix:'',test_number:'',currency:'USD',rate_1_1:'',rate_7_1:'',rate_7_7:'',rate_30_45:'',memo:''}:(ratesData.find(x=>x.id===id)||{});
+  const r=id<0?{name:'',prefix:'',test_number:'',currency:'USD',rate_1_1:'',rate_7_1:'',rate_7_7:'',rate_30_45:'',memo:'',provider_rate_1_1:'',provider_rate_7_1:'',provider_rate_7_7:'',provider_rate_30_45:''}:(ratesData.find(x=>x.id===id)||{});
   rName.value=r.name||'';rPrefix.value=r.prefix||'';rTest.value=r.test_numbers||r.test_number||'';rCur.value=r.currency||'USD';r1.value=r.rate_1_1||'';r2.value=r.rate_7_1||'';r3.value=r.rate_7_7||'';r4.value=r.rate_30_45||'';rMemo.value=r.memo||'';
+  /* P19k #4: provider rates (admin-internal) */
+  pr1.value=(r.provider_rate_1_1&&r.provider_rate_1_1!=='NA')?r.provider_rate_1_1:'';pr2.value=(r.provider_rate_7_1&&r.provider_rate_7_1!=='NA')?r.provider_rate_7_1:'';pr3.value=(r.provider_rate_7_7&&r.provider_rate_7_7!=='NA')?r.provider_rate_7_7:'';pr4.value=(r.provider_rate_30_45&&r.provider_rate_30_45!=='NA')?r.provider_rate_30_45:'';
   document.getElementById('rateModal').classList.add('show');}
 async function saveRate(){if(!rName.value.trim()){alert('Range name is required.');return;}
-  const body={name:rName.value.trim(),prefix:rPrefix.value.trim(),test_number:rTest.value.trim(),test_numbers:rTest.value.trim(),currency:rCur.value,rate_1_1:r1.value.trim()||'NA',rate_7_1:r2.value.trim()||'NA',rate_7_7:r3.value.trim()||'NA',rate_30_45:r4.value.trim()||'NA',memo:rMemo.value.trim()};
+  const body={name:rName.value.trim(),prefix:rPrefix.value.trim(),test_number:rTest.value.trim(),test_numbers:rTest.value.trim(),currency:rCur.value,rate_1_1:r1.value.trim()||'NA',rate_7_1:r2.value.trim()||'NA',rate_7_7:r3.value.trim()||'NA',rate_30_45:r4.value.trim()||'NA',memo:rMemo.value.trim(),
+    /* P19k #4 */
+    provider_rate_1_1:pr1.value.trim()||'NA',provider_rate_7_1:pr2.value.trim()||'NA',provider_rate_7_7:pr3.value.trim()||'NA',provider_rate_30_45:pr4.value.trim()||'NA'};
   try{ if(editRateId<0) await API.post('/ranges',body); else await API.put('/ranges/'+editRateId,body); closeModal('rateModal'); loadRates(); }catch(e){ alert('❌ '+e.message); }
 }
 async function delRate(id){
@@ -1319,13 +1334,24 @@ function buildSmsDetail(){
       <input type="date" id="sdDateFrom" title="From date" onchange="renderSmsDetail()" /> <span class="muted" style="align-self:center">to</span> <input type="date" id="sdDateTo" title="To date" onchange="renderSmsDetail()" />
       <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="toggleDetailFilters()"> Time</label>
       <input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
-      <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters()"> CLI</label>
-      <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters()"> Number</label>
-      <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters()"> Range</label>
-      <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters()"> Manager</label>
-      <label><input type="checkbox" id="sdUseProvider" style="width:auto" onchange="toggleDetailFilters()"> Provider</label>
+      <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters('cli')"> CLI</label>
+      <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters('number')"> Number</label>
+      <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters('range')"> Range</label>
+      <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters('manager')"> Manager</label>
+      <label><input type="checkbox" id="sdUseProvider" style="width:auto" onchange="toggleDetailFilters('provider')"> Provider</label>
       <button class="btn btn-red" onclick="renderSmsDetail()">Apply Filter</button>
       <button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+    </div>
+    <!-- P19k #2/#9: DIRECT multi-filter selects — CLI + Range + Manager + Provider (+Date/Time)
+         sab IKHTE YAAR apply hote hain (AND — backend buildSmsPagedQuery pehle se AND karta hai).
+         Ye wahi pick-state use karte hain jo facet-clicks (chips) use karte hain — ek hi source
+         of truth. Provider list existing Provider Management (/api/providers-info) se aati hai. -->
+    <div class="filter-row" style="margin-top:6px">
+      <label style="min-width:34px">Filters</label>
+      <select class="sel-lg" id="sdSelCli" onchange="sdSelPick('cli',this.value)"><option value="">All CLIs</option></select>
+      <select class="sel-lg" id="sdSelRange" onchange="sdSelPick('range',this.value)"><option value="">All Ranges</option></select>
+      <select class="sel-lg" id="sdSelManager" onchange="sdSelPick('manager',this.value)"><option value="">All Managers</option></select>
+      <select class="sel-lg" id="sdSelProvider" onchange="sdSelPick('provider',this.value)"><option value="">All Providers</option></select>
     </div>
     <div class="hint">Ticking a dimension lists its values in the results (from current data: SMS count + payout) — click a value to see only its results. Filters combine (AND).</div>
     <div id="sdChips" style="display:flex;flex-wrap:wrap;align-items:center"></div>
@@ -1346,14 +1372,40 @@ function sdSelParams(exclude){ const sel=(window.__sdSel=window.__sdSel||{cli:''
 function sdPick(dim,val){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',manager:'',provider:''}); sel[dim]=val; window.__sdDrill=dim; renderSmsDetail(); }
 function sdUnpick(dim){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',manager:'',provider:''}); sel[dim]=''; if(window.__sdDrill===dim)window.__sdDrill=''; renderSmsDetail(); }
 function sdChipsHtml(){ const sel=window.__sdSel||{}; const lbl={cli:'CLI',number:'Number',range:'Range',manager:'Manager',provider:'Provider'}; const out=[]; for(const k of ['cli','number','range','manager','provider']){ if(sel[k]){ const v=String(sel[k]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); out.push(`<span class="gx-chip">${lbl[k]}: <b>${v}</b> <span class="x" onclick="sdUnpick('${k}')" title="Remove filter">&#10005;</span></span>`); } } return out.join(''); }
-function toggleDetailFilters(){
+function toggleDetailFilters(dim){
   const tOn=document.getElementById('sdUseTime').checked;
   document.getElementById('sdTimeFrom').disabled=!tOn;
   document.getElementById('sdTimeTo').disabled=!tOn;
+  /* P19k #2: tick ORDER track karo — facet list ab "last ticked" dimension dikhati hai
+     (pehle ticks[0] priority thi: CLI ticked rehte hue Provider tick karne par Phir bhi
+     CLI list aati thi — multiple filters ka combining confusing tha). */
+  if (dim) {
+    window.__sdTickOrder = (window.__sdTickOrder || []).filter(d => d !== dim);
+    const cb = { cli:'sdUseCli', number:'sdUseNumber', range:'sdUseRange', manager:'sdUseUser', provider:'sdUseProvider' }[dim];
+    const el = document.getElementById(cb);
+    if (el && el.checked) window.__sdTickOrder.push(dim);
+  }
   window.__sdDrill=''; /* P19: tick change => dimension list wapas */
   renderSmsDetail();
 }
-function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',manager:'',provider:''};gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseProvider.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
+/* P19k #2: dropdown se direct pick — facet-click jaisi hi pick state (chips ke saath share),
+   drill reset (detail rows foran dikhen), aur AND-combining backend par pehle se hai. */
+function sdSelPick(dim,val){
+  const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',manager:'',provider:''});
+  sel[dim]=String(val||'');
+  window.__sdDrill='';
+  renderSmsDetail();
+}
+/* P19k #2: selects ko current pick state se sync (chips se remove hone par dropdown bhi clear ho) */
+function sdSyncFilterSelects(){
+  const sel=window.__sdSel||{};
+  const map={cli:'sdSelCli',range:'sdSelRange',manager:'sdSelManager',provider:'sdSelProvider'};
+  for(const k of Object.keys(map)){
+    const el=document.getElementById(map[k]);
+    if(el){ const want=String(sel[k]||''); if(el.value!==want){ el.value=want; } }
+  }
+}
+function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',manager:'',provider:''};window.__sdTickOrder=[];gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseProvider.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
 function buildSummaryRows(rows){
   const dims=[];
   if(sdUseDate.checked) dims.push({key:'_date',label:'Date',cls:'tag-gray'});
@@ -1776,6 +1828,20 @@ async function loadDashboard(){
     document.getElementById('gxPayRow').innerHTML=
       `<div class="gx-pay-chip"><div class="t">Payout — This Week</div><div class="v">${'$ '+pay3(d.payout_week||0)}</div><div class="s">Last 7 days: ${money(d.payout_7d||0)}</div></div>`+
       `<div class="gx-pay-chip"><div class="t">Payout — This Month</div><div class="v">${'$ '+pay3(d.payout_month||0)}</div><div class="s">Month to date</div></div>`;
+    /* P19k #4: Real Provider Cost — admin-only chips (backend admin role par hi bhejta hai).
+       = Provider Rate (per range, per payment cycle) × ELIGIBLE SMS count (paid rows only —
+       existing rate-limit/zero-rate engine ka result). Doosri koi calculation nahi. */
+    const pcr=document.getElementById('gxProvCostRow');
+    if(pcr){
+      if(d.provider_cost_today!==undefined){
+        pcr.style.display='';
+        pcr.innerHTML=
+          `<div class="gx-pay-chip"><div class="t">Real Provider Cost — Today</div><div class="v">${'$ '+pay3(d.provider_cost_today||0)}</div><div class="s">Eligible (paid) SMS × provider rate</div></div>`+
+          `<div class="gx-pay-chip"><div class="t">Real Provider Cost — This Week</div><div class="v">${'$ '+pay3(d.provider_cost_week||0)}</div><div class="s">Monday-start week</div></div>`+
+          `<div class="gx-pay-chip"><div class="t">Real Provider Cost — This Month</div><div class="v">${'$ '+pay3(d.provider_cost_month||0)}</div><div class="s">Month to date</div></div>`+
+          `<div class="gx-pay-chip"><div class="t">Real Provider Cost — This Year</div><div class="v">${'$ '+pay3(d.provider_cost_year||0)}</div><div class="s">Year to date</div></div>`;
+      } else { pcr.style.display='none'; pcr.innerHTML=''; }
+    }
     const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     buildBarChart('weekChart',(d.daily7||[]).slice().reverse().map(x=>({l:days[new Date(x.date).getDay()]||'',v:x.count||0}))); /* GALAXY: aaj hamesha LEFT */
     window.GX&&GX.map('#gxMap',(d.sms_by_country||[]));
@@ -2242,6 +2308,29 @@ async function fillSmsDetailLiteFilters(){
   const rangeSel=document.getElementById('sdRange'), userSel=document.getElementById('sdUser');
   if(rangeSel && (!rangeSel.options || rangeSel.options.length<=1)) rangeSel.innerHTML='<option value="">All Ranges</option>'+((ratesData||[]).map(r=>`<option value="${r.name}">${r.name}</option>`).join(''));
   if(userSel && (!userSel.options || userSel.options.length<=1)) userSel.innerHTML='<option value="">All Managers</option>'+((usersData.manager||[]).map(m=>`<option value="${m.username}">${m.username}</option>`).join(''));
+  /* P19k #2/#9: direct multi-filter selects — Range (Rate Management ranges), Manager
+     (users), CLI (existing /api/sms/clis — wide window taake all-time CLIs aayen),
+     Provider (existing Provider Management /api/providers-info — koi duplicate list nahi). */
+  const escOpt=(v)=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const rsel=document.getElementById('sdSelRange');
+  if(rsel && rsel.options.length<=1) rsel.innerHTML='<option value="">All Ranges</option>'+((ratesData||[]).map(r=>`<option value="${escOpt(r.name)}">${escOpt(r.name)}</option>`).join(''));
+  const msel=document.getElementById('sdSelManager');
+  if(msel && msel.options.length<=1) msel.innerHTML='<option value="">All Managers</option>'+((usersData.manager||[]).map(m=>`<option value="${escOpt(m.username)}">${escOpt(m.username)}</option>`).join(''));
+  const csel=document.getElementById('sdSelCli');
+  if(csel && csel.options.length<=1){
+    try{ const rj=await API.get('/sms/clis?from=1970-01-01&to=2099-12-31');
+      const items=(rj.items&&rj.items.length)?rj.items:(rj.clis||[]).map(c=>({cli:c,count:null}));
+      csel.innerHTML='<option value="">All CLIs</option>'+items.map(x=>`<option value="${escOpt(x.cli)}">${escOpt(x.cli)}${x.count!=null?' ('+x.count+' OTPs)':''}</option>`).join('');
+    }catch(e){ csel.innerHTML='<option value="">All CLIs</option>'; }
+  }
+  const psel=document.getElementById('sdSelProvider');
+  if(psel && psel.options.length<=1){
+    try{ const pj=await API.get('/providers-info');
+      const provs=(pj.providers||[]).map(p=>p.name).filter(Boolean);
+      psel.innerHTML='<option value="">All Providers</option>'+provs.map(p=>`<option value="${escOpt(p)}">${escOpt(p)}</option>`).join('');
+    }catch(e){ psel.innerHTML='<option value="">All Providers</option>'; }
+  }
+  sdSyncFilterSelects();
 }
 /* ===== P18: Payment Management (schedule + min-withdrawal settings) ===== */
 const GX_DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -2617,8 +2706,11 @@ async function renderSmsDetail(){
   const ticks=sdActiveTicks();
   const drill=window.__sdDrill||'';
   const dimLabel={cli:'CLI',number:'Number',range:'Range',manager:'Manager',provider:'Provider'};
+  sdSyncFilterSelects();
   if(!drill && ticks.length){
-    const by=ticks[0]; /* priority: cli > number > range > manager > provider */
+    /* P19k #2: LAST ticked dimension (order fallback: pehla ticked) */
+    const order=(window.__sdTickOrder||[]).filter(d=>ticks.includes(d));
+    const by=order.length?order[order.length-1]:ticks[0];
     const fp=sdSelParams(by); /* displayed dim ka apna pick ignore; baaki sab picks filter karte hain */
     const params=new URLSearchParams({from:dateFrom,to:dateTo});
     if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);

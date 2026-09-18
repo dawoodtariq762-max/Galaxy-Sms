@@ -438,6 +438,13 @@ function createTables() {
   ensureColumn('sms_records', 'payout_amount', "TEXT DEFAULT ''");
   ensureColumn('sms_records', 'limit_reason', "TEXT DEFAULT ''");
   ensureColumn('ranges', 'deleted_at', "TEXT DEFAULT ''");
+  /* P19k #4: Provider Rate — admin-internal, per payment-cycle period (ranges.rate_1_1/7_1/7_7/30_45
+     wahi convention follow). Sirf Real Provider Cost (admin dashboard) use karta hai;
+     Manager/Agent/Client API responses aur public Rate Card me kabhi expose nahi hota. */
+  ensureColumn('ranges', 'provider_rate_1_1', "TEXT DEFAULT 'NA'");
+  ensureColumn('ranges', 'provider_rate_7_1', "TEXT DEFAULT 'NA'");
+  ensureColumn('ranges', 'provider_rate_7_7', "TEXT DEFAULT 'NA'");
+  ensureColumn('ranges', 'provider_rate_30_45', "TEXT DEFAULT 'NA'");
 
   const cs = db.get('SELECT COUNT(*) AS c FROM carrier_settings');
   if (!cs || cs.c === 0) {
