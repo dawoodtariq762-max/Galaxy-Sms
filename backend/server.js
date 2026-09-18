@@ -2807,6 +2807,11 @@ function buildSmsPagedQuery(user, q = {}) {
   if (q.range_id) { where.push('s.range_id=?'); params.push(+q.range_id); }
   if (q.number) { where.push('s.number=?'); params.push(String(q.number)); }
   if (q.cli) { where.push('s.cli=?'); params.push(String(q.cli)); }
+  /* P20 (CDR rebuild): free-text SEARCH NUMBER / SEARCH CLI (reference panel jaisa).
+     Contains-match, case-insensitive (case_sensitive_like=ON hai, is liye dono
+     taraf lowercase). Exact q.number/q.cli barkarar — dusre callers untouched. */
+  if (q.number_like) { const v = '%' + String(q.number_like).trim().toLowerCase() + '%'; where.push('LOWER(s.number) LIKE ?'); params.push(v); }
+  if (q.cli_like) { const v = '%' + String(q.cli_like).trim().toLowerCase() + '%'; where.push('LOWER(s.cli) LIKE ?'); params.push(v); }
   /* P14: Provider = ranges.provider (real existing relationship). Admin-only UI exposure. */
   /* P19k #3: ab BACKEND bhi enforce karta hai — Manager/Agent/Client se aaya provider
      param silently ignore hota hai (sirf UI hide karna kaafi nahi). Client scope to
@@ -2913,6 +2918,7 @@ app.get('/api/sms/paged', authRequired, (req, res, next) => {
       { total, page, limit, totalPages, totalPayment },
       `SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
           n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
+          r.currency AS range_currency, r.provider AS range_provider,
           cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
         ${built.baseSql}
         ORDER BY ${orderSql} LIMIT ? OFFSET ?`,
@@ -2940,6 +2946,7 @@ app.get('/api/sms/paged', authRequired, (req, res) => cachedJson(req, res, 1200,
   if (Number.isFinite(cursor) && cursor > 0) {
     const cRows = db.all(`SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
         n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
+        r.currency AS range_currency, r.provider AS range_provider,
         cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
       ${built.baseSql} AND s.id < ?
       ORDER BY s.id DESC LIMIT ?`, [...built.params, cursor, limit]);
@@ -2948,6 +2955,7 @@ app.get('/api/sms/paged', authRequired, (req, res) => cachedJson(req, res, 1200,
   }
   const rows = db.all(`SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
       n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
+      r.currency AS range_currency, r.provider AS range_provider,
       cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
     ${built.baseSql}
     ORDER BY ${orderSql} LIMIT ? OFFSET ?`, [...built.params, limit, offset]);
@@ -2983,6 +2991,129 @@ app.get('/api/stats-summary/:by', authRequired, (req, res) => cachedJson(req, re
   const totalPayment = rows.reduce((a,r)=>decimalAdd(a,r.payment||'0'),'0');
   return { rows, totalSms, totalPayment, by };
 }, 'numbers_ver'));
+
+/* ================= P20 (CDR REBUILD): grouped CDR report endpoint =================
+   Reference-panel jaisa SMS Detailed Report: multi-dimension GROUP BY (Hour/Day/
+   Month/Range/Number/CLI/Client/Agent/Manager/Currency/Provider) + SMS count +
+   MY PAYOUT + CLIENT PAYOUT + totals + server-side pagination.
+   - FILTERS: buildSmsPagedQuery REUSE — saare existing filters (date/time window,
+     CLI, number, range, manager, agent, client, provider[admin], message search,
+     number_like/cli_like) AND-combine hote hain + role scope — koi dusra
+     permission system NAHI (spec: reuse existing authorization).
+   - ROLE-GROUP GUARD: jitne dims role ko allowed NAHI (provider/manager sirf
+     admin; agent sirf admin+manager; client sirf admin+manager+agent) wo
+     SILENTLY DROP hote hain — provider-param pattern jaisa (UI hide kaafi nahi).
+   - UK TIME BUCKETS: received_at UTC me hai; Hour/Day/Month buckets Europe/
+     London wall-clock ke hisab se (DST-safe — offset transition segments).
+   - MY PAYOUT = sms_records.payout_amount (authoritative stored value — rate-
+     limit zeroing waghera isi me hai). CLIENT PAYOUT = numbers.payout (client-
+     side rate jo agent->client allocation par set hoti hai; P19d: empty => '0')
+     har us SMS par jisme client_id set hai (client-allocated rows). */
+function ukLastSundayUtcMs(year, monthIdx){ /* monthIdx: 2=March, 9=October */
+  const d = new Date(Date.UTC(year, monthIdx + 1, 0));          // month ka aakhri din
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay());                 // pichhla Sunday
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 1, 0, 0); // 01:00 UTC transition
+}
+/* [startMs, endMs] ko same-offset UTC segments me todena. UK offset saal me
+   sirf 2 baar badalta hai (last Sunday March 01:00 UTC -> +1, last Sunday Oct
+   01:00 UTC -> +0), is liye segments normally 1 (kabhi 2-3) hote hain. */
+function ukOffsetSegments(startMs, endMs){
+  if (!(endMs > startMs)) endMs = startMs + 86400000;
+  const y0 = new Date(startMs).getUTCFullYear() - 1;
+  const y1 = new Date(endMs).getUTCFullYear() + 1;
+  const trans = [];
+  for (let y = y0; y <= y1 && y - y0 < 12; y++) { trans.push(ukLastSundayUtcMs(y, 2)); trans.push(ukLastSundayUtcMs(y, 9)); }
+  trans.sort((a, b) => a - b);
+  const bounds = [startMs, ...trans.filter(t => t > startMs && t < endMs), endMs];
+  const segs = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const off = ukOffsetMinutes(new Date(Math.floor((bounds[i] + bounds[i + 1]) / 2))) / 60;
+    const last = segs[segs.length - 1];
+    if (last && last.off === off) last.end = bounds[i + 1];
+    else segs.push({ start: bounds[i], end: bounds[i + 1], off });
+  }
+  return segs;
+}
+const REPORT_GROUP_DIMS = {
+  hour:    { time: 1, fmt: '%Y-%m-%d %H:00', label: 'Hour' },
+  day:     { time: 1, fmt: '%Y-%m-%d',       label: 'Day' },
+  month:   { time: 1, fmt: '%Y-%m',          label: 'Month' },
+  range:   { expr: "COALESCE(r.name,'')",     label: 'Range' },
+  number:  { expr: "COALESCE(s.number,'')",   label: 'Number' },
+  cli:     { expr: "COALESCE(s.cli,'')",      label: 'CLI' },
+  client:  { roles: ['admin','manager','agent'], expr: "COALESCE(cu.username,'')", label: 'Client' },
+  agent:   { roles: ['admin','manager'],      expr: "COALESCE(au.username,'')", label: 'Agent' },
+  manager: { roles: ['admin'],                expr: "COALESCE(mu.username,'')", label: 'Manager' },
+  currency:{ expr: "COALESCE(r.currency,'')", label: 'Currency' },
+  provider:{ roles: ['admin'],                expr: "COALESCE(r.provider,'')",  label: 'Provider' },
+};
+app.get('/api/sms/report', authRequired, (req, res) => cachedJson(req, res, 1200, () => {
+  const q = req.query || {};
+  const role = req.user && req.user.role;
+  /* role-allowed dims — disallowed silently dropped (backend-enforced scope) */
+  const want = String(q.group || '').split(',').map(s => s.trim()).filter(Boolean);
+  const dims = [];
+  for (const d of want) {
+    const D = REPORT_GROUP_DIMS[d];
+    if (D && !dims.includes(d) && (!D.roles || D.roles.includes(role))) dims.push(d);
+  }
+  if (!dims.length) { res.status(400); return { error: 'group param required (hour,day,month,range,number,cli,client,agent,manager,currency,provider)' }; }
+  const built = buildSmsPagedQuery(req.user, q);
+  /* UTC span for time-bucket segments: q.from/q.to (UK dates) ya data ka min/max */
+  let spanA, spanB;
+  const okDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+  if (okDate(q.from) || okDate(q.to)) {
+    const d0 = okDate(q.from) ? String(q.from) : (okDate(q.to) ? String(q.to) : ukTodayDateStr(0));
+    const d1 = okDate(q.to) ? String(q.to) : d0;
+    const [a0, b0] = d0 <= d1 ? [d0, d1] : [d1, d0];
+    const aSql = ukLocalDateToUtcSql(a0, 0), bSql = ukLocalDateToUtcSql(b0, 1);
+    spanA = Date.parse(aSql.replace(' ', 'T') + 'Z'); spanB = Date.parse(bSql.replace(' ', 'T') + 'Z');
+  } else {
+    const mm = db.get(`SELECT MIN(s.received_at) a, MAX(s.received_at) b ${built.baseSql}`, built.params) || {};
+    const p = x => x ? Date.parse(String(x).replace(' ', 'T') + 'Z') : NaN;
+    spanA = p(mm.a); spanB = p(mm.b);
+  }
+  if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) { spanA = Date.now() - 86400000; spanB = Date.now(); }
+  if (spanB < spanA) { const x = spanA; spanA = spanB; spanB = x; }
+  spanB += 3600000; /* max received_at wale din ka poora bucket cover */
+  const segs = ukOffsetSegments(spanA, spanB);
+  const timeExpr = fmt => segs.length === 1
+    ? `strftime('${fmt}', s.received_at, '${segs[0].off >= 0 ? '+' : ''}${segs[0].off} hours')`
+    : 'CASE ' + segs.map(sg => `WHEN s.received_at >= '${fmtUtcSql(sg.start)}' AND s.received_at < '${fmtUtcSql(sg.end)}' THEN strftime('${fmt}', s.received_at, '${sg.off >= 0 ? '+' : ''}${sg.off} hours')`).join(' ')
+      + ` ELSE strftime('${fmt}', s.received_at, '${segs[segs.length - 1].off >= 0 ? '+' : ''}${segs[segs.length - 1].off} hours') END`;
+  const kExpr = dims.map(d => REPORT_GROUP_DIMS[d].time ? timeExpr(REPORT_GROUP_DIMS[d].fmt) : REPORT_GROUP_DIMS[d].expr);
+  const payoutSum = "COALESCE(SUM(CAST(COALESCE(NULLIF(s.payout_amount,''),'0') AS REAL)),0)";
+  const clientPayoutSum = "COALESCE(SUM(CASE WHEN COALESCE(s.client_id,0)>0 THEN CAST(COALESCE(NULLIF(n.payout,''),'0') AS REAL) ELSE 0 END),0)";
+  const inner = `SELECT ${kExpr.map((e, i) => `${e} AS k${i}`).join(', ')}, COUNT(*) AS sms, ${payoutSum} AS my_payout, ${clientPayoutSum} AS client_payout ${built.baseSql} GROUP BY ${kExpr.join(', ')}`;
+  const total = +(db.get(`SELECT COUNT(*) c FROM (${inner})`, built.params)?.c || 0);
+  const grand = db.get(`SELECT COUNT(*) sms, ${payoutSum} my_payout, ${clientPayoutSum} client_payout ${built.baseSql}`, built.params) || {};
+  const limitRaw = String(q.limit || '25');
+  const smsRoleCap = rolePageMax(role);
+  const limit = limitRaw.toLowerCase() === 'all' ? Math.max(1, Math.min(Math.max(1, total), ROLE_ALL_MAX[role] || smsRoleCap))
+                 : Math.max(1, Math.min(parseInt(limitRaw || '25', 10) || 25, smsRoleCap));
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(Math.max(1, parseInt(q.page || '1', 10) || 1), totalPages);
+  const offset = (page - 1) * limit;
+  /* order: default pehla dim ASC (khali aakhir me), phir SMS DESC. sort=sms|payout|client_payout override */
+  const sK = String(q.sort || '').toLowerCase();
+  const sD = String(q.dir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  let orderSql;
+  if (sK === 'sms' || sK === 'payout' || sK === 'client_payout') {
+    const col = sK === 'sms' ? 'sms' : (sK === 'payout' ? 'my_payout' : 'client_payout');
+    orderSql = `${col} ${sD}, k0 COLLATE NOCASE ASC`;
+  } else {
+    orderSql = kExpr.map((e, i) => `(CASE WHEN ${e}='' OR ${e} IS NULL THEN 1 ELSE 0 END) ASC, k${i} COLLATE NOCASE ASC`).join(', ') + ', sms DESC';
+  }
+  const rows = db.all(`${inner} ORDER BY ${orderSql} LIMIT ? OFFSET ?`, [...built.params, limit, offset]);
+  return {
+    ok: true, group: dims,
+    rows: rows.map(r => ({ dims: dims.reduce((o, d, i) => (o[d] = r['k' + i], o), {}), sms: +r.sms || 0,
+      my_payout: normalizeDecimalString(r.my_payout) || '0', client_payout: normalizeDecimalString(r.client_payout) || '0' })),
+    total, page, limit, totalPages,
+    totals: { sms: +(grand.sms || 0), my_payout: normalizeDecimalString(grand.my_payout) || '0', client_payout: normalizeDecimalString(grand.client_payout) || '0' },
+  };
+}));
+
 // Legacy bulk endpoint kept for the summary widgets. Capped (see
 // smsRowsForScope) and cached, because panels re-call it on every page click.
 app.get('/api/sms', authRequired, (req, res) => cachedJson(req, res, 2500, () => {

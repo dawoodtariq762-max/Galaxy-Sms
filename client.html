@@ -36,7 +36,7 @@
   }catch(e){ sessionStorage.clear(); ['ms_token','ms_role','ms_user','ms_name'].forEach(k=>localStorage.removeItem(k)); location.replace('/panel-login'); }
 })();
 </script>
-<style>
+<style>tfoot.gx-tot td{position:sticky;bottom:0;background:var(--panel2,#161a2c);border-top:2px solid rgba(99,102,241,.35);font-weight:700}
   :root{
     --bg:#0c0d12; --bg2:#14151d; --panel:#181923; --panel2:#20222e; --row:#101119;
     --border:rgba(255,255,255,.07); --border2:rgba(255,255,255,.13);
@@ -341,7 +341,7 @@
       <div class="sb-sec">Menu</div>
       <div class="tab active" data-page="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Dashboard</div>
       <div class="tab" data-page="numbers"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>SMS Numbers</div>
-      <div class="tab" data-page="stats"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>SMS Stats</div>
+      <div class="tab" data-page="stats"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>SMS Detailed Report</div>
       <div class="tab" data-page="test"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 6 0v6"/><rect x="4" y="18" width="16" height="3"/><path d="M12 3v3"/></svg>SMS Test Panel</div>
       <div class="tab" data-page="chat"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat<span class="gx-nav-badge" id="gxChatBadge" style="display:none"></span></div>
       <div class="tab" data-page="complaints"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Complaints<span class="gx-nav-badge" id="gxCompBadge" style="display:none"></span></div>
@@ -399,27 +399,38 @@
 
     <!-- SMS STATS (received SMS / OTP records, full CLI + message) -->
     <section class="page" id="page-stats">
-      <div class="page-head"><div><h2>SMS Stats</h2><div class="breadcrumb"><b>My Panel</b> › Received SMS &amp; OTP</div></div></div>
+      <div class="page-head"><div><h2>SMS Detailed Report</h2><div class="breadcrumb"><b>My Panel</b> › Received SMS &amp; OTP</div></div></div>
       <div class="toolbar">
         <div class="filter-row">
           <label>From</label><input type="date" id="stFrom" onchange="renderStats();loadRanges()"/>
           <label>To</label><input type="date" id="stTo" onchange="renderStats();loadRanges()"/>
           <label>Time</label><input type="time" id="stTFrom" onchange="renderStats()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="stTTo" onchange="renderStats()"/>
           <select class="sel-lg" id="stRange" onchange="renderStats()"><option value="">All Ranges</option></select>
-          <select class="sel-lg" id="stCli" onchange="renderStats()"><option value="">All CLIs</option></select>
-          <input type="text" id="stNumber" list="stNumDl" placeholder="Number: 92300…" style="min-width:150px" oninput="clearTimeout(window.__stNT);window.__stNT=setTimeout(renderStats,450)"/>
+          <input type="text" id="stNumber" list="stNumDl" placeholder="Search number…" style="min-width:150px" oninput="clearTimeout(window.__stNT);window.__stNT=setTimeout(renderStats,450)"/>
+          <input type="text" id="stCliSearch" placeholder="Search CLI…" style="min-width:120px" oninput="clearTimeout(window.__stCT);window.__stCT=setTimeout(renderStats,450)"/>
           <button class="btn btn-rose" onclick="renderStats()">Apply</button>
           <button type="button" class="gx-btn"  onclick="stResetFilters()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
         </div>
-        <div class="hint" style="margin-top:8px">Default = today (UK date). Use the Date filter to select records from earlier days.</div>
+        <!-- P20 CDR REBUILD: Group by (client-allowed dims only — provider/manager/agent/client
+             dims backend se drop hote hain). Client ko sirf SMS count dikhta hai (no payout). -->
+        <div class="filter-row" style="margin-top:6px;flex-wrap:wrap">
+          <span style="font-weight:600;align-self:center;margin-right:2px">Group by</span>
+          <label style="width:auto"><input type="checkbox" id="stGb_hour" style="width:auto" onchange="renderStats()"> Hour</label>
+          <label style="width:auto"><input type="checkbox" id="stGb_day" style="width:auto" onchange="renderStats()"> Day</label>
+          <label style="width:auto"><input type="checkbox" id="stGb_month" style="width:auto" onchange="renderStats()"> Month</label>
+          <label style="width:auto"><input type="checkbox" id="stGb_range" style="width:auto" onchange="renderStats()"> Range</label>
+          <label style="width:auto"><input type="checkbox" id="stGb_number" style="width:auto" onchange="renderStats()"> Number</label>
+          <label style="width:auto"><input type="checkbox" id="stGb_cli" style="width:auto" onchange="renderStats()"> CLI</label>
+          <label style="width:auto"><input type="checkbox" id="stGb_currency" style="width:auto" onchange="renderStats()"> Currency</label>
+        </div>
+        <div class="hint" style="margin-top:8px">Default = today (UK date). Group by ticks aggregate the report (SMS count with totals). All filters combine (AND).</div>
       </div>
       <div class="table-wrap" style="padding:15px 17px;margin-top:0"><div class="table-controls">
         <div class="tc-left"><label>Show Records:</label><select id="stLen" onchange="renderStats()"><option>10</option><option selected>25</option><option>50</option><option value="All">All</option></select>
         <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
         <div class="tc-right"><label>Search:</label><input type="text" id="stSearch" oninput="renderStats()" placeholder="Search..."/></div></div></div>
       <div class="table-wrap"><div class="tscroll"><table>
-        <thead><tr><th>Date</th><th>Range</th><th>Number</th><th>CLI</th><th>OTP Code</th><th>Copy</th><th>Message</th></tr></thead>
-        <tbody id="statsBody"></tbody></table></div>
+        <thead id="stHead"></thead><tbody id="statsBody"></tbody><tfoot id="stFoot" class="gx-tot"></tfoot></table></div>
         <div class="table-foot"><div class="info" id="statsInfo"></div><div class="pagination"></div></div></div>
     </section>
 
@@ -456,7 +467,7 @@
     <h3>Welcome to GALAXY SMS</h3>
     <p>Here is the simple workflow:</p>
     <div class="welcome-step"><b>1</b><span>View your allocated numbers in <b>SMS Numbers</b>.</span></div>
-    <div class="welcome-step"><b>2</b><span>Open <b>SMS Stats</b> to see your latest OTP messages.</span></div>
+    <div class="welcome-step"><b>2</b><span>Open <b>SMS Detailed Report</b> to see your latest OTP messages.</span></div>
     <div class="welcome-step"><b>3</b><span>Use <b>Copy OTP</b> to quickly copy verification codes.</span></div>
     <button class="btn btn-rose" onclick="closeClientWelcome()" style="width:100%;margin-top:14px">Got it</button>
   </div>
@@ -627,14 +638,44 @@ async function renderStats(){if(!document.getElementById('statsBody'))return;
   if(f&&!f.value){f.value=uk;f.dataset.gxAuto='1';} else if(f&&f.dataset.gxAuto==='1'&&f.value!==uk){f.value=uk;}
   if(t&&!t.value){t.value=uk;t.dataset.gxAuto='1';} else if(t&&t.dataset.gxAuto==='1'&&t.value!==uk){t.value=uk;}
   if(!document.__gxAutoDateHook){ document.__gxAutoDateHook=1; document.addEventListener('change',e=>{ if(e.target&&e.target.matches&&e.target.matches('input[type=date]')) e.target.dataset.gxAuto='0'; }); }
-  const rf=stRange.value||'',cf=stCli.value||'',len=stLen.value||'25',q=(stSearch.value||'').trim();
-  const tfrom=(document.getElementById('stTFrom')?.value)||'',tto=(document.getElementById('stTTo')?.value)||'',numF=(document.getElementById('stNumber')?.value||'').trim();
+  const rf=stRange.value||'',len=stLen.value||'25',q=(stSearch.value||'').trim();
+  const tfrom=(document.getElementById('stTFrom')?.value)||'',tto=(document.getElementById('stTTo')?.value)||'';
+  const numF=(document.getElementById('stNumber')?.value||'').trim(),cliF=(document.getElementById('stCliSearch')?.value||'').trim();
   const from=f?.value||'',to=t?.value||'';
-  const sig=cliStatsSig({rf,cf,len,q,from,to,tfrom,tto,numF});if(cliStatsPager.signature!==sig){cliStatsPager.page=1;cliStatsPager.signature=sig;}
-  const params=new URLSearchParams({page:String(cliStatsPager.page),limit:len,sort:'date',dir:'desc'});if(rf)params.set('range',rf);if(cf)params.set('cli',cf);if(q)params.set('search',q);
-  if(from)params.set('from',from); if(to)params.set('to',to); if(tfrom)params.set('tfrom',tfrom); if(tto)params.set('tto',tto); if(numF)params.set('number',numF);
-  let data={rows:[],total:0,page:1,limit:25,totalPages:1};try{data=await API.get('/sms/paged?'+params.toString())}catch(e){console.warn(e)}cliStatsPager.page=data.page||1;cliStatsPager.totalPages=data.totalPages||1;const rows=(data.rows||[]).map(r=>{const msg=r.message||'';return {range:r.range_name||'',number:r.number||'',cli:r.cli||'',msg,date:(r.received_at||'').slice(0,19),otp:r.otp_code||extractOTP(msg)}});stats=rows;statsBody.innerHTML=rows.map(r=>`<tr><td class="muted">${r.date}</td><td>${r.range}</td><td class="mono">${r.number}</td><td class="mono">${r.cli}</td><td>${r.otp?`<span class="otp-code">${r.otp}</span>`:'<span class="otp-empty">—</span>'}</td><td>${r.otp?`<button type="button" class="gx-btn gx-blue" onclick="copyText('${r.otp}')" data-tip="Copy OTP" title="Copy OTP" aria-label="Copy OTP"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`:'—'}</td><td class="msg-body">${r.msg}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;statsInfo.textContent=`Showing ${data.total===0?0:Math.min(data.total,((data.page||1)-1)*Number(data.limit||25)+rows.length)} of ${data.total||0} records (UK: ${from||'…'} → ${to||'…'})`;const pag=statsInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,cliStatsPager,renderStats);}
-function stResetFilters(){ ['stTFrom','stTTo','stNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['stRange','stCli'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['stFrom','stTo'].forEach(id=>{const e=document.getElementById(id); if(e){e.value='';e.dataset.gxAuto='';}}); renderStats(); }
+  /* P20: contains-search (number_like/cli_like) — reference SEARCH NUMBER / SEARCH CLI */
+  const base=new URLSearchParams({from,to});
+  if(rf)base.set('range',rf); if(q)base.set('search',q);
+  if(tfrom)base.set('tfrom',tfrom); if(tto)base.set('tto',tto);
+  if(numF)base.set('number_like',numF); if(cliF)base.set('cli_like',cliF);
+  const groups=[];['hour','day','month','range','number','cli','currency'].forEach(d=>{const el=document.getElementById('stGb_'+d);if(el&&el.checked)groups.push(d);});
+  const stHead=document.getElementById('stHead'),stFoot=document.getElementById('stFoot');
+  if(groups.length){
+    /* ---- GROUPED MODE: /api/sms/report (client scope backend-enforced) ---- */
+    const sig=cliStatsSig({mode:'group',g:groups.join(','),f:base.toString(),len});if(cliStatsPager.signature!==sig){cliStatsPager.page=1;cliStatsPager.signature=sig;}
+    const params=new URLSearchParams(base);params.set('group',groups.join(','));params.set('page',String(cliStatsPager.page));params.set('limit',len);
+    let data={rows:[],total:0,page:1,limit:25,totalPages:1,totals:{}};try{data=await API.get('/sms/report?'+params.toString())}catch(e){console.warn(e)}
+    cliStatsPager.page=data.page||1;cliStatsPager.totalPages=data.totalPages||1;
+    const dimL={hour:'Hour',day:'Day',month:'Month',range:'Range',number:'Number',cli:'CLI',currency:'Currency'};
+    stHead.innerHTML='<tr>'+groups.map(g=>`<th>${dimL[g]||g}</th>`).join('')+'<th>SMS</th></tr>';
+    const rows=data.rows||[];
+    const fmtDim=(d,v)=>{const raw=String(v==null?'':v);const esc=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');if(!raw)return '<span class="muted">—</span>';if(d==='number'||d==='cli'||d==='hour'||d==='day'||d==='month')return `<span class="mono">${esc}</span>`;if(d==='range')return `<span class="tag tag-blue">${esc}</span>`;if(d==='currency')return `<span class="tag tag-green">${esc}</span>`;return esc;};
+    statsBody.innerHTML=rows.map(r=>'<tr>'+groups.map(g=>`<td>${fmtDim(g,r.dims&&r.dims[g])}</td>`).join('')+`<td class="cell-money">${(r.sms||0).toLocaleString()}</td></tr>`).join('')||`<tr><td colspan="${groups.length+1}" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+    const tot=data.totals||{};
+    stFoot.innerHTML=`<tr><td colspan="${groups.length}"><b>Totals</b></td><td class="cell-money"><b>${(tot.sms||0).toLocaleString()}</b></td></tr>`;
+    statsInfo.textContent=`Showing ${data.total===0?0:Math.min(data.total,((data.page||1)-1)*Number(data.limit||25)+rows.length)} of ${data.total||0} groups (UK: ${from||'…'} → ${to||'…'})`;
+    const pag=statsInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,cliStatsPager,renderStats);
+    return;
+  }
+  /* ---- DETAIL MODE: /api/sms/paged (OTP view — unchanged columns) ---- */
+  const sig=cliStatsSig({mode:'detail',f:base.toString(),len});if(cliStatsPager.signature!==sig){cliStatsPager.page=1;cliStatsPager.signature=sig;}
+  const params=new URLSearchParams(base);params.set('page',String(cliStatsPager.page));params.set('limit',len);params.set('sort','date');params.set('dir','desc');
+  let data={rows:[],total:0,page:1,limit:25,totalPages:1};try{data=await API.get('/sms/paged?'+params.toString())}catch(e){console.warn(e)}cliStatsPager.page=data.page||1;cliStatsPager.totalPages=data.totalPages||1;
+  const rows=(data.rows||[]).map(r=>{const msg=r.message||'';return {range:r.range_name||'',number:r.number||'',cli:r.cli||'',msg,date:(r.received_at||'').slice(0,19),otp:r.otp_code||extractOTP(msg)}});
+  stats=rows;stHead.innerHTML='<tr><th>Date</th><th>Range</th><th>Number</th><th>CLI</th><th>OTP Code</th><th>Copy</th><th>Message</th></tr>';
+  statsBody.innerHTML=rows.map(r=>`<tr><td class="muted">${r.date}</td><td>${r.range}</td><td class="mono">${r.number}</td><td class="mono">${r.cli}</td><td>${r.otp?`<span class="otp-code">${r.otp}</span>`:'<span class="otp-empty">—</span>'}</td><td>${r.otp?`<button type="button" class="gx-btn gx-blue" onclick="copyText('${r.otp}')" data-tip="Copy OTP" title="Copy OTP" aria-label="Copy OTP"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`:'—'}</td><td class="msg-body">${r.msg}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+  stFoot.innerHTML='';
+  statsInfo.textContent=`Showing ${data.total===0?0:Math.min(data.total,((data.page||1)-1)*Number(data.limit||25)+rows.length)} of ${data.total||0} records (UK: ${from||'…'} → ${to||'…'})`;const pag=statsInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,cliStatsPager,renderStats);}
+function stResetFilters(){ ['stTFrom','stTTo','stNumber','stCliSearch'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['stRange'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['hour','day','month','range','number','cli','currency'].forEach(d=>{const e=document.getElementById('stGb_'+d); if(e) e.checked=false;}); ['stFrom','stTo'].forEach(id=>{const e=document.getElementById(id); if(e){e.value='';e.dataset.gxAuto='';}}); renderStats(); }
 async function loadStats(){ await renderStats(); renderNumbers(); }
 
 /* FAST PRIORITY INIT */

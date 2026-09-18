@@ -243,11 +243,14 @@ async function bootPanel(page, tok, user) {
   t('C14 manager: khaali range (scope me nahi) => 0', d.total === 0, 'total=' + d.total);
   /* UI wiring (static) */
   const admH = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
-  t('C15 admin UI: direct selects CLI/Range/Manager/Provider (provider Manager ke BAAD)', /id="sdSelManager"[\s\S]{0,200}id="sdSelProvider"/.test(admH) && admH.includes('id="sdSelCli"') && admH.includes('id="sdSelRange"'), '');
-  t('C16 admin UI: facet list LAST-ticked dim (tick order)', admH.includes('__sdTickOrder') && /order\[order\.length-1\]:ticks\[0\]/.test(admH), '');
+  /* P20 CDR REBUILD ke baad UI reference-design par shift ho gaya: selects = Range/
+     Manager/Agent/Client/Provider + free-text SEARCH NUMBER (sdNumSearch) / SEARCH CLI
+     (sdCliSearch) + Group-by row. (Purana tick-facet design replace hua — owner decision.) */
+  t('C15 admin UI: Range/Manager/Agent/Client/Provider selects + SEARCH NUMBER/CLI (provider Manager ke BAAD)', /id="sdSelManager"[\s\S]{0,520}id="sdSelProvider"/.test(admH) && admH.includes('id="sdSelRange"') && admH.includes('id="sdSelAgent"') && admH.includes('id="sdSelClient"') && admH.includes('id="sdNumSearch"') && admH.includes('id="sdCliSearch"'), '');
+  t('C16 admin UI: Group-by multi-dim row (P20 — facet design replace)', admH.includes('sdGb_') && admH.includes("/sms/report"), '');
   const mgrH = fs.readFileSync(path.join(ROOT, 'manager.html'), 'utf8');
   const agtH = fs.readFileSync(path.join(ROOT, 'agent.html'), 'utf8');
-  t('C17 manager/agent UI: CLI/Range selects, provider select NAHI', mgrH.includes('id="sdSelCli"') && mgrH.includes('id="sdSelAgent"') && !mgrH.includes('sdSelProvider') && agtH.includes('id="sdSelClient"') && !agtH.includes('sdSelProvider'), '');
+  t('C17 manager/agent UI: Range/Client (+Agent mgr) selects, provider select NAHI', mgrH.includes('id="sdSelRange"') && mgrH.includes('id="sdSelAgent"') && mgrH.includes('id="sdSelClient"') && !mgrH.includes('sdSelProvider') && agtH.includes('id="sdSelClient"') && !agtH.includes('sdSelProvider'), '');
   t('C18 admin UI: provider options existing Provider Management se (/providers-info)', admH.includes("/api/providers-info") || admH.includes("API.get('/providers-info')"), '');
 
   /* ================= SECTION D: client SMS support ================= */
@@ -268,7 +271,7 @@ async function bootPanel(page, tok, user) {
   const p403 = await api('/api/providers-info', 'GET', null, cli);
   t('D8 client: Provider Management endpoint 403', p403.status === 403, 'status=' + p403.status);
   const cliH = fs.readFileSync(path.join(ROOT, 'client.html'), 'utf8');
-  t('D9 client UI: CLI/Range/Date/Time filters present, provider NAHI', cliH.includes('id="stCli"') && cliH.includes('id="stRange"') && cliH.includes('id="stFrom"') && cliH.includes('id="stTFrom"') && !cliH.includes('sdSelProvider') && !/provider\s*select/i.test(cliH), '');
+  t('D9 client UI: CLI+Number search/Range/Date/Time filters present, provider NAHI (P20: renamed SMS Detailed Report)', cliH.includes('id="stCliSearch"') && cliH.includes('id="stNumber"') && cliH.includes('id="stRange"') && cliH.includes('id="stFrom"') && cliH.includes('id="stTFrom"') && cliH.includes('SMS Detailed Report') && !cliH.includes('sdSelProvider') && !/provider\s*select/i.test(cliH), '');
 
   /* ================= SECTION E: provider-rate CRUD + visibility ================= */
   console.log('\n--- E: Provider Rate (admin-internal) CRUD + visibility guards ---');

@@ -156,25 +156,21 @@ async function bootPanel(pagePath, { token, role, user, name }) {
 
     /* FIX#3 — SMS Detail facet flow (real API data) */
     await w.loadAdminPageData('smsDetail'); await sleep(900);
-    const sdUseCli = d.getElementById('sdUseCli');
-    t('UI-A8 FIX#3 SMS Detail: CLI dimension tick exists', !!sdUseCli);
-    if (sdUseCli) {
-      sdUseCli.checked = true;
-      w.toggleDetailFilters();
+    /* P20 CDR REBUILD: tick-facet design => Group-by design. CLI dim ab sdGb_cli. */
+    const sdGbCli = d.getElementById('sdGb_cli');
+    t('UI-A8 FIX#3 SMS Detail: CLI dimension (group-by) exists', !!sdGbCli);
+    if (sdGbCli) {
+      sdGbCli.checked = true;
+      await w.renderSmsDetail(); await sleep(1100);
+      const groupRows = [...d.querySelectorAll('#sdBody tr')].map(tr => tr.textContent.trim());
+      const has333 = groupRows.some(x => x.includes('333'));
+      const has444 = groupRows.some(x => x.includes('444'));
+      t('UI-A9 FIX#3 group by CLI -> aggregated CLIs (333,444 from live data + SMS counts)', has333 && has444 && groupRows.length >= 5, JSON.stringify(groupRows).slice(0, 160));
+      sdGbCli.checked = false;
       await w.renderSmsDetail(); await sleep(900);
-      const facetRows = [...d.querySelectorAll('#sdBody .gx-facet-row')].map(tr => tr.textContent.trim());
-      const has333 = facetRows.some(x => x.includes('333'));
-      const has444 = facetRows.some(x => x.includes('444'));
-      t('UI-A9 FIX#3 tick CLI -> facet list shows today CLIs (333,444 from live data)', has333 && has444 && facetRows.length >= 5, JSON.stringify(facetRows).slice(0, 160));
-      w.sdPick('cli', '333');
-      await w.renderSmsDetail(); await sleep(900);
-      const drillRows = [...d.querySelectorAll('#sdBody tr')].map(tr => tr.textContent);
-      const chip = d.querySelector('.gx-chip');
-      t('UI-A10 FIX#3 click CLI 333 -> detail rows only 333 + chip shown', drillRows.length === 2 && drillRows.every(x => x.includes('333')) && !!chip && chip.textContent.includes('333'), 'rows=' + drillRows.length + ' chip=' + (chip ? chip.textContent.trim().slice(0, 40) : 'none'));
-      w.sdUnpick('cli');
-      await w.renderSmsDetail(); await sleep(700);
-      t('UI-A11 FIX#3 unpick -> filter cleared (chip gone)', !d.querySelector('.gx-chip'), 'chips=' + d.querySelectorAll('.gx-chip').length);
-      sdUseCli.checked = false; w.toggleDetailFilters();
+      const detailRows = [...d.querySelectorAll('#sdBody tr')].map(tr => tr.textContent);
+      t('UI-A10 FIX#3 group off -> detail rows wapas (Date/Range columns)', detailRows.length >= 1, 'rows=' + detailRows.length);
+      t('UI-A11 FIX#3 group reset clean (koi chip nahi)', !d.querySelector('.gx-chip'), 'chips=' + d.querySelectorAll('.gx-chip').length);
     }
 
     /* FIX#4 — elements + E2E */
@@ -219,15 +215,15 @@ async function bootPanel(pagePath, { token, role, user, name }) {
     t('UI-M2 FIX#3 manager SMS Report: srCli ABSENT, other filters intact', !d.getElementById('srCli') && !!(d.getElementById('srRange') || d.getElementById('srNumber')));
     t('UI-M3 FIX#4 manager has NO rate UI (no new ability)', !d.getElementById('aaRate') && !d.getElementById('allocRate'));
     t('UI-M4 manager allocAll modal intact (payterm+payout)', !!(d.getElementById('aaPayterm') && d.getElementById('aaPayout')));
-    const sdUseCli = d.getElementById('sdUseCli');
-    if (sdUseCli) {
-      sdUseCli.checked = true; w.toggleDetailFilters();
-      await w.renderSmsDetail(); await sleep(900);
-      const rows = [...d.querySelectorAll('#sdBody .gx-facet-row')].map(tr => tr.textContent.trim());
+    const sdGbMgrCli = d.getElementById('sdGb_cli');
+    if (sdGbMgrCli) {
+      sdGbMgrCli.checked = true;
+      await w.renderSmsDetail(); await sleep(1100);
+      const rows = [...d.querySelectorAll('#sdBody tr')].map(tr => tr.textContent.trim());
       const sees = k => rows.some(x => x.includes(k));
-      t('UI-M5 FIX#3 manager facet: subtree CLIs (333,555,666,888) not A2-direct (444,121,131)', sees('333') && sees('555') && sees('666') && sees('888') && !sees('444') && !sees('121') && !sees('131'), JSON.stringify(rows).slice(0, 140));
-      sdUseCli.checked = false; w.toggleDetailFilters();
-    } else t('UI-M5 FIX#3 manager facet tick exists', false, 'sdUseCli missing');
+      t('UI-M5 FIX#3 manager group-by CLI: subtree CLIs (333,555,666,888) not A2-direct (444,121,131)', sees('333') && sees('555') && sees('666') && sees('888') && !sees('444') && !sees('121') && !sees('131'), JSON.stringify(rows).slice(0, 140));
+      sdGbMgrCli.checked = false; await w.renderSmsDetail(); await sleep(700);
+    } else t('UI-M5 FIX#3 manager CLI group-by exists', false, 'sdGb_cli missing');
     await P.close();
   }
 
@@ -239,22 +235,22 @@ async function bootPanel(pagePath, { token, role, user, name }) {
     t('UI-G1 agent boots with 0 uncaught script errors', P.errors.length === 0, P.errors.slice(0, 3).join(' ;; '));
     t('UI-G2 FIX#3 agent SMS Report: srCli ABSENT', !d.getElementById('srCli'));
     t('UI-G3 FIX#4 agent has NO rate UI', !d.getElementById('aaRate') && !d.getElementById('allocRate'));
-    const sdUseCli = d.getElementById('sdUseCli');
     const sdUseTime = d.getElementById('sdUseTime');
-    t('UI-G4 FIX#3 agent SMS Detail: CLI tick + Time filter present', !!sdUseCli && !!sdUseTime);
-    if (sdUseCli) {
-      sdUseCli.checked = true; w.toggleDetailFilters();
-      await w.renderSmsDetail(); await sleep(900);
-      const rows = [...d.querySelectorAll('#sdBody .gx-facet-row')].map(tr => tr.textContent.trim());
+    t('UI-G4 FIX#3 agent SMS Detail: CLI group-by + Time filter present', !!d.getElementById('sdGb_cli') && !!sdUseTime);
+    const sdGbAgtCli = d.getElementById('sdGb_cli');
+    if (sdGbAgtCli) {
+      sdGbAgtCli.checked = true;
+      await w.renderSmsDetail(); await sleep(1100);
+      const rows = [...d.querySelectorAll('#sdBody tr')].map(tr => tr.textContent.trim());
       const sees = k => rows.some(x => x.includes(k));
-      t('UI-G5 FIX#3 agent facet: own CLIs only (333,555,666) not others (444,888,121)', sees('333') && sees('555') && sees('666') && !sees('444') && !sees('888') && !sees('121'), JSON.stringify(rows).slice(0, 140));
+      t('UI-G5 FIX#3 agent group-by CLI: own CLIs only (333,555,666) not others (444,888,121)', sees('333') && sees('555') && sees('666') && !sees('444') && !sees('888') && !sees('121'), JSON.stringify(rows).slice(0, 140));
       if (sdUseTime) { /* Time filter wired: tick + render must not throw */
         let err = null;
-        try { sdUseTime.checked = true; w.toggleDetailFilters(); await w.renderSmsDetail(); await sleep(700); } catch (e) { err = e.message; }
+        try { sdUseTime.checked = true; w.sdToggleTime(); await w.renderSmsDetail(); await sleep(700); } catch (e) { err = e.message; }
         t('UI-G6 agent Time filter wired (tick + render no error)', !err, err || 'ok');
         sdUseTime.checked = false;
       }
-      sdUseCli.checked = false; w.toggleDetailFilters();
+      sdGbAgtCli.checked = false; await w.renderSmsDetail(); await sleep(600);
     }
     await P.close();
   }
@@ -265,7 +261,7 @@ async function bootPanel(pagePath, { token, role, user, name }) {
     const P = await bootPanel('/client', { token: c1Tok, role: 'client', user: 'p19c1', name: 'p19c1' });
     const w = P.window, d = w.document;
     t('UI-C1 client boots with 0 uncaught script errors', P.errors.length === 0, P.errors.slice(0, 3).join(' ;; '));
-    t('UI-C2 client stCli preserved (behaviour as-is)', !!d.getElementById('stCli'));
+    t('UI-C2 client CLI filter preserved (P20: SEARCH CLI text input)', !!d.getElementById('stCliSearch'));
     await P.close();
   }
 

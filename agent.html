@@ -791,63 +791,103 @@ function renderSmsReport(){const len=document.getElementById('srLen').value,q=(d
 /* ===== CDR: DETAILED (advanced filters) ===== */
 function buildSmsDetail(){
   document.getElementById('page-smsDetail').innerHTML=`
-  <style>.gx-facet-row{cursor:pointer}.gx-facet-row:hover{background:rgba(99,102,241,.10)}.gx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:rgba(99,102,241,.15);color:#a5b4fc;margin:2px 6px 2px 0}.gx-chip .x{cursor:pointer;font-weight:800;color:#f87c8a}</style>
+  <style>.gx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:rgba(99,102,241,.15);color:#a5b4fc;margin:2px 6px 2px 0}.gx-chip .x{cursor:pointer;font-weight:800;color:#f87c8a}.gx-gb-lab{font-weight:600;align-self:center;margin-right:2px}tfoot.gx-tot td{position:sticky;bottom:0;background:var(--panel2,#161a2c);border-top:2px solid rgba(99,102,241,.35);font-weight:700}</style>
   <div class="page-head"><div><h2>SMS Detailed Report</h2><div class="breadcrumb"><b>CDR Stats</b> › Detailed</div></div></div>
   <div class="toolbar">
     <div class="filter-row"><label><input type="checkbox" id="sdUseDate" checked style="width:auto" onchange="renderSmsDetail()"> Date</label><input type="date" id="sdDateFrom" title="From date" onchange="renderSmsDetail()" /> <span class="muted" style="align-self:center">to</span> <input type="date" id="sdDateTo" title="To date" onchange="renderSmsDetail()" />
-    <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="toggleDetailFilters()"> Time</label><input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
-    <label><input type="checkbox" id="sdUseCli" style="width:auto" onchange="toggleDetailFilters('cli')"> CLI</label>
-    <label><input type="checkbox" id="sdUseNumber" style="width:auto" onchange="toggleDetailFilters('number')"> Number-wise</label>
-    <label><input type="checkbox" id="sdUseRange" style="width:auto" onchange="toggleDetailFilters('range')"> Range</label>
-    <label><input type="checkbox" id="sdUseUser" style="width:auto" onchange="toggleDetailFilters('client')"> Client</label>
+    <label><input type="checkbox" id="sdUseTime" style="width:auto" onchange="sdToggleTime()"> Time</label><input type="time" id="sdTimeFrom" title="From time (UK)" disabled onchange="renderSmsDetail()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="sdTimeTo" title="To time (UK)" disabled onchange="renderSmsDetail()"/>
+    <label>Number</label><input type="text" id="sdNumSearch" placeholder="Search number…" style="min-width:150px" oninput="clearTimeout(window.__sdNT);window.__sdNT=setTimeout(renderSmsDetail,450)"/>
+    <label>CLI</label><input type="text" id="sdCliSearch" placeholder="Search CLI…" style="min-width:120px" oninput="clearTimeout(window.__sdCT);window.__sdCT=setTimeout(renderSmsDetail,450)"/>
     <button class="btn btn-blue" onclick="renderSmsDetail()">Apply Filter</button><button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button></div>
-    <!-- P19k #2: DIRECT multi-filter selects (CLI + Range + Client) — AND-combine, Date/Time ke saath. Provider admin-only hai. -->
+    <!-- P20 CDR REBUILD: filters + Group by (reference design). Provider/Manager
+         admin-only hain (backend bhi enforce karta hai — silently ignored). -->
     <div class="filter-row" style="margin-top:6px">
       <label style="min-width:34px">Filters</label>
-      <select class="sel-lg" id="sdSelCli" onchange="sdSelPick('cli',this.value)"><option value="">All CLIs</option></select>
       <select class="sel-lg" id="sdSelRange" onchange="sdSelPick('range',this.value)"><option value="">All Ranges</option></select>
       <select class="sel-lg" id="sdSelClient" onchange="sdSelPick('client',this.value)"><option value="">All Clients</option></select>
     </div>
-    <div class="hint">Ticking a dimension lists its values in the results (from current data: SMS count + payout) — click a value to see only its results. Filters combine (AND).</div>
+    <div class="filter-row" style="margin-top:6px;flex-wrap:wrap">
+      <span class="gx-gb-lab">Group by</span>
+      <label style="width:auto"><input type="checkbox" id="sdGb_hour" style="width:auto" onchange="renderSmsDetail()"> Hour</label><label style="width:auto"><input type="checkbox" id="sdGb_day" style="width:auto" onchange="renderSmsDetail()"> Day</label><label style="width:auto"><input type="checkbox" id="sdGb_month" style="width:auto" onchange="renderSmsDetail()"> Month</label><label style="width:auto"><input type="checkbox" id="sdGb_range" style="width:auto" onchange="renderSmsDetail()"> Range</label><label style="width:auto"><input type="checkbox" id="sdGb_number" style="width:auto" onchange="renderSmsDetail()"> Number</label><label style="width:auto"><input type="checkbox" id="sdGb_cli" style="width:auto" onchange="renderSmsDetail()"> CLI</label><label style="width:auto"><input type="checkbox" id="sdGb_client" style="width:auto" onchange="renderSmsDetail()"> Client</label><label style="width:auto"><input type="checkbox" id="sdGb_currency" style="width:auto" onchange="renderSmsDetail()"> Currency</label>
+    </div>
+    <div class="hint">Group by ticks aggregate the report (SMS count + My Payout + Client Payout, with totals row). Without group-by you get one row per SMS. All filters combine (AND).</div>
     <div id="sdChips" style="display:flex;flex-wrap:wrap;align-items:center"></div>
   </div>
   <div class="table-wrap" style="padding:15px 17px;margin-top:0"><div class="table-controls">
     <div class="tc-left"><label>Show Records:</label><select id="sdLen" onchange="renderSmsDetail()"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option><option>1000</option><option>10000</option><option value="All">All</option></select>${eb()}</div>
-    <div class="tc-right"><label>Search:</label><input type="text" id="sdSearch" oninput="renderSmsDetail()" placeholder="Search..."/></div></div></div>
-  <div class="table-wrap"><div class="tscroll"><table><thead id="sdHead"></thead><tbody id="sdBody"></tbody></table></div>
-    <div class="table-foot"><div class="info" id="sdInfo"></div><div class="info" id="sdPayoutInfo"></div><div class="pagination"></div></div></div>`;var _f3=document.getElementById('sdDateFrom'),_t3=document.getElementById('sdDateTo');if(_f3)_f3.value='';if(_t3)_t3.value='';renderSmsDetail();}
-/* P19 facet state (agent): dims = cli, number, range, client */
-function sdActiveTicks(){ const m=[]; if(typeof sdUseCli!=='undefined'&&sdUseCli&&sdUseCli.checked)m.push('cli'); if(typeof sdUseNumber!=='undefined'&&sdUseNumber&&sdUseNumber.checked)m.push('number'); if(typeof sdUseRange!=='undefined'&&sdUseRange&&sdUseRange.checked)m.push('range'); if(typeof sdUseUser!=='undefined'&&sdUseUser&&sdUseUser.checked)m.push('client'); return m; }
-function sdSelParams(exclude){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',client:''}); const out={}; for(const k of ['cli','number','range','client']){ if(k!==exclude&&sel[k]) out[k]=sel[k]; } return out; }
-function sdPick(dim,val){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',client:''}); sel[dim]=val; window.__sdDrill=dim; renderSmsDetail(); }
-function sdUnpick(dim){ const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',client:''}); sel[dim]=''; if(window.__sdDrill===dim)window.__sdDrill=''; renderSmsDetail(); }
-function sdChipsHtml(){ const sel=window.__sdSel||{}; const lbl={cli:'CLI',number:'Number',range:'Range',client:'Client'}; const out=[]; for(const k of ['cli','number','range','client']){ if(sel[k]){ const v=String(sel[k]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); out.push(`<span class="gx-chip">${lbl[k]}: <b>${v}</b> <span class="x" onclick="sdUnpick('${k}')" title="Remove filter">&#10005;</span></span>`); } } return out.join(''); }
-function toggleDetailFilters(dim){
-  /* P19k #2: dim arg ke saath tick-ORDER track — facet list ab LAST ticked dim dikhati hai. */
-  const _t=document.getElementById('sdUseTime').checked;document.getElementById('sdTimeFrom').disabled=!_t;document.getElementById('sdTimeTo').disabled=!_t;
-  if(dim){
-    window.__sdTickOrder=(window.__sdTickOrder||[]).filter(d=>d!==dim);
-    const cb={cli:'sdUseCli',number:'sdUseNumber',range:'sdUseRange',client:'sdUseUser'}[dim];
-    const el=document.getElementById(cb);
-    if(el&&el.checked)window.__sdTickOrder.push(dim);
-  }
-  window.__sdDrill='';
+    <div class="tc-right"><label>Search:</label><input type="text" id="sdSearch" oninput="clearTimeout(window.__sdST);window.__sdST=setTimeout(renderSmsDetail,450)" placeholder="Search..."/></div></div></div>
+  <div class="table-wrap"><div class="tscroll"><table><thead id="sdHead"></thead><tbody id="sdBody"></tbody><tfoot id="sdFoot" class="gx-tot"></tfoot></table></div>
+    <div class="table-foot"><div class="info" id="sdInfo"></div><div class="info" id="sdPayoutInfo"></div><div class="pagination"></div></div></div>`;var _f3=document.getElementById('sdDateFrom'),_t3=document.getElementById('sdDateTo');if(_f3)_f3.value='';if(_t3)_t3.value='';renderSmsDetail();fillSdFilterSelects();}
+/* ---- P20 report state/helpers (agent) ---- */
+function sdDims(){ return {hour:'Hour',day:'Day',month:'Month',range:'Range',number:'Number',cli:'CLI',client:'Client',currency:'Currency'}; }
+function sdSelAll(){ return {cli:'',number:'',range:'',client:''}; }
+function sdToggleTime(){
+  const on=document.getElementById('sdUseTime').checked;
+  document.getElementById('sdTimeFrom').disabled=!on;
+  document.getElementById('sdTimeTo').disabled=!on;
   renderSmsDetail();
 }
-/* P19k #2: dropdown direct pick — facet-click wahi pick state (chips) share karta hai. */
 function sdSelPick(dim,val){
-  const sel=(window.__sdSel=window.__sdSel||{cli:'',number:'',range:'',client:''});
+  const sel=(window.__sdSel=window.__sdSel||sdSelAll());
   sel[dim]=String(val||'');
-  window.__sdDrill='';
   renderSmsDetail();
+}
+function sdUnpick(dim){
+  const sel=(window.__sdSel=window.__sdSel||sdSelAll());
+  sel[dim]='';
+  const map={cli:'sdCliSearch',number:'sdNumSearch',range:'sdSelRange',client:'sdSelClient'};
+  const el=map[dim]?document.getElementById(map[dim]):null; if(el) el.value='';
+  renderSmsDetail();
+}
+function sdChipsHtml(){
+  const sel=window.__sdSel||{};
+  const lbl={cli:'CLI contains',number:'Number contains',range:'Range',client:'Client'};
+  const out=[];
+  for(const k of ['cli','number','range','client']){
+    if(sel[k]){ const v=String(sel[k]).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      out.push(`<span class="gx-chip">${lbl[k]}: <b>${v}</b> <span class="x" onclick="sdUnpick('${k}')" title="Remove filter">&#10005;</span></span>`); } }
+  return out.join('');
 }
 function sdSyncFilterSelects(){
-  const sel=window.__sdSel||{};
-  const map={cli:'sdSelCli',range:'sdSelRange',client:'sdSelClient'};
-  for(const k of Object.keys(map)){
-    const el=document.getElementById(map[k]);
-    if(el){const want=String(sel[k]||'');if(el.value!==want)el.value=want;}
-  }
+  const sel=window.__sdSel=window.__sdSel||sdSelAll();
+  const map={range:'sdSelRange',client:'sdSelClient'};
+  for(const k of Object.keys(map)){ const el=document.getElementById(map[k]); if(el){ const want=String(sel[k]||''); if(el.value!==want) el.value=want; } }
+}
+function sdGbActive(){ const out=[]; for(const d of Object.keys(sdDims())){ const el=document.getElementById('sdGb_'+d); if(el&&el.checked) out.push(d); } return out; }
+function sdReset(){
+  window.__sdSort={k:'',d:''}; window.__sdSel=sdSelAll();
+  gxResetSortHeads('sdSort_');
+  for(const d of Object.keys(sdDims())){ const el=document.getElementById('sdGb_'+d); if(el) el.checked=false; }
+  sdUseDate.checked=true;
+  var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');
+  if(_f2){_f2.value='';_f2.dataset.gxAuto='';} if(_t2){_t2.value='';_t2.dataset.gxAuto='';}
+  sdUseTime.checked=false;
+  var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');
+  if(_tf2)_tf2.value=''; if(_tt2)_tt2.value='';
+  const nsd=document.getElementById('sdSearch'); if(nsd) nsd.value='';
+  const _nsr=document.getElementById('sdNumSearch'),_csr=document.getElementById('sdCliSearch');
+  if(_nsr)_nsr.value=''; if(_csr)_csr.value='';
+  sdToggleTime();
+}
+/* P20: group-by column formatting */
+function sdFmtDim(d,v){
+  const raw=String(v==null?'':v);
+  const esc=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  if(!raw) return '<span class="muted">—</span>';
+  if(d==='number'||d==='cli') return `<span class="tag tag-gray mono">${esc}</span>`;
+  if(d==='range') return `<span class="tag tag-blue">${esc}</span>`;
+  if(d==='agent') return `<span class="tag tag-agt">${esc}</span>`;
+  if(d==='client') return `<span class="tag tag-cli">${esc}</span>`;
+  if(d==='currency') return `<span class="tag tag-green">${esc}</span>`;
+  if(d==='hour'||d==='day'||d==='month') return `<span class="mono">${esc}</span>`;
+  return esc;
+}
+/* P20: grouped-mode sort (SMS / My Payout — server-side) */
+function gxSdGroupSort(k){
+  const st=(window.__sdGs=window.__sdGs||{k:'',d:''});
+  st.d = (st.k===k && st.d==='asc') ? 'desc' : 'asc';
+  st.k = k;
+  renderSmsDetail();
 }
 async function fillSdFilterSelects(){
   const escOpt=(v)=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -856,13 +896,6 @@ async function fillSdFilterSelects(){
     if(rsel&&rsel.options.length<=1){
       const ranges=await API.get('/ranges');
       rsel.innerHTML='<option value="">All Ranges</option>'+((ranges||[]).map(r=>`<option value="${escOpt(r.name)}">${escOpt(r.name)}</option>`).join(''));
-    }
-    const csel=document.getElementById('sdSelCli');
-    if(csel&&csel.options.length<=1){
-      try{const rj=await API.get('/sms/clis?from=1970-01-01&to=2099-12-31');
-        const items=(rj.items&&rj.items.length)?rj.items:(rj.clis||[]).map(c=>({cli:c,count:null}));
-        csel.innerHTML='<option value="">All CLIs</option>'+items.map(x=>`<option value="${escOpt(x.cli)}">${escOpt(x.cli)}${x.count!=null?' ('+x.count+' OTPs)':''}</option>`).join('');
-      }catch(e){csel.innerHTML='<option value="">All CLIs</option>';}
     }
     const cll=document.getElementById('sdSelClient');
     if(cll&&cll.options.length<=1){
@@ -873,7 +906,7 @@ async function fillSdFilterSelects(){
     sdSyncFilterSelects();
   }catch(e){console.warn(e)}
 }
-function sdReset(){window.__sdSort={k:'',d:''};window.__sdSumSort={k:'',d:''};window.__sdDrill='';window.__sdSel={cli:'',number:'',range:'',client:''};window.__sdTickOrder=[];gxResetSortHeads('sdSort_');['sms','payment'].forEach(x=>{const el=document.getElementById('sdSum_'+x);if(el)el.textContent='\u21C5';});sdUseDate.checked=true;var _f2=document.getElementById('sdDateFrom'),_t2=document.getElementById('sdDateTo');if(_f2){_f2.value='';_f2.dataset.gxAuto='';}if(_t2){_t2.value='';_t2.dataset.gxAuto='';}sdUseRange.checked=false;sdUseNumber.checked=false;sdUseUser.checked=false;sdUseCli.checked=false;sdUseTime.checked=false;var _tf2=document.getElementById('sdTimeFrom'),_tt2=document.getElementById('sdTimeTo');if(_tf2)_tf2.value='';if(_tt2)_tt2.value='';sdSearch.value='';toggleDetailFilters();}
+
 function groupRows(rows,key,label){const map={};rows.forEach(r=>{const k=r[key]||'—';if(!map[k])map[k]={name:k,sms:0,pay:'0'};map[k].sms++;map[k].pay=decAdd(map[k].pay,r.payout_amount||r.payout_rate||0);});const arr=Object.values(map);return {head:`<tr><th>${label}</th><th>Total OTPs</th><th>Total Payout</th></tr>`,rows:arr.map(x=>`<tr><td><span class="tag tag-cli">${x.name}</span></td><td class="cell-money">${x.sms}</td><td class="cell-money">${money(x.pay)}</td></tr>`)};}
 function inSmsDateRange(receivedAt){
   var d = ukDateOf(receivedAt || '');
@@ -1097,36 +1130,56 @@ async function renderSmsDetail(){if(!document.getElementById('sdBody'))return;
   const chips=document.getElementById('sdChips'); if(chips) chips.innerHTML=sdChipsHtml();
   const _sdF=(document.getElementById('sdDateFrom')?.value)||'',_sdT=(document.getElementById('sdDateTo')?.value)||'';let dateFrom=_sdF,dateTo=_sdT;if(!dateFrom&&!dateTo){dateFrom=todayStr();dateTo=todayStr();}else if(dateFrom&&!dateTo){dateTo='2099-12-31';}else if(!dateFrom&&dateTo){dateFrom='1970-01-01';}if(dateFrom>dateTo){const _s=dateFrom;dateFrom=dateTo;dateTo=_s;}
   const tfVal=sdUseTime?.checked?(document.getElementById('sdTimeFrom')?.value||''):'',ttVal=sdUseTime?.checked?(document.getElementById('sdTimeTo')?.value||''):'',search=(sdSearch?.value||'').trim(),len=sdLen?.value||'25';
-  /* P19 FACET: tick+no-drill => dim values list (stats-summary, server-scoped); drill/no-tick => detail rows.
-     P19: Time window (tfrom/tto) ab agent me bhi manager/admin jaisa kaam karta hai (pehle checkbox vestigial tha). */
-  const ticks=sdActiveTicks(); const drill=window.__sdDrill||'';
+  /* P20 FIX: text searches ko pick-state me sync (warna typed value kabhi query me nahi jata) */
+  const sel=window.__sdSel=window.__sdSel||sdSelAll();
+  const _nsI=document.getElementById('sdNumSearch'), _csI=document.getElementById('sdCliSearch');
+  if(_nsI) sel.number=_nsI.value.trim(); if(_csI) sel.cli=_csI.value.trim();
   sdSyncFilterSelects();
-  const dimLabel={cli:'CLI',number:'Number',range:'Range',client:'Client'};
-  if(!drill && ticks.length){
-    /* P19k #2: LAST ticked dimension (fallback: pehla ticked) */
-    const _ord=(window.__sdTickOrder||[]).filter(d=>ticks.includes(d));
-    const by=_ord.length?_ord[_ord.length-1]:ticks[0];
-    const fp=sdSelParams(by);
-    const params=new URLSearchParams({from:dateFrom,to:dateTo});
-    if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);
-    if(search)params.set('search',search);
-    for(const k of Object.keys(fp)) params.set(k,fp[k]);
-    const _su=(window.__sdSumSort=window.__sdSumSort||{k:'',d:''});if(_su.k){params.set('sort',_su.k);params.set('dir',_su.d);}
-    let data={rows:[]};try{data=await API.get('/stats-summary/'+by+'?'+params.toString())}catch(e){}
-    sdHead.innerHTML=`<tr><th>${dimLabel[by]||by}</th><th class="sortable" onclick="gxSdSumSort('sms')">Total OTPs <span class="sort" id="sdSum_sms">${gxArr(_su,'sms')}</span></th><th class="sortable" onclick="gxSdSumSort('payment')">Total Payout <span class="sort" id="sdSum_payment">${gxArr(_su,'payment')}</span></th></tr>`;
-    sdBody.innerHTML=(data.rows||[]).map(x=>{const raw=String(x.key||'\u2014');const v=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');const mono=(by==='cli'||by==='number')?' mono':'';return `<tr class="gx-facet-row" onclick="sdPick('${by}','${v}')" title="Click to show only this ${dimLabel[by]||by}"><td><span class="tag tag-blue${mono}">${v}</span></td><td class="cell-money">${x.sms||0}</td><td class="cell-money">${money(x.payment||'0')}</td></tr>`;}).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
-    sdInfo.textContent=`Showing ${(data.rows||[]).length} ${dimLabel[by]||by} values — click a row to filter`;sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`;return;}
-  const state=agtPager('agtSmsDetailServer');const _sdst=(window.__sdSort=window.__sdSort||{k:'',d:''});
-  const fp=sdSelParams('');
-  const sig=agtSig({dateVal:dateFrom,rangeVal:fp.range||'',userVal:fp.client||'',cliVal:fp.cli||'',numberVal:fp.number||'',search,len,sk:_sdst.k,sd:_sdst.d,drill});if(state.signature!==sig){state.page=1;state.signature=sig;}
-  const params=new URLSearchParams({page:String(state.page),limit:len,from:dateFrom,to:dateTo,sort:(_sdst.k||'date'),dir:(_sdst.k?_sdst.d:'desc')});
-  for(const k of Object.keys(fp)) params.set(k,fp[k]);
-  if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal); if(search)params.set('search',search);
+  /* P20: text searches => contains params; dropdown picks => exact */
+  const base=new URLSearchParams({from:dateFrom,to:dateTo});
+  if(tfVal)base.set('tfrom',tfVal); if(ttVal)base.set('tto',ttVal); if(search)base.set('search',search);
+  if(sel.number)base.set('number_like',sel.number);
+  if(sel.cli)base.set('cli_like',sel.cli);
+  for(const k of ['range','client']) if(sel[k]) base.set(k,sel[k]);
+  const groups=sdGbActive();
+  const state=agtPager('agtSmsDetailServer');
+  if(groups.length){
+    /* ---- GROUPED MODE: /api/sms/report (role-scoped dims backend se) ---- */
+    const _gs=(window.__sdGs=window.__sdGs||{k:'',d:''});
+    const sig=agtSig({mode:'group',g:groups.join(','),f:base.toString(),len,sk:_gs.k,sd:_gs.d});if(state.signature!==sig){state.page=1;state.signature=sig;}
+    const params=new URLSearchParams(base);
+    params.set('group',groups.join(',')); params.set('page',String(state.page||1)); params.set('limit',len);
+    if(_gs.k){ params.set('sort',_gs.k); params.set('dir',_gs.d); }
+    let data={rows:[],total:0,page:1,limit:25,totalPages:1,totals:{}};try{data=await API.get('/sms/report?'+params.toString())}catch(e){}
+    state.page=data.page||1;state.totalPages=data.totalPages||1;
+    const dimL=sdDims();
+    sdHead.innerHTML='<tr>'+groups.map(g=>`<th>${dimL[g]||g}</th>`).join('')
+      +`<th class="sortable" onclick="gxSdGroupSort('sms')">SMS <span class="sort" id="sdGs_sms">${_gs.k==='sms'?(_gs.d==='asc'?'\u2191':'\u2193'):'\u21C5'}</span></th>`
+      +`<th class="sortable" onclick="gxSdGroupSort('payout')">My Payout <span class="sort">${_gs.k==='payout'?(_gs.d==='asc'?'\u2191':'\u2193'):'\u21C5'}</span></th>`
+      +'<th>Client Payout</th></tr>';
+    const rows=data.rows||[];
+    sdBody.innerHTML=rows.map(r=>'<tr>'+groups.map(g=>`<td>${sdFmtDim(g,r.dims&&r.dims[g])}</td>`).join('')
+      +`<td class="cell-money">${(r.sms||0).toLocaleString()}</td>`
+      +`<td class="cell-money" style="color:#4ade80">${money(r.my_payout||'0')}</td>`
+      +`<td class="cell-money">${money(r.client_payout||'0')}</td></tr>`).join('')||`<tr><td colspan="${groups.length+3}" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+    const tot=data.totals||{};
+    sdFoot.innerHTML=`<tr><td colspan="${groups.length}"><b>Totals</b></td><td class="cell-money"><b>${(tot.sms||0).toLocaleString()}</b></td><td class="cell-money"><b>${money(tot.my_payout||'0')}</b></td><td class="cell-money"><b>${money(tot.client_payout||'0')}</b></td></tr>`;
+    sdInfo.textContent=`Showing ${shownSrv(data.page,data.limit,rows.length,data.total)} of ${data.total||0} groups`;
+    sdPayoutInfo.textContent=`Total SMS: ${(tot.sms||0).toLocaleString()} · My Payout: ${money(tot.my_payout||'0')} · Client Payout: ${money(tot.client_payout||'0')}`;
+    const pag=sdInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,state,renderSmsDetail);
+    return;
+  }
+  /* ---- DETAIL MODE: /api/sms/paged ---- */
+  const _sdst=(window.__sdSort=window.__sdSort||{k:'',d:''});
+  const sig=agtSig({mode:'detail',f:base.toString(),len,sk:_sdst.k,sd:_sdst.d});if(state.signature!==sig){state.page=1;state.signature=sig;}
+  const params=new URLSearchParams(base);
+  params.set('page',String(state.page||1));params.set('limit',len);params.set('sort',(_sdst.k||'date'));params.set('dir',(_sdst.k?_sdst.d:'desc'));
   let data={rows:[],total:0,page:1,limit:25,totalPages:1,totalPayment:'0'};try{data=await API.get('/sms/paged?'+params.toString())}catch(e){}
   state.page=data.page||1;state.totalPages=data.totalPages||1;
-  sdHead.innerHTML=`<tr><th>Date</th><th>Client</th><th class="sortable" onclick="gxSdSort('range')">Range <span class="sort">${gxArr(_sdst,'range')}</span></th><th class="sortable" onclick="gxSdSort('number')">Number <span class="sort">${gxArr(_sdst,'number')}</span></th><th class="sortable" onclick="gxSdSort('cli')">CLI <span class="sort">${gxArr(_sdst,'cli')}</span></th><th class="sortable" onclick="gxSdSort('payout')">Payout Rate <span class="sort">${gxArr(_sdst,'payout')}</span></th><th>Message</th></tr>`;
+  sdHead.innerHTML=`<tr><th>Date</th><th>Client</th><th class="sortable" onclick="gxSdSort('range')">Range <span class="sort">${gxArr(_sdst,'range')}</span></th><th class="sortable" onclick="gxSdSort('number')">Number <span class="sort">${gxArr(_sdst,'number')}</span></th><th class="sortable" onclick="gxSdSort('cli')">CLI <span class="sort">${gxArr(_sdst,'cli')}</span></th><th>Currency</th><th class="sortable" onclick="gxSdSort('payout')">Payout Rate <span class="sort">${gxArr(_sdst,'payout')}</span></th><th>Message</th></tr>`;
   const rows=data.rows||[];
-  sdBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-cli">${r.client_name||'—'}</span></td><td><b>${r.range_name||'—'}</b></td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td class="cell-money">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+  sdBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-cli">${r.client_name||'—'}</span></td><td><b>${r.range_name||'—'}</b></td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td>${r.range_currency?'<span class="tag tag-green">'+r.range_currency+'</span>':'—'}</td><td class="cell-money">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+  sdFoot.innerHTML='';
   sdInfo.textContent=`Showing ${shownSrv(data.page,data.limit,rows.length,data.total)} of ${data.total||0} rows`;sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`;const pag=sdInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,state,renderSmsDetail);}
 
 /* FAST SERVER-SIDE NUMBERS/STATS OVERRIDES */
