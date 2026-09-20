@@ -177,77 +177,37 @@ async function run() {
     const convId = convRes.body.conversation_id;
 
     // Fake audio payload (opus stream bytes)
+    // 4. Voice message removal verification (Endpoints return 404 / cleanly disabled)
     const fakeAudioData = Buffer.alloc(1024, 0xAA);
     const uploadVoiceRes = await req('POST', `/api/chat/conversations/${convId}/voice?duration=5.4`, fakeAudioData, mgrChatToken, true, {
       'Content-Type': 'audio/ogg'
     });
-    assert(uploadVoiceRes.status === 200 && uploadVoiceRes.body.ok, 'Voice message uploaded successfully');
-    assert(uploadVoiceRes.body.message.attachment_type === 'voice', 'Message tagged as attachment_type=voice');
-    const voiceFilename = uploadVoiceRes.body.message.attachment_path;
-    assert(voiceFilename && voiceFilename.startsWith('voice_'), 'Generated valid voice filename', voiceFilename);
+    assert(uploadVoiceRes.status === 404, 'Voice upload endpoint cleanly removed (returns 404)');
 
-    // Playback with Bearer header
-    const playHeaderRes = await req('GET', `/api/chat/voice/${voiceFilename}`, null, agtChatToken);
-    assert(playHeaderRes.status === 200, 'Recipient Agent plays voice message using Bearer header');
-    assert(playHeaderRes.headers['content-type'].includes('audio'), 'Voice playback returns audio content type');
+    const playHeaderRes = await req('GET', `/api/chat/voice/test_voice.ogg`, null, agtChatToken);
+    assert(playHeaderRes.status === 404, 'Voice playback endpoint cleanly removed (returns 404)');
 
-    // Playback with ?token= query parameter (for direct <audio src="..."> element playback)
-    const playQueryRes = await req('GET', `/api/chat/voice/${voiceFilename}?token=${agtChatToken}`);
-    assert(playQueryRes.status === 200, 'Voice playback succeeds via ?token= query param');
-
-    // IDOR check: unauthorized user cannot listen to voice message
-    const createThird = await req('POST', '/api/users', {
-      username: 'unauth_client',
-      password: 'PanelPassword123!',
-      role: 'client',
-      name: 'Unauth Client',
-      parent_id: agtId
-    }, adminToken);
-    const unauthPin = createThird.body.chat_password;
-    const unauthLogin = await req('POST', '/api/chat/auth/login', {
-      username: 'unauth_client',
-      password: unauthPin
-    });
-    const unauthPlayRes = await req('GET', `/api/chat/voice/${voiceFilename}`, null, unauthLogin.body.token);
-    assert(unauthPlayRes.status === 403, 'Unauthorized 3rd party is blocked from playing voice note (403 Forbidden)');
-
-    // 5. WebRTC Voice Call Signaling
+    // 5. WebRTC Voice Call Signaling removal verification (Endpoints return 404 / cleanly disabled)
     const callInviteRes = await req('POST', '/api/chat/call/invite', {
       conversation_id: convId,
       offer: { type: 'offer', sdp: 'v=0\r\no=alice ...' },
       call_type: 'voice'
     }, mgrChatToken);
-    assert(callInviteRes.status === 200 && callInviteRes.body.call_id, 'Manager issues WebRTC call invite');
-    const callId = callInviteRes.body.call_id;
+    assert(callInviteRes.status === 404, 'WebRTC call invite endpoint cleanly removed (returns 404)');
 
-    // Agent answers call
     const callAnswerRes = await req('POST', '/api/chat/call/answer', {
-      call_id: callId,
+      call_id: 'call-123',
       answer: { type: 'answer', sdp: 'v=0\r\no=bob ...' }
     }, agtChatToken);
-    assert(callAnswerRes.status === 200 && callAnswerRes.body.ok, 'Agent answers WebRTC call');
-
-    // Exchange ICE candidate
-    const iceRes = await req('POST', '/api/chat/call/ice-candidate', {
-      call_id: callId,
-      candidate: { candidate: 'candidate:1 1 UDP 2122252543 192.168.1.1 50000 typ host', sdpMid: '0', sdpMLineIndex: 0 }
-    }, mgrChatToken);
-    assert(iceRes.status === 200, 'ICE candidate exchange succeeds');
-
-    // End call
-    const endCallRes = await req('POST', '/api/chat/call/end', {
-      call_id: callId,
-      reason: 'hangup'
-    }, agtChatToken);
-    assert(endCallRes.status === 200, 'Call session ended cleanly');
+    assert(callAnswerRes.status === 404, 'WebRTC call answer endpoint cleanly removed (returns 404)');
 
     // 6. Mobile Assets & Production Host Configuration
     const mobileHtml = fs.readFileSync(path.join(__dirname, '..', 'mobile-app', 'assets', 'index.html'), 'utf8');
     assert(mobileHtml.includes('http://173.249.48.57'), 'Mobile app has production server http://173.249.48.57 embedded by default');
     assert(mobileHtml.includes('#070D1F') && mobileHtml.includes('--accent: #30ABED'), 'Mobile app includes Deep Space Luxury theme');
     assert(mobileHtml.includes('bottom-nav') && mobileHtml.includes('data-nav="chats"') && mobileHtml.includes('data-nav="contacts"'), 'Mobile app features bottom navigation tabs');
-    assert(mobileHtml.includes('callOverlay') && mobileHtml.includes('RTCPeerConnection'), 'Mobile app includes WebRTC calling interface and peer connection logic');
-    assert(mobileHtml.includes('btnMic') && mobileHtml.includes('MediaRecorder'), 'Mobile app includes voice note recording and MediaRecorder');
+    assert(!mobileHtml.includes('RTCPeerConnection'), 'Mobile app cleanly removed WebRTC calling code');
+    assert(!mobileHtml.includes('MediaRecorder'), 'Mobile app cleanly removed voice recording code');
 
     // 7. Signed APK Verification
     const apkPath = path.join(__dirname, '..', 'galaxy-chat-v1.apk');

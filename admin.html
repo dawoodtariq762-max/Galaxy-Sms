@@ -2913,14 +2913,16 @@ async function initAllChatAccounts(){
 }
 
 function openSetChatPasswordModal(userId, username){
+  const existing = document.getElementById('setChatPwModal');
+  if (existing) existing.remove();
   const ov = document.createElement('div');
-  ov.className = 'modal-overlay';
+  ov.className = 'modal-overlay show';
   ov.id = 'setChatPwModal';
   ov.innerHTML = `
     <div class="modal" style="width:min(440px,96%)">
       <div class="modal-head">
         <h3>Set Chat Password: <span class="mono">${pesc(username)}</span></h3>
-        <button class="modal-close" onclick="closeModal('setChatPwModal')">✕</button>
+        <button class="modal-close" onclick="closeChatPwModal()">✕</button>
       </div>
       <div class="modal-body">
         <p class="muted" style="margin-bottom:14px;font-size:13px">
@@ -2939,10 +2941,15 @@ function openSetChatPasswordModal(userId, username){
         <div id="mChatPwErr" class="msg err" style="display:none;margin-top:10px"></div>
       </div>
       <div class="modal-foot" style="display:flex;justify-content:flex-end;gap:8px">
-        <button class="btn btn-ghost" onclick="closeModal('setChatPwModal')">Cancel</button>
+        <button class="btn btn-ghost" onclick="closeChatPwModal()">Cancel</button>
         <button class="btn btn-blue" id="mChatPwSave">Save Chat Password</button>
       </div>
     </div>`;
+
+  window.closeChatPwModal = function() {
+    const el = document.getElementById('setChatPwModal');
+    if (el) { el.classList.remove('show'); el.remove(); }
+  };
 
   document.body.appendChild(ov);
 
@@ -2966,7 +2973,7 @@ function openSetChatPasswordModal(userId, username){
     try {
       ov.querySelector('#mChatPwSave').disabled = true;
       const res = await API.post(`/chat/admin/accounts/${userId}/password`, { password: p1 });
-      closeModal('setChatPwModal');
+      closeChatPwModal();
       alert(`✅ Galaxy Chat password for "${username}" set to:\n\n${p1}\n\nYou can share this with the user.`);
       loadChatAccounts();
     } catch (e) {

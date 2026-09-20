@@ -310,26 +310,7 @@
   .ticks { font-size: 12px; letter-spacing: -1px; }
   .ticks.read { color: #38BDF8; font-weight: 800; text-shadow: 0 0 6px rgba(56,189,248,0.5); }
 
-  /* Voice message player bubble */
-  .voice-bubble {
-    display: flex; align-items: center; gap: 10px; min-width: 170px; padding: 8px 12px;
-  }
-  .voice-play-btn {
-    width: 36px; height: 36px; border-radius: 50%; border: 0;
-    background: #fff; color: #1D4ED8; font-size: 14px; display: grid; place-items: center;
-    cursor: pointer; flex-shrink: 0;
-  }
-  .msg-row.them .voice-play-btn { background: var(--accent); color: #fff; }
-  .voice-waveform {
-    flex: 1; height: 4px; background: rgba(255,255,255,0.25); border-radius: 2px; position: relative;
-    cursor: pointer;
-  }
-  .voice-progress {
-    position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: #38BDF8; border-radius: 2px;
-  }
-  .voice-duration { font-size: 11px; opacity: 0.85; min-width: 30px; text-align: right; }
-
-  /* Input Bar & Voice Recording */
+  /* Input Bar */
   .chat-input-bar {
     background: var(--surface); border-top: 1px solid var(--border);
     padding: 8px 12px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;
@@ -358,16 +339,6 @@
   }
   .send-btn:disabled { opacity: 0.35; cursor: default; }
 
-  /* Voice Recording Bar UI */
-  .voice-rec-overlay {
-    flex: 1; display: none; align-items: center; justify-content: space-between;
-    background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35);
-    border-radius: 20px; padding: 0 14px; height: 40px; color: #FECACA; font-size: 13px; font-weight: 700;
-  }
-  .voice-rec-overlay.active { display: flex; }
-  .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #EF4444; animation: blink 1s infinite; }
-  @keyframes blink { 50% { opacity: 0.3; } }
-
   /* Action Sheet for Messages */
   .sheet-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.72);
@@ -393,34 +364,6 @@
   .sheet-btn.danger { color: #FCA5A5; border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.12); }
   .sheet-btn.danger:active { background: rgba(239,68,68,0.22); }
   .sheet-btn.cancel { background: transparent; border-color: transparent; color: var(--text-muted); margin-top: 4px; }
-
-  /* WebRTC Voice Call Overlay */
-  .call-overlay {
-    position: fixed; inset: 0; background: rgba(7,13,31,0.96);
-    display: none; flex-direction: column; align-items: center; justify-content: space-between;
-    padding: 60px 24px 50px; z-index: 200; backdrop-filter: blur(24px);
-  }
-  .call-overlay.active { display: flex; }
-  .call-head { text-align: center; }
-  .call-avatar-wrap {
-    width: 110px; height: 110px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    display: grid; place-items: center; font-size: 42px; font-weight: 800; color: #fff;
-    margin: 0 auto 20px; box-shadow: 0 0 35px var(--accent-glow); animation: callPulse 2s infinite;
-  }
-  @keyframes callPulse { 0% { transform: scale(0.98); } 50% { transform: scale(1.04); } 100% { transform: scale(0.98); } }
-  .call-name { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
-  .call-status { font-size: 14px; color: var(--accent); font-weight: 600; letter-spacing: 0.05em; }
-  .call-controls { display: flex; align-items: center; gap: 24px; }
-  .call-btn-circle {
-    width: 64px; height: 64px; border-radius: 50%; border: 0; color: #fff; font-size: 24px;
-    display: grid; place-items: center; cursor: pointer; transition: transform 0.15s;
-  }
-  .call-btn-circle:active { transform: scale(0.92); }
-  .call-btn-circle.accept { background: #10B981; box-shadow: 0 8px 24px rgba(16,185,129,0.4); }
-  .call-btn-circle.decline { background: #EF4444; box-shadow: 0 8px 24px rgba(239,68,68,0.4); }
-  .call-btn-circle.mute { background: var(--surface-card); border: 1px solid var(--border); color: var(--text); }
-  .call-btn-circle.mute.muted { background: var(--warn); color: #000; }
 
   /* Modals */
   .modal-overlay {
@@ -560,7 +503,6 @@
       <div class="partner-name" id="cPartnerName">User</div>
       <div class="partner-sub" id="cPartnerRole">Agent</div>
     </div>
-    <button class="call-btn" id="btnStartCall" onclick="initiateVoiceCall()" title="Voice Call">📞</button>
   </header>
 
   <div class="spectator-banner" id="specBanner">
@@ -575,21 +517,6 @@
   <div class="chat-input-bar">
     <!-- Normal typing input -->
     <textarea class="chat-input" id="mInput" rows="1" placeholder="Type a message..." oninput="autoExpand(this)"></textarea>
-
-    <!-- Voice recording live overlay -->
-    <div class="voice-rec-overlay" id="voiceRecBar">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="rec-dot"></span>
-        <span id="recTimer">0:00</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <button type="button" style="background:none;border:0;color:#FCA5A5;font-weight:700;font-size:13px;cursor:pointer" onclick="cancelVoiceRecord()">✕ Cancel</button>
-        <button type="button" style="background:none;border:0;color:#38BDF8;font-weight:800;font-size:13px;cursor:pointer" onclick="finishVoiceRecord()">➤ Send Voice</button>
-      </div>
-    </div>
-
-    <!-- Voice record button -->
-    <button type="button" class="action-icon-btn" id="btnMic" onclick="toggleVoiceRecord()" title="Record Voice Message">🎙️</button>
 
     <!-- Text send button -->
     <button class="send-btn" id="mSend" onclick="sendMessage()">➤</button>
@@ -627,23 +554,6 @@
   </div>
 </div>
 
-<!-- 6. WEBRTC VOICE CALL OVERLAY -->
-<div class="call-overlay" id="callOverlay">
-  <div class="call-head">
-    <div class="call-avatar-wrap" id="callAvatar">📞</div>
-    <div class="call-name" id="callPartnerName">User</div>
-    <div class="call-status" id="callStatus">Calling...</div>
-  </div>
-
-  <audio id="remoteAudio" autoplay></audio>
-
-  <div class="call-controls" id="callControls">
-    <!-- Dynamic controls based on state: Ringing vs Active -->
-    <button type="button" class="call-btn-circle mute" id="btnCallMute" onclick="toggleCallMute()" title="Mute Mic">🎤</button>
-    <button type="button" class="call-btn-circle decline" id="btnCallEnd" onclick="endCall()" title="End Call">✕</button>
-  </div>
-</div>
-
 <script>
 (function() {
   'use strict';
@@ -670,26 +580,6 @@
     audioCtx: null,
     seenNotifIds: new Set(),
     activeAudioPlayer: null
-  };
-
-  // WebRTC Call State
-  const CallState = {
-    activeCallId: null,
-    peerConn: null,
-    localStream: null,
-    isCaller: false,
-    timerInterval: null,
-    startTime: 0,
-    isMuted: false
-  };
-
-  // Voice Recording State
-  const VoiceRec = {
-    mediaRecorder: null,
-    audioChunks: [],
-    startTime: 0,
-    timerInterval: null,
-    isRecording: false
   };
 
   // Native Android Bridge Helper
@@ -733,10 +623,6 @@
 
   // Back button handling
   window.handleAppBack = function() {
-    if (CallState.activeCallId) {
-      if (confirm('End ongoing call?')) endCall();
-      return true;
-    }
     if ($('msgSheet').classList.contains('active')) {
       closeSheet();
       return true;
@@ -1140,8 +1026,6 @@
     const banner = $('specBanner');
     banner.style.display = isSpectator ? 'flex' : 'none';
 
-    $('btnStartCall').style.display = isSpectator ? 'none' : 'grid';
-
     $('screenChat').classList.add('active');
     loadMessages(convId);
 
@@ -1186,17 +1070,6 @@
       let contentHtml = '';
       if (isDeleted) {
         contentHtml = '<div>🚫 This message was deleted</div>';
-      } else if (m.attachment_type === 'voice' && m.attachment_path) {
-        const audioSrc = `${S.server.replace(/\/+$/, '')}/api/chat/voice/${encodeURIComponent(m.attachment_path)}`;
-        contentHtml = `
-          <div class="voice-bubble">
-            <button type="button" class="voice-play-btn" onclick="playVoiceAudio(event, '${audioSrc}', this)">▶</button>
-            <div class="voice-waveform" onclick="seekVoiceAudio(event, this)">
-              <div class="voice-progress"></div>
-            </div>
-            <span class="voice-duration">${Math.round(m.attachment_duration || 5)}s</span>
-          </div>
-        `;
       } else {
         contentHtml = `<div>${escapeHtml(m.body)}</div>`;
       }
@@ -1221,46 +1094,6 @@
       `;
     }).join('');
   }
-
-  window.playVoiceAudio = function(e, src, btn) {
-    e.stopPropagation();
-    if (S.activeAudioPlayer && !S.activeAudioPlayer.paused) {
-      S.activeAudioPlayer.pause();
-      if (S.activeAudioBtn) S.activeAudioBtn.textContent = '▶';
-      if (S.activeAudioBtn === btn) {
-        S.activeAudioPlayer = null;
-        S.activeAudioBtn = null;
-        return;
-      }
-    }
-
-    const audio = new Audio(src);
-    S.activeAudioPlayer = audio;
-    S.activeAudioBtn = btn;
-    btn.textContent = '❚❚';
-
-    const bubble = btn.closest('.voice-bubble');
-    const progressBar = bubble ? bubble.querySelector('.voice-progress') : null;
-
-    audio.ontimeupdate = () => {
-      if (progressBar && audio.duration) {
-        const pct = (audio.currentTime / audio.duration) * 100;
-        progressBar.style.width = pct + '%';
-      }
-    };
-
-    audio.onended = () => {
-      btn.textContent = '▶';
-      if (progressBar) progressBar.style.width = '0%';
-      S.activeAudioPlayer = null;
-      S.activeAudioBtn = null;
-    };
-
-    audio.play().catch(err => {
-      btn.textContent = '▶';
-      alert('Cannot play audio: ' + err.message);
-    });
-  };
 
   function escapeHtml(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1295,249 +1128,6 @@
     } catch (e) {
       alert('Failed to send: ' + e.message);
     }
-  };
-
-  // Voice Recording (Audio message)
-  window.toggleVoiceRecord = async function() {
-    if (VoiceRec.isRecording) {
-      finishVoiceRecord();
-    } else {
-      startVoiceRecord();
-    }
-  };
-
-  async function startVoiceRecord() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      VoiceRec.audioChunks = [];
-      VoiceRec.mediaRecorder = new MediaRecorder(stream);
-
-      VoiceRec.mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) VoiceRec.audioChunks.push(e.data);
-      };
-
-      VoiceRec.mediaRecorder.start();
-      VoiceRec.isRecording = true;
-      VoiceRec.startTime = Date.now();
-
-      $('mInput').style.display = 'none';
-      $('mSend').style.display = 'none';
-      $('voiceRecBar').classList.add('active');
-      $('btnMic').classList.add('recording');
-
-      VoiceRec.timerInterval = setInterval(() => {
-        const sec = Math.floor((Date.now() - VoiceRec.startTime) / 1000);
-        const m = Math.floor(sec / 60);
-        const s = sec % 60;
-        $('recTimer').textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
-      }, 500);
-
-      Native.vibrate(30);
-    } catch (err) {
-      alert('Microphone permission required to record voice messages: ' + err.message);
-    }
-  }
-
-  window.cancelVoiceRecord = function() {
-    if (!VoiceRec.isRecording) return;
-    VoiceRec.isRecording = false;
-    clearInterval(VoiceRec.timerInterval);
-    if (VoiceRec.mediaRecorder && VoiceRec.mediaRecorder.state !== 'inactive') {
-      VoiceRec.mediaRecorder.stop();
-    }
-    resetVoiceUI();
-  };
-
-  window.finishVoiceRecord = function() {
-    if (!VoiceRec.isRecording) return;
-    VoiceRec.isRecording = false;
-    clearInterval(VoiceRec.timerInterval);
-
-    const durationSec = Math.max(1, Math.round((Date.now() - VoiceRec.startTime) / 1000));
-
-    VoiceRec.mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(VoiceRec.audioChunks, { type: 'audio/ogg; codecs=opus' });
-      resetVoiceUI();
-
-      if (!S.activeConv) return;
-
-      try {
-        const url = `${S.server.replace(/\/+$/, '')}/api/chat/conversations/${S.activeConv.id}/voice?duration=${durationSec}`;
-        const headers = { 'Content-Type': 'audio/ogg; codecs=opus' };
-        if (S.token) headers['Authorization'] = 'Bearer ' + S.token;
-
-        const res = await fetch(url, { method: 'POST', headers, body: audioBlob });
-        const data = await res.json();
-        if (data && data.message) {
-          S.messages.push(data.message);
-          renderMessages();
-          scrollToBottom();
-          Native.vibrate(25);
-        }
-      } catch (err) {
-        alert('Failed to send voice message: ' + err.message);
-      }
-    };
-
-    VoiceRec.mediaRecorder.stop();
-  };
-
-  function resetVoiceUI() {
-    $('voiceRecBar').classList.remove('active');
-    $('btnMic').classList.remove('recording');
-    $('mInput').style.display = 'block';
-    $('mSend').style.display = 'grid';
-  }
-
-  // WebRTC Voice Calling Implementation
-  window.initiateVoiceCall = async function() {
-    if (!S.activeConv) return;
-    const partner = S.activeConv.other || (S.user.id === S.activeConv.user_a.id ? S.activeConv.user_b : S.activeConv.user_a);
-
-    $('callPartnerName').textContent = partner.name || partner.username;
-    $('callStatus').textContent = 'Connecting...';
-    $('callOverlay').classList.add('active');
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      CallState.localStream = stream;
-
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }]
-      });
-      CallState.peerConn = pc;
-      CallState.isCaller = true;
-
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-      pc.ontrack = (event) => {
-        $('remoteAudio').srcObject = event.streams[0];
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate && CallState.activeCallId) {
-          api('/api/chat/call/ice-candidate', 'POST', { call_id: CallState.activeCallId, candidate: event.candidate }).catch(() => {});
-        }
-      };
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const res = await api('/api/chat/call/invite', 'POST', {
-        conversation_id: S.activeConv.id,
-        media_type: 'audio',
-        sdp: offer
-      });
-
-      CallState.activeCallId = res.call_id;
-      $('callStatus').textContent = 'Ringing...';
-      Native.vibrate([100, 200, 100, 200]);
-    } catch (err) {
-      alert('Call failed: ' + err.message);
-      endCall();
-    }
-  };
-
-  window.handleIncomingCall = async function(data) {
-    CallState.activeCallId = data.call_id;
-    CallState.isCaller = false;
-
-    $('callPartnerName').textContent = data.caller.name || data.caller.username;
-    $('callStatus').textContent = 'Incoming Voice Call...';
-    $('callControls').innerHTML = `
-      <button type="button" class="call-btn-circle accept" onclick="acceptIncomingCall('${data.sdp ? escapeHtml(JSON.stringify(data.sdp)) : ''}')" title="Accept">📞</button>
-      <button type="button" class="call-btn-circle decline" onclick="endCall('rejected')" title="Decline">✕</button>
-    `;
-    $('callOverlay').classList.add('active');
-
-    Native.showNotification('Incoming Call', `Call from ${data.caller.name}`);
-    Native.vibrate([300, 200, 300, 200, 300]);
-    playNotificationChime();
-  };
-
-  window.acceptIncomingCall = async function(rawSdp) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      CallState.localStream = stream;
-
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }]
-      });
-      CallState.peerConn = pc;
-
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-      pc.ontrack = (event) => {
-        $('remoteAudio').srcObject = event.streams[0];
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate && CallState.activeCallId) {
-          api('/api/chat/call/ice-candidate', 'POST', { call_id: CallState.activeCallId, candidate: event.candidate }).catch(() => {});
-        }
-      };
-
-      if (rawSdp) {
-        const offer = JSON.parse(rawSdp);
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        await api('/api/chat/call/answer', 'POST', {
-          call_id: CallState.activeCallId,
-          sdp: answer
-        });
-      }
-
-      onCallConnected();
-    } catch (err) {
-      alert('Failed to connect call: ' + err.message);
-      endCall();
-    }
-  };
-
-  function onCallConnected() {
-    $('callStatus').textContent = '00:00';
-    CallState.startTime = Date.now();
-    CallState.timerInterval = setInterval(() => {
-      const sec = Math.floor((Date.now() - CallState.startTime) / 1000);
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      $('callStatus').textContent = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-    }, 1000);
-
-    $('callControls').innerHTML = `
-      <button type="button" class="call-btn-circle mute" id="btnCallMute" onclick="toggleCallMute()" title="Mute Mic">🎤</button>
-      <button type="button" class="call-btn-circle decline" onclick="endCall('hangup')" title="End Call">✕</button>
-    `;
-  }
-
-  window.toggleCallMute = function() {
-    if (!CallState.localStream) return;
-    CallState.isMuted = !CallState.isMuted;
-    CallState.localStream.getAudioTracks().forEach(t => { t.enabled = !CallState.isMuted; });
-    const btn = $('btnCallMute');
-    if (btn) btn.classList.toggle('muted', CallState.isMuted);
-  };
-
-  window.endCall = function(reason = 'hangup') {
-    if (CallState.activeCallId) {
-      api('/api/chat/call/end', 'POST', { call_id: CallState.activeCallId, reason }).catch(() => {});
-    }
-
-    clearInterval(CallState.timerInterval);
-
-    if (CallState.localStream) {
-      CallState.localStream.getTracks().forEach(t => t.stop());
-      CallState.localStream = null;
-    }
-    if (CallState.peerConn) {
-      CallState.peerConn.close();
-      CallState.peerConn = null;
-    }
-
-    CallState.activeCallId = null;
-    $('callOverlay').classList.remove('active');
   };
 
   // Message Action Sheet (Delete for Me, Delete for Everyone)
@@ -1716,33 +1306,6 @@
             renderMessages();
           }
         }
-      });
-
-      // WebRTC Call Signaling Listeners
-      S.es.addEventListener('call_invite', (e) => {
-        const data = JSON.parse(e.data);
-        handleIncomingCall(data);
-      });
-
-      S.es.addEventListener('call_answer', async (e) => {
-        const data = JSON.parse(e.data);
-        if (CallState.peerConn && data.sdp) {
-          await CallState.peerConn.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          onCallConnected();
-        }
-      });
-
-      S.es.addEventListener('call_ice', async (e) => {
-        const data = JSON.parse(e.data);
-        if (CallState.peerConn && data.candidate) {
-          try {
-            await CallState.peerConn.addIceCandidate(new RTCIceCandidate(data.candidate));
-          } catch (err) {}
-        }
-      });
-
-      S.es.addEventListener('call_ended', () => {
-        endCall();
       });
 
       // Access revoked

@@ -538,7 +538,7 @@
           <div class="stat-card dash-metric d-orange"><div class="stat-info"><p>Monthly Balance</p><h3 id="agtMonthlyBal">$0</h3><span id="agtMonthlyMin">Minimum: $0</span></div><div class="dash-go">M</div></div>
         </div>
         <div class="grid2">
-          <div class="card"><div class="card-head"><div><h3>Binance UID</h3><div class="sub">Save your Binance UID to receive payments through Binance Pay.</div></div><button class="btn btn-blue btn-sm" onclick="openWalletHelp()">Help</button></div><div class="form-group"><label>Binance UID</label><input id="agtWallet" placeholder="Enter your Binance UID" inputmode="numeric" autocomplete="off"></div><div class="hint" style="color:var(--red,#e5484d)">Warning: Payments are sent to the Binance UID you save here. Please double-check your UID before saving — entering an incorrect UID can result in funds being sent to the wrong account. You are responsible for the accuracy of your Binance UID.</div><button class="btn btn-blue" style="margin-top:12px" onclick="saveAgentWallet()">Save Binance UID</button></div>
+          <div class="card"><div class="card-head"><div><h3>Binance UID</h3><div class="sub">Save your Binance UID to receive payments through Binance Pay.</div></div><button class="btn btn-blue btn-sm" onclick="openWalletHelp()">Help</button></div><div class="form-group"><label>Binance UID</label><input id="agtWallet" placeholder="Enter your Binance UID" inputmode="numeric" autocomplete="off"></div><div class="hint" id="agtWalletHint" style="color:var(--red,#e5484d)">Warning: Payments are sent to the Binance UID you save here. Please double-check your UID before saving — entering an incorrect UID can result in funds being sent to the wrong account. Once saved, it is locked for security.</div><button class="btn btn-blue" id="btnSaveAgtWallet" style="margin-top:12px" onclick="saveAgentWallet()">Save Binance UID</button></div>
           <div class="card"><div class="card-head"><div><h3>Request Payment</h3><div class="sub">Only eligible balances can be requested.</div></div></div><div id="agtRequestButtons" class="row"></div><div id="agtPayNotifications" class="hint" style="margin-top:12px"></div></div>
         </div>
         <div class="table-wrap" style="padding:15px 17px;margin-top:16px"><div class="table-controls"><div class="tc-left"><label>Payment History</label></div><div class="tc-right"><button type="button" class="gx-btn gx-blue"  onclick="loadAgentPayment()" data-tip="Refresh" title="Refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button></div></div></div>
@@ -1068,7 +1068,31 @@ function openWalletHelp(){document.getElementById('walletHelpModal').classList.a
 function payBal(b,type){return (b||[]).find(x=>x.payment_type===type)||{available_balance:'0',minimum:'0',can_request:false,label:type}}
 async function loadAgentPayment(){
   const data=await API.get('/payment-v2/agent/summary');
-  if(document.getElementById('agtWallet')) agtWallet.value=data.wallet?.binance_uid||''; /* P19j: Binance UID (was wallet_address) */
+  const uid = data.wallet?.binance_uid || '';
+  if(document.getElementById('agtWallet')) {
+    agtWallet.value = uid;
+    const btn = document.getElementById('btnSaveAgtWallet');
+    const hint = document.getElementById('agtWalletHint');
+    if (uid) {
+      agtWallet.disabled = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '🔒 Locked (Contact Admin to Change)';
+        btn.className = 'btn btn-ghost';
+      }
+      if (hint) {
+        hint.style.color = 'var(--text-muted, #8B93B8)';
+        hint.textContent = '🔒 Your Binance UID is locked for security. To update your payout address, please contact Admin Support.';
+      }
+    } else {
+      agtWallet.disabled = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Save Binance UID';
+        btn.className = 'btn btn-blue';
+      }
+    }
+  }
   const d=payBal(data.balances,'daily'), w=payBal(data.balances,'weekly'), m=payBal(data.balances,'monthly_30x45');
   /* P17: card = TOTAL earned (available + not-yet-eligible) — ledger source of truth, dashboard-consistent.
      Sub-line: minimum + abhi-available + kab eligible. Request gating (eligible-only) UNCHANGED. */

@@ -383,16 +383,19 @@
     setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500);
   }
   function findExportTable(btn){
-    const page=btn.closest('.page') || document;
+    const page=btn.closest('.page') || btn.closest('main') || document;
     let wrap=btn.closest('.table-wrap');
     if(wrap){
       let n=wrap.nextElementSibling;
       while(n){ const t=n.querySelector&&n.querySelector('table'); if(t) return t; n=n.nextElementSibling; }
       const t=wrap.querySelector('table'); if(t) return t;
     }
-    const card=btn.closest('.card');
-    if(card){ const t=[...card.querySelectorAll('table')].find(x=>x.offsetParent!==null && x.querySelector('tbody')); if(t) return t; }
-    const tables=[...page.querySelectorAll('table')].filter(t=>t.offsetParent!==null && t.querySelector('tbody'));
+    const card=btn.closest('.card') || btn.closest('.two-col') || btn.closest('section');
+    if(card){
+      const t=[...card.querySelectorAll('table')].find(x=>(x.offsetParent!==null || !document.body.offsetParent) && x.querySelector('tbody'));
+      if(t) return t;
+    }
+    const tables=[...page.querySelectorAll('table')].filter(t=>(t.offsetParent!==null || !document.body.offsetParent) && t.querySelector('tbody'));
     return tables[0] || page.querySelector('table');
   }
   function exportTable(btn, mode){
@@ -456,10 +459,20 @@
     }catch(e){}
   }
   function exportModeFromButton(btn){
-    const label=(btn.textContent||btn.value||'').toLowerCase();
+    if(!btn) return '';
+    const label=[
+      btn.getAttribute('data-mode'),
+      btn.getAttribute('data-tip'),
+      btn.getAttribute('title'),
+      btn.getAttribute('aria-label'),
+      btn.textContent,
+      btn.value,
+      btn.className
+    ].filter(Boolean).join(' ').toLowerCase();
+
     if(label.includes('copy')) return 'copy';
     if(label.includes('csv')) return 'csv';
-    if(label.includes('excel')) return 'excel';
+    if(label.includes('excel') || label.includes('xls')) return 'excel';
     if(label.includes('pdf')) return 'pdf';
     if(label.includes('print')) return 'print';
     return '';
@@ -467,7 +480,14 @@
   function removePdfPrintButtons(root=document){
     const scope = root && root.querySelectorAll ? root : document;
     scope.querySelectorAll('.exp-btns button').forEach(btn=>{
-      const label=(btn.textContent||'').trim().toLowerCase();
+      const label=[
+        btn.getAttribute('data-mode'),
+        btn.getAttribute('data-tip'),
+        btn.getAttribute('title'),
+        btn.getAttribute('aria-label'),
+        btn.textContent,
+        btn.value
+      ].filter(Boolean).join(' ').trim().toLowerCase();
       if(label==='pdf' || label==='print') btn.remove();
     });
   }
@@ -477,10 +497,13 @@
       if(btn.dataset.msExportBound) return;
       btn.dataset.msExportBound='1';
       btn.type='button';
+      if(btn.getAttribute('onclick')) return; // allow custom onclick handler
       btn.addEventListener('click',(e)=>{
-        e.preventDefault(); e.stopPropagation();
         const mode=exportModeFromButton(btn);
-        if(mode) exportTable(btn,mode);
+        if(mode) {
+          e.preventDefault(); e.stopPropagation();
+          exportTable(btn,mode);
+        }
       });
     });
   }
@@ -490,9 +513,12 @@
     mo.observe(document.body,{childList:true,subtree:true});
     document.addEventListener('click',(e)=>{
       const btn=e.target.closest('.exp-btns button'); if(!btn) return;
-      e.preventDefault(); e.stopPropagation();
+      if(btn.getAttribute('onclick')) return; // allow custom inline handlers like exportNumbersCsv()
       const mode=exportModeFromButton(btn);
-      if(mode) exportTable(btn,mode);
+      if(mode) {
+        e.preventDefault(); e.stopPropagation();
+        exportTable(btn,mode);
+      }
     }, true);
   }
   function initActionFeedback(){

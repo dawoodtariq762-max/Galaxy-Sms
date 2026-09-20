@@ -169,6 +169,14 @@ function broadcast(conv, event, obj) {
       if (targets.has(res._gxUserId) || res._gxRole === 'admin') sseSend(res, event, obj);
 }
 
+function broadcastSseAll(event, obj) {
+  for (const [, set] of sseClients) {
+    for (const res of set) {
+      try { sseSend(res, event, obj); } catch (_) {}
+    }
+  }
+}
+
 function addClient(res, userId, role) {
   let set = sseClients.get(userId);
   if (!set) { set = new Set(); sseClients.set(userId, set); }
@@ -213,6 +221,7 @@ module.exports = function mountChat(app, deps) {
   const chatAuth = deps.chatAuthRequired || authRequired;
   const signChat = deps.signChat || (u => require('./auth').signChat(u));
   const SECRET = deps.SECRET || process.env.JWT_SECRET || 'ms-sms-dev-secret-change-in-production';
+  app.broadcastSseAll = broadcastSseAll;
 
   /* ================================================================
    * CHAT AUTHENTICATION
@@ -810,220 +819,4 @@ module.exports = function mountChat(app, deps) {
     const info = db.run('INSERT INTO complaint_replies (complaint_id, sender_id, body) VALUES (?,?,?)', [cm.id, req.user.id, body]);
     res.json({ ok: true, id: Number(info.lastInsertRowid) });
   });
-
-  /* ================= Voice Messages ================= */
-  const VOICE_DIR = path.join(__dirname, '..', 'data', 'chat_voice');
-  if (!fs.existsSync(VOICE_DIR)) {
-    try { fs.mkdirSync(VOICE_DIR, { recursive: true }); } catch (e) {}
-  }
-
-  const rawAudio = express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '8mb' });
-
-  app.post('/api/chat/conversations/:id/voice', chatAuth, rawAudio, (req, res) => {
-    const conv = getConv(intId(req.params.id));
-    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-    if (!convAccess(req.user, conv)) return res.status(403).json({ error: 'Forbidden — not your conversation' });
-
-    if (!req.body || !Buffer.isBuffer(req.body) || req.body.length < 50) {
-      return res.status(400).json({ error: 'Audio data is empty or invalid' });
-    }
-
-    if (req.body.length > 8 * 1024 * 1024) {
-      return res.status(413).json({ error: 'Audio file too large (max 8MB)' });
-    }
-
-    const duration = Math.min(Math.max(parseFloat(req.query.duration || req.headers['x-voice-duration'] || '0') || 0, 1), 300);
-    const filename = `voice_${Date.now()}_${crypto.randomBytes(8).toString('hex')}.opus`;
-    const filepath = path.join(VOICE_DIR, filename);
-
-    try {
-      fs.writeFileSync(filepath, req.body);
-    } catch (e) {
-      return res.status(500).json({ error: 'Failed to write voice file' });
-    }
-
-    const bodyText = `🎤 Voice message (${Math.round(duration)}s)`;
-    const info = db.run(
-      'INSERT INTO chat_messages (conversation_id, sender_id, body, attachment_path, attachment_type) VALUES (?,?,?,?,?)',
-      [conv.id, req.user.id, bodyText, filename, 'voice']
-    );
-
-    db.run(`UPDATE chat_conversations SET last_message_at=datetime('now'), last_message_text=? WHERE id=?`, [bodyText, conv.id]);
-
-    const sender = getUser(req.user.id) || req.user;
-    const msg = {
-      id: Number(info.lastInsertRowid),
-      conversation_id: conv.id,
-      sender_id: req.user.id,
-      sender_name: (sender.name && String(sender.name).trim()) || sender.username,
-      sender_role: ROLE_LABEL[req.user.role] || req.user.role,
-      body: bodyText,
-      attachment_path: filename,
-      attachment_type: 'voice',
-      attachment_duration: duration,
-      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      read_at: null,
-      is_deleted: false
-    };
-
-    broadcast(conv, 'msg', { c: conv.id, m: msg });
-    dispatchPushNotification(conv, req.user.id, msg);
-    res.json({ ok: true, message: msg });
-  });
-
-  app.get('/api/chat/voice/:filename', chatAuth, (req, res) => {
-    const rawFilename = path.basename(req.params.filename);
-    const filepath = path.join(VOICE_DIR, rawFilename);
-
-    if (!fs.existsSync(filepath)) {
-      return res.status(404).json({ error: 'Voice file not found' });
-    }
-
-    const msg = db.get('SELECT * FROM chat_messages WHERE attachment_path=?', [rawFilename]);
-    if (!msg) return res.status(404).json({ error: 'Message record not found' });
-
-    const conv = getConv(msg.conversation_id);
-    if (!conv || !convAccess(req.user, conv)) {
-      return res.status(403).json({ error: 'Forbidden — unauthorized access to audio' });
-    }
-
-    res.setHeader('Content-Type', 'audio/ogg; codecs=opus');
-    res.setHeader('Cache-Control', 'private, max-age=86400');
-    fs.createReadStream(filepath).pipe(res);
-  });
-
-  /* ================= WebRTC Voice & Video Call Signaling ================= */
-  const activeCalls = new Map();
-
-  app.post('/api/chat/call/invite', chatAuth, (req, res) => {
-    const convId = intId(req.body && req.body.conversation_id);
-    const conv = getConv(convId);
-    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-    if (!convAccess(req.user, conv)) return res.status(403).json({ error: 'Forbidden' });
-
-    const calleeId = (conv.user_a === req.user.id) ? conv.user_b : conv.user_a;
-    const callee = getUser(calleeId);
-    if (!callee || !callee.active) return res.status(404).json({ error: 'Recipient unavailable' });
-
-    const callId = 'call_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
-    const mediaType = req.body && req.body.media_type === 'video' ? 'video' : 'audio';
-
-    const callSession = {
-      id: callId,
-      conversation_id: convId,
-      caller_id: req.user.id,
-      callee_id: calleeId,
-      media_type: mediaType,
-      status: 'ringing',
-      started_at: Date.now(),
-      sdp: (req.body && req.body.sdp) || null
-    };
-
-    activeCalls.set(callId, callSession);
-
-    const callerUser = getUser(req.user.id) || req.user;
-    const invitePayload = {
-      call_id: callId,
-      conversation_id: convId,
-      media_type: mediaType,
-      caller: {
-        id: req.user.id,
-        username: callerUser.username,
-        name: callerUser.name || callerUser.username,
-        role: ROLE_LABEL[callerUser.role] || callerUser.role
-      },
-      sdp: req.body && req.body.sdp
-    };
-
-    for (const [clientId, client] of sseClients.entries()) {
-      if (client.userId === calleeId) {
-        try {
-          client.res.write(`event: call_invite\ndata: ${JSON.stringify(invitePayload)}\n\n`);
-        } catch (e) {}
-      }
-    }
-
-    // Auto timeout after 45s if unanswered
-    setTimeout(() => {
-      const call = activeCalls.get(callId);
-      if (call && call.status === 'ringing') {
-        activeCalls.delete(callId);
-        broadcastCallEvent(call, 'call_ended', { call_id: callId, reason: 'timeout' });
-      }
-    }, 45000);
-
-    res.json({ ok: true, call_id: callId });
-  });
-
-  app.post('/api/chat/call/answer', chatAuth, (req, res) => {
-    const callId = String((req.body && req.body.call_id) || '');
-    const call = activeCalls.get(callId);
-    if (!call) return res.status(404).json({ error: 'Call session not found or expired' });
-    if (call.callee_id !== req.user.id) return res.status(403).json({ error: 'Not the callee' });
-
-    call.status = 'connected';
-    call.connected_at = Date.now();
-
-    const answerPayload = {
-      call_id: callId,
-      sdp: req.body && req.body.sdp
-    };
-
-    for (const [clientId, client] of sseClients.entries()) {
-      if (client.userId === call.caller_id) {
-        try {
-          client.res.write(`event: call_answer\ndata: ${JSON.stringify(answerPayload)}\n\n`);
-        } catch (e) {}
-      }
-    }
-
-    res.json({ ok: true });
-  });
-
-  app.post('/api/chat/call/ice-candidate', chatAuth, (req, res) => {
-    const callId = String((req.body && req.body.call_id) || '');
-    const call = activeCalls.get(callId);
-    if (!call) return res.status(404).json({ error: 'Call session not found' });
-    if (call.caller_id !== req.user.id && call.callee_id !== req.user.id) return res.status(403).json({ error: 'Not party to this call' });
-
-    const targetUserId = (call.caller_id === req.user.id) ? call.callee_id : call.caller_id;
-    const candidatePayload = {
-      call_id: callId,
-      candidate: req.body && req.body.candidate
-    };
-
-    for (const [clientId, client] of sseClients.entries()) {
-      if (client.userId === targetUserId) {
-        try {
-          client.res.write(`event: call_ice\ndata: ${JSON.stringify(candidatePayload)}\n\n`);
-        } catch (e) {}
-      }
-    }
-
-    res.json({ ok: true });
-  });
-
-  app.post('/api/chat/call/end', chatAuth, (req, res) => {
-    const callId = String((req.body && req.body.call_id) || '');
-    const call = activeCalls.get(callId);
-    const reason = String((req.body && req.body.reason) || 'hangup');
-
-    if (call) {
-      activeCalls.delete(callId);
-      broadcastCallEvent(call, 'call_ended', { call_id: callId, reason });
-    }
-
-    res.json({ ok: true });
-  });
-
-  function broadcastCallEvent(call, eventName, data) {
-    const participants = [call.caller_id, call.callee_id];
-    for (const [clientId, client] of sseClients.entries()) {
-      if (participants.includes(client.userId)) {
-        try {
-          client.res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
-        } catch (e) {}
-      }
-    }
-  }
 };

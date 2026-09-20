@@ -70,15 +70,8 @@ public class MainActivity extends Activity {
             }
         });
 
-        // Grant WebRTC microphone permissions to the WebView
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(() -> {
-                    request.grant(request.getResources());
-                });
-            }
-        });
+        // WebChromeClient for dialogs
+        webView.setWebChromeClient(new WebChromeClient());
 
         // Expose Native Android Bridge to the WebView
         webView.addJavascriptInterface(new WebAppInterface(this), "GalaxyNative");
@@ -89,20 +82,10 @@ public class MainActivity extends Activity {
     private void requestRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= 33) {
             boolean needNotif = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED;
-            boolean needMic = checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED;
-            if (needNotif || needMic) {
+            if (needNotif) {
                 requestPermissions(new String[]{
-                    Manifest.permission.POST_NOTIFICATIONS,
-                    Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.MODIFY_AUDIO_SETTINGS
+                    Manifest.permission.POST_NOTIFICATIONS
                 }, 101);
-            }
-        } else if (Build.VERSION.SDK_INT >= 23) {
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{
-                    Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.MODIFY_AUDIO_SETTINGS
-                }, 102);
             }
         }
     }

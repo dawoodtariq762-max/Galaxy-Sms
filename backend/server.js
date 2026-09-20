@@ -2347,6 +2347,7 @@ function handleAllocate(req, res) {
     logAction(req, 'allocate_numbers', 'numbers',
       { count: allocatedCount, requested: beforeRows.length, skipped: response.skipped, target: target.username, target_role: target.role, ...(rateVal ? { rate_override: rateVal } : {}), ...(force ? { force: true } : {}) });
     bumpNumbersVer();
+    if (app.broadcastSseAll) app.broadcastSseAll('allocation_update', { action: 'allocate', count: allocatedCount, target_id: target.id, target_role: target.role, timestamp: Date.now() });
     if (idemKey) idempotencyStore(req, 'allocate', idemKey, response);
     return res.json(response);
   } catch (e) {
@@ -2410,6 +2411,7 @@ app.post('/api/numbers/unallocate', authRequired, (req, res) => {
     } finally { db.endBatch(); }
     logAction(req, 'unallocate_numbers', 'numbers', { count, role: req.user.role });
     bumpNumbersVer();
+    if (app.broadcastSseAll) app.broadcastSseAll('allocation_update', { action: 'unallocate', count, role: req.user.role, timestamp: Date.now() });
     res.json({ ok: true, count });
   } catch (e) {
     try { db.execNoSave('DROP TABLE IF EXISTS tmp_unalloc_ids'); } catch (_) {}
@@ -2751,6 +2753,7 @@ async function performSmartDivideJob(job){
     auditJobAction(user,'smart_divide_numbers_background','numbers',{total,report,payterm:smartType,...(job.rate?{rate_override:job.rate}:{})});
     setJob(job,{status:'done',progress:100,total,processed:total,report,completed_at:new Date().toISOString(),message:'Completed'});
     bumpNumbersVer();
+    if (app.broadcastSseAll) app.broadcastSseAll('allocation_update', { action: 'smart_divide', count: total, timestamp: Date.now() });
   }catch(e){
     setJob(job,{status:'failed',error:e.message||String(e),completed_at:new Date().toISOString(),message:'Failed'});
   }
@@ -3711,18 +3714,31 @@ app.put('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res
 app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}}));
 app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), (req,res)=>res.json(db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}));
 app.put('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), (req,res)=>{
-  /* P19j: Binance UID replaces the USDT TRC20 wallet address. PREVIOUS behaviour: accepted
-     wallet_address, validated with walletValid() (T + 33 chars) and upserted agent_wallets.wallet_address
-     with network='USDT_TRC20'. Rollback: restore the old handler body below. Old wallet_address values
-     are NEVER deleted or overwritten — only binance_uid/network/updated_at are written now. */
+  /* P19j: Binance UID replaces the USDT TRC20 wallet address. Once set, it is locked
+     for security so funds cannot be redirected if an agent session is compromised.
+     Only Admin can update an existing locked Binance UID. */
   const uid=String(req.body?.binance_uid ?? req.body?.wallet_address ?? '').trim();
   if(!uid) return res.status(400).json({error:'Binance UID is required.'});
   if(!binanceUidValid(uid)) return res.status(400).json({error:'Invalid Binance UID. It must be the 8-12 digit numeric UID from your Binance account.'});
-  const ex=db.get('SELECT agent_id FROM agent_wallets WHERE agent_id=?',[req.user.id]);
+  const ex=db.get('SELECT agent_id, binance_uid FROM agent_wallets WHERE agent_id=?',[req.user.id]);
+  if(ex && ex.binance_uid && binanceUidValid(ex.binance_uid)) {
+    return res.status(403).json({error:'Your Binance UID is locked for security. Please contact Admin Support to update your Binance UID.'});
+  }
   if(ex) db.run("UPDATE agent_wallets SET binance_uid=?,network='BINANCE_UID',updated_at=datetime('now') WHERE agent_id=?",[uid,req.user.id]);
   else db.run("INSERT INTO agent_wallets (agent_id,binance_uid,network) VALUES (?,?,'BINANCE_UID')",[req.user.id,uid]);
   paymentAudit(req,'update_wallet',{agent_id:req.user.id,wallet_address:'',status:'saved',details:{binance_uid:uid}});
   res.json({ok:true,binance_uid:uid,network:'BINANCE_UID'});
+});
+app.put('/api/payment-v2/admin/agents/:id/wallet', authRequired, requireRole('admin'), (req,res)=>{
+  const agentId=+req.params.id;
+  const uid=String(req.body?.binance_uid ?? '').trim();
+  if(!uid) return res.status(400).json({error:'Binance UID is required.'});
+  if(!binanceUidValid(uid)) return res.status(400).json({error:'Invalid Binance UID. It must be the 8-12 digit numeric UID.'});
+  const ex=db.get('SELECT agent_id FROM agent_wallets WHERE agent_id=?',[agentId]);
+  if(ex) db.run("UPDATE agent_wallets SET binance_uid=?,network='BINANCE_UID',updated_at=datetime('now') WHERE agent_id=?",[uid,agentId]);
+  else db.run("INSERT INTO agent_wallets (agent_id,binance_uid,network) VALUES (?,?,'BINANCE_UID')",[agentId,uid]);
+  paymentAudit(req,'admin_update_wallet',{agent_id:agentId,status:'saved',details:{binance_uid:uid}});
+  res.json({ok:true,agent_id:agentId,binance_uid:uid});
 });
 app.post('/api/payment-v2/agent/request', authRequired, requireRole('agent'), (req,res)=>{
   /* P19j: request now requires a saved Binance UID (was: valid TRC20 wallet). Calculations, eligibility,
