@@ -60,12 +60,15 @@ async function bootServer() {
       JWT_SECRET: 'test-p21-jwt-secret-secure-random-1234567890',
       NODE_ENV: 'test'
     });
-    serverProc = spawn('node', [path.join(__dirname, '..', 'backend', 'server.js')], { env });
+    serverProc = spawn('node', [path.join(__dirname, '..', 'backend', 'server.js')], {
+      env,
+      cwd: path.join(__dirname, '..')
+    });
     serverProc.stdout.on('data', (d) => {
       if (d.toString().includes('Server running on port')) resolve();
     });
     serverProc.stderr.on('data', (d) => {
-      // ignore normal logs
+      console.error('[srv-err]', d.toString());
     });
     serverProc.on('error', reject);
     setTimeout(() => resolve(), 3000);

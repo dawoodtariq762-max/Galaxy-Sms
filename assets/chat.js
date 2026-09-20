@@ -77,6 +77,12 @@
 .gxc-bubble{padding:8px 12px;border-radius:14px;font-size:13.5px;line-height:1.45;word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;max-width:100%}
 /* P19k #1: pathological long unbroken strings (URLs/keys) — bubble width ke andar hi wrap */
 .gxc-bubble{overflow-wrap:anywhere}
+.gxc-bubble.deleted{font-style:italic;opacity:.68;background:rgba(255,255,255,.04)!important;border:1px dashed rgba(255,255,255,.2)!important}
+.gxc-msg-acts{display:none;position:absolute;top:-8px;right:0;background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));border-radius:8px;padding:2px;gap:4px;z-index:10}
+.gxc-row:hover .gxc-msg-acts{display:flex}
+.gxc-act-btn{background:none;border:none;color:var(--px-muted,#9BA3C9);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:4px}
+.gxc-act-btn:hover{color:#fff;background:rgba(255,255,255,.1)}
+.gxc-act-btn.danger:hover{color:#FF5C7A}
 .gxc-row.mine .gxc-bubble{background:linear-gradient(135deg,rgba(48,171,237,.22),rgba(127,24,179,.20));border:1px solid rgba(48,171,237,.30);border-bottom-right-radius:4px;color:var(--px-text,#E7EAF8)}
 .gxc-row.theirs .gxc-bubble{background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));border-bottom-left-radius:4px;color:var(--px-text,#E7EAF8)}
 .gxc-mmeta{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--px-dim,#7A83A8);margin:2px 4px 0}
@@ -334,14 +340,51 @@
 
   function renderMsg(m) {
     const mine = m.sender_id === ME.id;
+    const isDeleted = (m.is_deleted === true || m.deleted_for_everyone === 1);
     const div = document.createElement('div');
     div.className = 'gxc-row ' + (mine ? 'mine' : 'theirs');
     div.dataset.mid = m.id;
-    /* owner spec #4: har message par sender ki identity (naam + role) clearly dikhe */
+    div.style.position = 'relative';
+
+    const msgAgeMinutes = (Date.now() - new Date(String(m.created_at).replace(' ', 'T') + 'Z').getTime()) / 60000;
+    const canDeleteEveryone = !isDeleted && (IS_ADMIN || (mine && msgAgeMinutes <= 15));
+
     div.innerHTML = `${!mine ? `<div class="gxc-sender">${esc(m.sender_name)} · ${esc(m.sender_role)}</div>` : ''}
-      <div class="gxc-bubble"></div>
-      <div class="gxc-mmeta"><span>${esc(fmtTime(m.created_at))}</span>${mine ? `<span class="gxc-ticks${m.read_at ? ' read' : ''}" title="${m.read_at ? 'Read' : 'Sent'}">${m.read_at ? '✓✓' : '✓'}</span>` : ''}</div>`;
-    div.querySelector('.gxc-bubble').textContent = m.body; /* XSS-safe: textContent */
+      <div class="gxc-bubble${isDeleted ? ' deleted' : ''}"></div>
+      <div class="gxc-mmeta"><span>${esc(fmtTime(m.created_at))}</span>${mine && !isDeleted ? `<span class="gxc-ticks${m.read_at ? ' read' : ''}" title="${m.read_at ? 'Read' : 'Sent'}">${m.read_at ? '✓✓' : '✓'}</span>` : ''}</div>
+      ${!isDeleted ? `<div class="gxc-msg-acts">
+        <button type="button" class="gxc-act-btn btn-del-me" title="Delete for me">🗑️ Me</button>
+        ${canDeleteEveryone ? `<button type="button" class="gxc-act-btn danger btn-del-all" title="Delete for everyone">🚫 All</button>` : ''}
+      </div>` : ''}`;
+
+    div.querySelector('.gxc-bubble').textContent = isDeleted ? 'This message was deleted' : m.body;
+
+    const delMeBtn = div.querySelector('.btn-del-me');
+    if (delMeBtn) {
+      delMeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await API.post(`/chat/messages/${m.id}/delete-for-me`, {});
+          div.remove();
+        } catch (err) { alert('❌ ' + err.message); }
+      });
+    }
+
+    const delAllBtn = div.querySelector('.btn-del-all');
+    if (delAllBtn) {
+      delAllBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this message for everyone?')) return;
+        try {
+          await API.post(`/chat/messages/${m.id}/delete-for-everyone`, {});
+          const b = div.querySelector('.gxc-bubble');
+          if (b) { b.textContent = 'This message was deleted'; b.classList.add('deleted'); }
+          const acts = div.querySelector('.gxc-msg-acts');
+          if (acts) acts.remove();
+        } catch (err) { alert('❌ ' + err.message); }
+      });
+    }
+
     return div;
   }
 
@@ -430,6 +473,7 @@
       es.addEventListener('ready', () => { touchSse(); if (S.convId) catchUpOpenConv(); /* reconnect gap ke messages */ });
       es.addEventListener('hb', touchSse);
       es.addEventListener('msg', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveMsg(d.c, d.m); } catch (e) {} });
+      es.addEventListener('msg_deleted', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveDeleted(d.c, d.message_id); } catch (e) {} });
       es.addEventListener('read', (ev) => { try { touchSse(); onLiveRead(JSON.parse(ev.data)); } catch (e) {} });
       es.onerror = () => {
         if (!S.es) { startPolling(); scheduleSseRetry(); return; }
@@ -486,6 +530,21 @@
   function onLiveRead(d) {
     if (S.convId !== d.c) return;
     document.querySelectorAll('#gxcMsgs .gxc-row.mine .gxc-ticks').forEach(t => { t.classList.add('read'); t.textContent = '✓✓'; });
+  }
+  function onLiveDeleted(convId, msgId) {
+    if (S.convId === convId) {
+      const row = $('gxcMsgs') && $('gxcMsgs').querySelector(`[data-mid="${msgId}"]`);
+      if (row) {
+        const bubble = row.querySelector('.gxc-bubble');
+        if (bubble) {
+          bubble.textContent = 'This message was deleted';
+          bubble.classList.add('deleted');
+        }
+        const acts = row.querySelector('.gxc-msg-acts');
+        if (acts) acts.remove();
+      }
+    }
+    loadConvsSoon();
   }
   function startPolling() {
     if (S.pollTimer) return;

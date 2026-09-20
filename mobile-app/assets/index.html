@@ -6,23 +6,29 @@
 <title>Galaxy Chat</title>
 <style>
   :root {
-    --bg: #0A0A0B;
-    --surface: #141416;
-    --surface2: #1B1B1E;
-    --surface3: #24242A;
+    --bg: #070D1F;
+    --surface: #0D152D;
+    --surface2: #131E3D;
+    --surface3: #1A284E;
+    --card: #101935;
     --accent: #30ABED;
+    --accent-glow: rgba(48,171,237,0.35);
     --accent2: #7F18B3;
-    --accent-glow: rgba(48,171,237,0.25);
-    --text: #F2F3F5;
-    --text-muted: #93979E;
-    --border: rgba(190,195,205,0.12);
-    --border-bright: rgba(48,171,237,0.35);
-    --ok: #25D9A4;
-    --warn: #FFB443;
-    --danger: #FF5C7A;
-    --radius: 16px;
-    --bubble-me: linear-gradient(135deg, #2563EB 0%, #7F18B3 100%);
-    --bubble-them: #1B1B1F;
+    --accent-blue: #2563EB;
+    --text: #F8FAFC;
+    --text-muted: #94A3B8;
+    --text-dim: #64748B;
+    --border: rgba(48,171,237,0.16);
+    --border-bright: rgba(48,171,237,0.38);
+    --border-subtle: rgba(255,255,255,0.06);
+    --ok: #10B981;
+    --warn: #F59E0B;
+    --danger: #EF4444;
+    --bubble-me: linear-gradient(135deg, #1D4ED8 0%, #7F18B3 100%);
+    --bubble-them: #131E3D;
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body {
@@ -44,102 +50,113 @@
   #screenLogin {
     justify-content: center;
     align-items: center;
-    padding: 24px;
-    background: radial-gradient(circle at 50% 15%, rgba(48,171,237,0.18), transparent 60%),
-                radial-gradient(circle at 80% 85%, rgba(127,24,179,0.15), transparent 60%),
+    padding: 20px;
+    background: radial-gradient(circle at 50% 12%, rgba(48,171,237,0.22), transparent 55%),
+                radial-gradient(circle at 85% 85%, rgba(127,24,179,0.20), transparent 60%),
                 var(--bg);
   }
   .login-card {
-    width: min(380px, 100%);
-    background: rgba(20,20,22,0.85);
+    width: min(390px, 100%);
+    background: rgba(13,21,45,0.88);
     border: 1px solid var(--border-bright);
-    border-radius: 24px;
-    padding: 28px 24px;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    border-radius: 26px;
+    padding: 30px 24px;
+    box-shadow: 0 35px 85px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.1);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
   }
   .login-brand { text-align: center; margin-bottom: 24px; }
   .login-brand .logo-wrap {
-    width: 68px; height: 68px; border-radius: 20px;
-    background: linear-gradient(135deg, #0A0A0B, #1B1B1E);
+    width: 72px; height: 72px; border-radius: 22px;
+    background: linear-gradient(135deg, #070D1F, #16244C);
     border: 1px solid var(--border-bright);
-    margin: 0 auto 12px; display: grid; place-items: center;
-    box-shadow: 0 10px 30px rgba(48,171,237,0.3);
+    margin: 0 auto 14px; display: grid; place-items: center;
+    box-shadow: 0 12px 32px rgba(48,171,237,0.35);
+    cursor: pointer;
+    transition: transform 0.15s;
   }
+  .login-brand .logo-wrap:active { transform: scale(0.92); }
   .login-brand h1 {
-    font-size: 22px; font-weight: 800; letter-spacing: -0.02em;
-    background: linear-gradient(96deg, #30ABED, #C9CCD2);
+    font-size: 23px; font-weight: 850; letter-spacing: -0.02em;
+    background: linear-gradient(96deg, #30ABED 0%, #E2E8F0 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .login-brand p { font-size: 12px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .login-brand p { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.08em; text-transform: uppercase; }
 
-  .field { margin-bottom: 14px; }
-  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+  .field { margin-bottom: 15px; }
+  .field label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
   .input-wrap { position: relative; }
   .input-wrap input {
-    width: 100%; height: 46px; background: rgba(10,10,11,0.8);
-    border: 1px solid var(--border); border-radius: 12px;
-    color: var(--text); padding: 0 14px; font-size: 14px; outline: none;
-    transition: 0.16s;
+    width: 100%; height: 48px; background: rgba(7,13,31,0.85);
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    color: var(--text); padding: 0 14px; font-size: 14.5px; outline: none;
+    transition: border-color 0.16s, box-shadow 0.16s;
   }
   .input-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
   .input-wrap .eye-btn {
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer;
+    background: none; border: none; color: var(--text-muted); font-size: 17px; cursor: pointer; padding: 6px;
   }
   .btn-primary {
-    width: 100%; height: 48px; border: 0; border-radius: 12px;
+    width: 100%; height: 50px; border: 0; border-radius: var(--radius-md);
     background: linear-gradient(96deg, var(--accent) 0%, var(--accent2) 100%);
-    color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-    box-shadow: 0 10px 24px rgba(127,24,179,0.35); transition: 0.15s; margin-top: 8px;
+    color: #fff; font-size: 15.5px; font-weight: 750; cursor: pointer;
+    box-shadow: 0 10px 26px rgba(127,24,179,0.4); transition: transform 0.15s, opacity 0.15s; margin-top: 10px;
   }
   .btn-primary:active { transform: scale(0.98); }
+  .btn-primary:disabled { opacity: 0.55; cursor: default; }
+
   .login-err {
-    background: rgba(255,92,122,0.12); border: 1px solid rgba(255,92,122,0.35);
-    color: #FFB0BF; padding: 10px 12px; border-radius: 10px; font-size: 12.5px;
+    background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4);
+    color: #FCA5A5; padding: 11px 14px; border-radius: var(--radius-sm); font-size: 13px;
     margin-bottom: 14px; display: none;
+  }
+  .dev-badge {
+    text-align: center; font-size: 11px; color: var(--accent);
+    padding: 6px 10px; border-radius: 8px; background: rgba(48,171,237,0.12);
+    margin-bottom: 12px; display: none;
   }
 
   /* Main Shell */
   .top-bar {
-    height: 56px; background: var(--surface); border-bottom: 1px solid var(--border);
+    height: 60px; background: var(--surface); border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
     flex-shrink: 0; z-index: 10;
   }
   .brand-title { display: flex; align-items: center; gap: 10px; }
-  .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-  .brand-title h2 { font-size: 17px; font-weight: 800; }
+  .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .brand-title h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
   .top-actions { display: flex; align-items: center; gap: 8px; }
   .icon-btn {
-    width: 36px; height: 36px; border-radius: 10px; background: var(--surface2);
+    width: 38px; height: 38px; border-radius: 11px; background: var(--surface2);
     border: 1px solid var(--border); color: var(--text-muted); display: grid; place-items: center;
-    cursor: pointer;
+    cursor: pointer; transition: background 0.15s;
   }
   .icon-btn:active { background: var(--surface3); color: var(--text); }
 
   /* Navigation Tabs */
   .nav-tabs {
     display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 0 12px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none;
+    padding: 0 10px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none;
   }
   .nav-tabs::-webkit-scrollbar { display: none; }
   .tab-btn {
-    padding: 12px 14px; font-size: 13px; font-weight: 600; color: var(--text-muted);
-    background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
-    white-space: nowrap; display: flex; align-items: center; gap: 6px;
+    padding: 13px 14px; font-size: 13px; font-weight: 650; color: var(--text-muted);
+    background: none; border: none; border-bottom: 2.5px solid transparent; cursor: pointer;
+    white-space: nowrap; display: flex; align-items: center; gap: 6px; transition: color 0.15s;
   }
-  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 750; }
   .badge {
-    background: var(--accent2); color: #fff; font-size: 11px; padding: 1px 6px;
+    background: var(--accent2); color: #fff; font-size: 10.5px; padding: 2px 7px;
     border-radius: 10px; font-weight: 800; min-width: 18px; text-align: center;
   }
 
   /* Search Bar */
-  .search-wrap { padding: 10px 14px; background: var(--bg); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .search-wrap { padding: 10px 14px; background: var(--bg); border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
   .search-box {
-    width: 100%; height: 38px; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; color: var(--text); padding: 0 12px; font-size: 13.5px; outline: none;
+    width: 100%; height: 40px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text); padding: 0 14px; font-size: 13.5px; outline: none;
+    transition: border-color 0.15s;
   }
   .search-box:focus { border-color: var(--accent); }
 
@@ -147,84 +164,113 @@
   .conv-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .conv-item {
     display: flex; align-items: center; gap: 14px; padding: 14px 16px;
-    border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer;
+    border-bottom: 1px solid var(--border-subtle); cursor: pointer;
     transition: background 0.12s;
   }
   .conv-item:active { background: var(--surface2); }
   .avatar {
-    width: 46px; height: 46px; border-radius: 16px;
-    background: linear-gradient(135deg, #1E293B, #0F172A);
+    width: 48px; height: 48px; border-radius: 17px;
+    background: linear-gradient(135deg, #131E3D, #1A284E);
     border: 1px solid var(--border-bright);
     display: grid; place-items: center; font-size: 18px; font-weight: 800;
     color: var(--accent); flex-shrink: 0;
   }
   .conv-info { flex: 1; min-width: 0; }
   .conv-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
-  .conv-name { font-size: 14.5px; font-weight: 700; truncate; }
-  .conv-time { font-size: 11px; color: var(--text-muted); }
+  .conv-name { font-size: 15px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv-time { font-size: 11.5px; color: var(--text-muted); }
   .conv-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .conv-last { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv-last { font-size: 12.8px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   .role-tag {
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 2px 6px; border-radius: 6px;
+    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 3px 7px; border-radius: 6px;
   }
-  .role-admin { background: rgba(255,92,122,0.18); color: #FF708F; }
-  .role-manager { background: rgba(139,147,184,0.18); color: #B9C2FF; }
-  .role-agent { background: rgba(48,171,237,0.18); color: #7DF0DA; }
-  .role-client { background: rgba(199,209,248,0.18); color: #9AD8FF; }
+  .role-admin { background: rgba(239,68,68,0.22); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.3); }
+  .role-manager { background: rgba(167,139,250,0.20); color: #DDD6FE; border: 1px solid rgba(167,139,250,0.3); }
+  .role-agent { background: rgba(56,189,248,0.20); color: #BAE6FD; border: 1px solid rgba(56,189,248,0.3); }
+  .role-client { background: rgba(251,191,36,0.20); color: #FDE68A; border: 1px solid rgba(251,191,36,0.3); }
 
   /* Floating Action Button */
   .fab {
-    position: fixed; right: 20px; bottom: 24px; width: 54px; height: 54px;
-    border-radius: 18px; background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border: 0; color: #fff; font-size: 24px; display: grid; place-items: center;
-    box-shadow: 0 12px 28px rgba(127,24,179,0.4); cursor: pointer; z-index: 20;
+    position: fixed; right: 20px; bottom: 26px; width: 56px; height: 56px;
+    border-radius: 19px; background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: 0; color: #fff; font-size: 26px; display: grid; place-items: center;
+    box-shadow: 0 14px 30px rgba(127,24,179,0.45); cursor: pointer; z-index: 20;
+    transition: transform 0.15s;
   }
-  .fab:active { transform: scale(0.95); }
+  .fab:active { transform: scale(0.92); }
 
   /* Chat Screen */
   #screenChat { z-index: 30; }
   .chat-header {
-    height: 58px; background: var(--surface); border-bottom: 1px solid var(--border);
+    height: 60px; background: var(--surface); border-bottom: 1px solid var(--border);
     display: flex; align-items: center; gap: 12px; padding: 0 12px; flex-shrink: 0;
   }
   .chat-header .back-btn {
-    width: 36px; height: 36px; border-radius: 10px; background: transparent;
-    border: 0; color: var(--text); font-size: 20px; cursor: pointer; display: grid; place-items: center;
+    width: 38px; height: 38px; border-radius: 11px; background: transparent;
+    border: 0; color: var(--text); font-size: 22px; cursor: pointer; display: grid; place-items: center;
   }
   .chat-header .partner-info { flex: 1; min-width: 0; }
-  .chat-header .partner-name { font-size: 15px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chat-header .partner-sub { font-size: 11px; color: var(--ok); display: flex; align-items: center; gap: 4px; }
+  .chat-header .partner-name { font-size: 15.5px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-header .partner-sub { font-size: 11.5px; color: var(--ok); display: flex; align-items: center; gap: 4px; }
   .chat-header .partner-sub.offline { color: var(--text-muted); }
+
+  .spectator-banner {
+    background: linear-gradient(90deg, rgba(239,68,68,0.18), rgba(127,24,179,0.18));
+    border-bottom: 1px solid rgba(239,68,68,0.3);
+    padding: 6px 14px; font-size: 11px; font-weight: 700; color: #FECACA;
+    display: none; align-items: center; justify-content: space-between;
+  }
 
   .msg-container {
     flex: 1; overflow-y: auto; padding: 16px 14px;
-    display: flex; flex-direction: column; gap: 10px;
+    display: flex; flex-direction: column; gap: 12px;
     -webkit-overflow-scrolling: touch;
   }
-  .msg-row { display: flex; flex-direction: column; max-width: 82%; }
+  .msg-row { display: flex; flex-direction: column; max-width: 84%; position: relative; }
   .msg-row.mine { align-self: flex-end; align-items: flex-end; }
   .msg-row.them { align-self: flex-start; align-items: flex-start; }
+
   .bubble {
-    padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4;
-    word-break: break-word; position: relative;
+    padding: 10px 14px; border-radius: 18px; font-size: 14.5px; line-height: 1.42;
+    word-break: break-word; position: relative; cursor: pointer;
   }
   .msg-row.mine .bubble {
     background: var(--bubble-me); color: #fff;
     border-bottom-right-radius: 4px;
-    box-shadow: 0 6px 18px rgba(37,99,235,0.25);
+    box-shadow: 0 6px 20px rgba(29,78,216,0.3);
   }
   .msg-row.them .bubble {
     background: var(--bubble-them); color: var(--text);
     border: 1px solid var(--border); border-bottom-left-radius: 4px;
   }
+  .msg-row.them .bubble.spectator-bubble {
+    border-left: 3.5px solid var(--accent);
+  }
+
+  /* Tombstone */
+  .bubble.deleted-bubble {
+    background: rgba(255,255,255,0.03) !important;
+    border: 1px dashed rgba(255,255,255,0.16) !important;
+    color: var(--text-muted) !important;
+    font-style: italic;
+    cursor: default;
+    box-shadow: none !important;
+  }
+
+  .sender-header {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 11.5px; font-weight: 750;
+  }
+  .sender-header .sender-label { color: #BAE6FD; }
+
   .bubble-meta {
-    font-size: 10px; color: rgba(255,255,255,0.65); margin-top: 4px;
+    font-size: 10.5px; color: rgba(255,255,255,0.65); margin-top: 4px;
     display: flex; align-items: center; gap: 4px; justify-content: flex-end;
   }
   .msg-row.them .bubble-meta { color: var(--text-muted); justify-content: flex-start; }
-  .ticks { font-size: 12px; }
-  .ticks.read { color: #84EFC9; font-weight: bold; }
+  .ticks { font-size: 12px; letter-spacing: -1px; }
+  .ticks.read { color: #38BDF8; font-weight: 800; text-shadow: 0 0 6px rgba(56,189,248,0.5); }
 
   /* Input Box */
   .chat-input-bar {
@@ -232,41 +278,68 @@
     padding: 8px 12px; display: flex; align-items: center; gap: 10px; flex-shrink: 0;
   }
   .chat-input {
-    flex: 1; min-height: 40px; max-height: 110px; background: rgba(10,10,11,0.7);
+    flex: 1; min-height: 42px; max-height: 110px; background: rgba(7,13,31,0.8);
     border: 1px solid var(--border); border-radius: 20px; color: var(--text);
-    padding: 10px 16px; font-size: 14px; outline: none; resize: none; line-height: 1.35;
+    padding: 10px 16px; font-size: 14.5px; outline: none; resize: none; line-height: 1.35;
   }
   .chat-input:focus { border-color: var(--accent); }
   .send-btn {
-    width: 40px; height: 40px; border-radius: 50%;
+    width: 42px; height: 42px; border-radius: 50%;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     border: 0; color: #fff; display: grid; place-items: center; cursor: pointer;
-    flex-shrink: 0; box-shadow: 0 4px 12px rgba(127,24,179,0.3);
+    flex-shrink: 0; box-shadow: 0 4px 14px rgba(127,24,179,0.35); transition: transform 0.15s;
   }
+  .send-btn:active { transform: scale(0.92); }
   .send-btn:disabled { opacity: 0.4; cursor: default; }
 
-  /* Modals */
+  /* Modals & Action Sheet */
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    position: fixed; inset: 0; background: rgba(0,0,0,0.78);
     display: none; place-items: center; z-index: 100; padding: 20px;
-    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   }
   .modal-overlay.active { display: grid; }
   .modal-box {
-    width: min(400px, 100%); background: var(--surface); border: 1px solid var(--border-bright);
-    border-radius: 20px; padding: 20px; box-shadow: 0 24px 60px rgba(0,0,0,0.8);
+    width: min(420px, 100%); background: var(--surface); border: 1px solid var(--border-bright);
+    border-radius: var(--radius-lg); padding: 22px; box-shadow: 0 25px 65px rgba(0,0,0,0.85);
     max-height: 85vh; display: flex; flex-direction: column;
   }
   .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-  .modal-head h3 { font-size: 16.5px; font-weight: 750; }
-  .modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; }
+  .modal-head h3 { font-size: 17px; font-weight: 800; }
+  .modal-close { background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; }
   .contact-list { overflow-y: auto; max-height: 50vh; display: flex; flex-direction: column; gap: 8px; }
   .contact-item {
-    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 12px;
-    cursor: pointer;
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-md);
+    cursor: pointer; transition: background 0.12s;
   }
   .contact-item:active { border-color: var(--accent); background: var(--surface3); }
+
+  /* Action Sheet for Messages */
+  .sheet-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: none; align-items: flex-end; justify-content: center; z-index: 120;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .sheet-overlay.active { display: flex; }
+  .sheet-card {
+    width: min(480px, 100%); background: var(--surface); border-top: 1px solid var(--border-bright);
+    border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 20px 18px 28px;
+    box-shadow: 0 -15px 40px rgba(0,0,0,0.85); animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .sheet-handle { width: 38px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 4px; margin: 0 auto 16px; }
+  .sheet-title { font-size: 12.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; text-align: center; }
+  .sheet-btn {
+    width: 100%; height: 48px; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface2); color: var(--text); font-size: 14.5px; font-weight: 650;
+    margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .sheet-btn:active { background: var(--surface3); }
+  .sheet-btn.danger { color: #FCA5A5; border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.12); }
+  .sheet-btn.danger:active { background: rgba(239,68,68,0.22); }
+  .sheet-btn.cancel { background: transparent; border-color: transparent; color: var(--text-muted); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -275,21 +348,23 @@
 <div class="screen active" id="screenLogin">
   <div class="login-card">
     <div class="login-brand">
-      <div class="logo-wrap">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#30ABED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <div class="logo-wrap" id="brandLogo" onclick="onLogoTap()">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#30ABED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
       </div>
       <h1>GALAXY CHAT</h1>
-      <p>Secure Mobile Messaging</p>
+      <p>Deep Space Mobile Messaging</p>
     </div>
 
+    <div id="devBadge" class="dev-badge">🔧 Developer Mode: Server Host Unlocked</div>
     <div id="loginErr" class="login-err"></div>
 
-    <div class="field">
+    <!-- Hidden by default; 5-tap developer bypass unlocks -->
+    <div class="field" id="wrapServer" style="display:none">
       <label>Server Host</label>
       <div class="input-wrap">
-        <input type="text" id="lServer" placeholder="https://powerx.example.com" value=""/>
+        <input type="text" id="lServer" placeholder="http://173.249.48.57:4000" value=""/>
       </div>
     </div>
 
@@ -303,7 +378,7 @@
     <div class="field">
       <label>Chat Password</label>
       <div class="input-wrap">
-        <input type="password" id="lPass" placeholder="Dedicated chat password" autocomplete="current-password"/>
+        <input type="password" id="lPass" placeholder="Enter dedicated chat password" autocomplete="current-password"/>
         <button type="button" class="eye-btn" onclick="togglePassVis()">👁</button>
       </div>
     </div>
@@ -326,17 +401,11 @@
   </header>
 
   <div class="nav-tabs" id="tabContainer">
-    <button class="tab-btn active" data-tab="chats" onclick="switchTab('chats')">
-      Chats <span class="badge" id="bChats" style="display:none">0</span>
-    </button>
-    <button class="tab-btn" data-tab="complaints" onclick="switchTab('complaints')">
-      Complaints <span class="badge" id="bComp" style="display:none">0</span>
-    </button>
-    <!-- Admin-only dynamic tabs inserted here -->
+    <!-- Role-based hierarchy tabs injected dynamically -->
   </div>
 
   <div class="search-wrap">
-    <input type="text" class="search-box" id="sQuery" placeholder="Search conversations or contacts..." oninput="filterConversations()"/>
+    <input type="text" class="search-box" id="sQuery" placeholder="Search conversations or contacts..." oninput="onSearchInput()"/>
   </div>
 
   <div class="conv-list" id="convContainer">
@@ -350,12 +419,17 @@
 <div class="screen" id="screenChat">
   <header class="chat-header">
     <button class="back-btn" onclick="closeChat()">‹</button>
-    <div class="avatar" id="cAvatar" style="width:38px;height:38px;font-size:15px">U</div>
+    <div class="avatar" id="cAvatar" style="width:40px;height:40px;font-size:16px">U</div>
     <div class="partner-info">
       <div class="partner-name" id="cPartnerName">User</div>
       <div class="partner-sub" id="cPartnerRole">Agent</div>
     </div>
   </header>
+
+  <div class="spectator-banner" id="specBanner">
+    <span>👁️ Spectator Auditing Mode</span>
+    <span style="font-size:10px;opacity:0.8">Direct Admin Monitoring</span>
+  </div>
 
   <div class="msg-container" id="msgBox">
     <!-- Messages populated here -->
@@ -396,9 +470,21 @@
     </div>
     <div class="field">
       <label>Details</label>
-      <textarea id="compBody" class="chat-input" rows="4" style="border-radius:12px" placeholder="Describe the issue for the Admin team..."></textarea>
+      <textarea id="compBody" class="chat-input" rows="4" style="border-radius:12px" placeholder="Describe the issue for Admin resolution..."></textarea>
     </div>
     <button type="button" class="btn-primary" onclick="submitComplaint()">Submit to Admin</button>
+  </div>
+</div>
+
+<!-- 6. MESSAGE ACTION SHEET -->
+<div class="sheet-overlay" id="msgSheet" onclick="onSheetBackdrop(event)">
+  <div class="sheet-card" id="sheetCard">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="sheetInfo">Message Options</div>
+    <button type="button" class="sheet-btn" onclick="copySelectedMessage()">📋 Copy Text</button>
+    <button type="button" class="sheet-btn danger" onclick="deleteMessageForMe()">🗑️ Delete for Me</button>
+    <button type="button" class="sheet-btn danger" id="btnDelEveryone" style="display:none" onclick="deleteMessageForEveryone()">🚫 Delete for Everyone</button>
+    <button type="button" class="sheet-btn cancel" onclick="closeSheet()">Cancel</button>
   </div>
 </div>
 
@@ -419,8 +505,12 @@
     messages: [],
     es: null,
     pollTimer: null,
-    lastMsgId: 0
+    lastMsgId: 0,
+    selectedMsg: null,
+    audioCtx: null
   };
+
+  const DEFAULT_VPS_SERVER = 'http://173.249.48.57:4000';
 
   // Bridge helper
   const Native = window.GalaxyNative || {
@@ -434,7 +524,39 @@
 
   function $(id) { return document.getElementById(id); }
 
+  // Synthesize notification chime using Web Audio API
+  function playNotificationChime() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!S.audioCtx) S.audioCtx = new AudioCtx();
+      if (S.audioCtx.state === 'suspended') S.audioCtx.resume();
+
+      const now = S.audioCtx.currentTime;
+      const osc = S.audioCtx.createOscillator();
+      const gain = S.audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now); // A5
+      osc.frequency.exponentialRampToValueAtTime(1320, now + 0.12); // E6
+
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+      osc.connect(gain);
+      gain.connect(S.audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.35);
+    } catch(e) {}
+  }
+
+  // Back button handling
   window.handleAppBack = function() {
+    if ($('msgSheet').classList.contains('active')) {
+      closeSheet();
+      return true;
+    }
     if ($('screenChat').classList.contains('active')) {
       closeChat();
       return true;
@@ -443,14 +565,38 @@
       closeModal('contactModal');
       return true;
     }
+    if ($('compModal').classList.contains('active')) {
+      closeModal('compModal');
+      return true;
+    }
     return false;
   };
 
-  // Init server URL & saved token
+  // Developer mode bypass (5 logo taps)
+  let logoTaps = 0;
+  let logoTapTimer = null;
+  window.onLogoTap = function() {
+    logoTaps++;
+    clearTimeout(logoTapTimer);
+    logoTapTimer = setTimeout(() => { logoTaps = 0; }, 1500);
+
+    if (logoTaps >= 5) {
+      logoTaps = 0;
+      const wrap = $('wrapServer');
+      const badge = $('devBadge');
+      const isHidden = wrap.style.display === 'none';
+      wrap.style.display = isHidden ? 'block' : 'none';
+      badge.style.display = isHidden ? 'block' : 'none';
+      Native.vibrate(50);
+      if (isHidden) Native.toast('Developer mode: Server Host unlocked');
+    }
+  };
+
+  // Init
   function init() {
-    let savedServer = Native.getPref('galaxy_server') || location.origin;
-    if (!savedServer || savedServer === 'null' || savedServer.startsWith('file:')) {
-      savedServer = 'http://127.0.0.1:4000';
+    let savedServer = Native.getPref('galaxy_server');
+    if (!savedServer || savedServer === 'null' || savedServer.startsWith('file:') || savedServer.includes('127.0.0.1')) {
+      savedServer = DEFAULT_VPS_SERVER;
     }
     $('lServer').value = savedServer;
 
@@ -487,7 +633,8 @@
   }
 
   window.doLogin = async function() {
-    const server = $('lServer').value.trim();
+    const serverInput = $('lServer').value.trim();
+    const server = serverInput || DEFAULT_VPS_SERVER;
     const username = $('lUser').value.trim();
     const password = $('lPass').value;
     const errBox = $('loginErr');
@@ -512,9 +659,8 @@
       Native.savePref('galaxy_chat_token', S.token);
       Native.savePref('galaxy_chat_user', JSON.stringify(S.user));
 
-      // Register device token
       const deviceTok = Native.getDeviceToken();
-      api('/api/chat/device-token', 'POST', { token: deviceTok, platform: 'android', app_version: '1.0.0' }).catch(() => {});
+      api('/api/chat/device-token', 'POST', { token: deviceTok, platform: 'android', app_version: '2.0.0' }).catch(() => {});
 
       showMainScreen();
     } catch (e) {
@@ -551,21 +697,41 @@
     connectSSE();
   }
 
+  // Hierarchy Split Tabs
   function setupTabs() {
     const cont = $('tabContainer');
-    if (S.user.role === 'admin') {
+    const r = S.user.role;
+
+    if (r === 'admin') {
       cont.innerHTML = `
-        <button class="tab-btn active" data-tab="all" onclick="switchTab('all')">All Chats</button>
-        <button class="tab-btn" data-tab="managers" onclick="switchTab('managers')">Managers</button>
-        <button class="tab-btn" data-tab="agents" onclick="switchTab('agents')">Agents</button>
-        <button class="tab-btn" data-tab="clients" onclick="switchTab('clients')">Clients</button>
+        <button class="tab-btn active" data-tab="direct" onclick="switchTab('direct')">My Direct</button>
+        <button class="tab-btn" data-tab="manager_chats" onclick="switchTab('manager_chats')">Managers</button>
+        <button class="tab-btn" data-tab="agent_chats" onclick="switchTab('agent_chats')">Agents</button>
+        <button class="tab-btn" data-tab="client_chats" onclick="switchTab('client_chats')">Clients</button>
+        <button class="tab-btn" data-tab="all" onclick="switchTab('all')">All System</button>
         <button class="tab-btn" data-tab="complaints" onclick="switchTab('complaints')">Complaints <span class="badge" id="bComp" style="display:none">0</span></button>
       `;
-    } else {
+      S.activeTab = 'direct';
+    } else if (r === 'manager') {
       cont.innerHTML = `
-        <button class="tab-btn active" data-tab="chats" onclick="switchTab('chats')">Chats <span class="badge" id="bChats" style="display:none">0</span></button>
+        <button class="tab-btn active" data-tab="agents" onclick="switchTab('agents')">My Agents</button>
+        <button class="tab-btn" data-tab="admin" onclick="switchTab('admin')">Admin Support</button>
         <button class="tab-btn" data-tab="complaints" onclick="switchTab('complaints')">Complaints <span class="badge" id="bComp" style="display:none">0</span></button>
       `;
+      S.activeTab = 'agents';
+    } else if (r === 'agent') {
+      cont.innerHTML = `
+        <button class="tab-btn active" data-tab="clients" onclick="switchTab('clients')">My Clients</button>
+        <button class="tab-btn" data-tab="manager" onclick="switchTab('manager')">My Manager</button>
+        <button class="tab-btn" data-tab="complaints" onclick="switchTab('complaints')">Complaints <span class="badge" id="bComp" style="display:none">0</span></button>
+      `;
+      S.activeTab = 'clients';
+    } else { // client
+      cont.innerHTML = `
+        <button class="tab-btn active" data-tab="manager" onclick="switchTab('manager')">My Agent</button>
+        <button class="tab-btn" data-tab="complaints" onclick="switchTab('complaints')">Complaints & Support <span class="badge" id="bComp" style="display:none">0</span></button>
+      `;
+      S.activeTab = 'manager';
     }
   }
 
@@ -587,6 +753,8 @@
       let url = '/api/chat/conversations';
       if (S.user.role === 'admin') {
         url += `?scope=all&filter=${S.activeTab}`;
+      } else {
+        url += `?filter=${S.activeTab}`;
       }
       S.convs = await api(url);
       renderConversations();
@@ -601,14 +769,14 @@
     let list = S.convs;
     if (q) {
       list = list.filter(c => {
-        const name = (c.other ? c.other.name : (c.user_a.name + ' ' + c.user_b.name)).toLowerCase();
+        const partnerName = c.other ? (c.other.name || c.other.username) : ((c.user_a ? c.user_a.name : '') + ' ' + (c.user_b ? c.user_b.name : ''));
         const last = (c.last_message_text || '').toLowerCase();
-        return name.includes(q) || last.includes(q);
+        return partnerName.toLowerCase().includes(q) || last.includes(q);
       });
     }
 
     if (!list.length) {
-      cont.innerHTML = `<div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
+      cont.innerHTML = `<div style="text-align:center;padding:50px 20px;color:var(--text-muted)">
         <p style="font-size:15px;margin-bottom:8px">No conversations found</p>
         <p style="font-size:12px">Tap the <b>+</b> button below to start a chat.</p>
       </div>`;
@@ -617,6 +785,7 @@
 
     cont.innerHTML = list.map(c => {
       const partner = c.other || (S.user.id === c.user_a.id ? c.user_b : c.user_a);
+      const isSpectator = S.user.role === 'admin' && !c.is_direct_admin;
       const initial = (partner.name || partner.username).charAt(0).toUpperCase();
       const time = c.last_message_at ? c.last_message_at.slice(11, 16) : '';
       const unreadBadge = c.unread > 0 ? `<span class="badge">${c.unread}</span>` : '';
@@ -626,11 +795,11 @@
           <div class="avatar">${initial}</div>
           <div class="conv-info">
             <div class="conv-top">
-              <span class="conv-name">${partner.name || partner.username}</span>
+              <span class="conv-name">${partner.name || partner.username}${isSpectator ? ' <span style="font-size:10px;color:var(--accent2);font-weight:700">[AUDIT]</span>' : ''}</span>
               <span class="conv-time">${time}</span>
             </div>
             <div class="conv-bottom">
-              <span class="conv-last">${c.last_message_text || 'No messages yet'}</span>
+              <span class="conv-last">${escapeHtml(c.last_message_text || 'No messages yet')}</span>
               <div style="display:flex;align-items:center;gap:6px">
                 <span class="role-tag role-${partner.role}">${partner.role_label || partner.role}</span>
                 ${unreadBadge}
@@ -642,7 +811,7 @@
     }).join('');
   }
 
-  window.filterConversations = function() {
+  window.onSearchInput = function() {
     renderConversations();
   };
 
@@ -656,7 +825,7 @@
   function renderComplaints() {
     const cont = $('convContainer');
     if (!S.complaints.length) {
-      cont.innerHTML = `<div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
+      cont.innerHTML = `<div style="text-align:center;padding:50px 20px;color:var(--text-muted)">
         <p style="font-size:15px;margin-bottom:8px">No complaints submitted</p>
         <p style="font-size:12px">Formal complaints submitted to Admin appear here.</p>
       </div>`;
@@ -666,15 +835,15 @@
     cont.innerHTML = S.complaints.map(c => {
       const stColor = c.status === 'Resolved' ? 'var(--ok)' : (c.status === 'In Progress' ? 'var(--accent)' : 'var(--warn)');
       return `
-        <div class="conv-item" onclick="openComplaintView(${c.id})">
-          <div class="avatar" style="background:#1B1B22;color:var(--warn)">⚠️</div>
+        <div class="conv-item">
+          <div class="avatar" style="background:var(--surface2);color:var(--warn)">⚠️</div>
           <div class="conv-info">
             <div class="conv-top">
-              <span class="conv-name">#${c.id} ${c.subject}</span>
+              <span class="conv-name">#${c.id} ${escapeHtml(c.subject)}</span>
               <span class="conv-time">${(c.created_at || '').slice(5, 16)}</span>
             </div>
             <div class="conv-bottom">
-              <span class="conv-last">${c.body}</span>
+              <span class="conv-last">${escapeHtml(c.body)}</span>
               <span class="role-tag" style="color:${stColor};background:rgba(255,255,255,0.06)">${c.status}</span>
             </div>
           </div>
@@ -689,15 +858,18 @@
 
     S.activeConv = conv;
     const partner = conv.other || (S.user.id === conv.user_a.id ? conv.user_b : conv.user_a);
+    const isSpectator = S.user.role === 'admin' && !conv.is_direct_admin;
 
     $('cAvatar').textContent = (partner.name || partner.username).charAt(0).toUpperCase();
     $('cPartnerName').textContent = partner.name || partner.username;
     $('cPartnerRole').textContent = partner.role_label || partner.role;
 
+    const banner = $('specBanner');
+    banner.style.display = isSpectator ? 'flex' : 'none';
+
     $('screenChat').classList.add('active');
     loadMessages(convId);
 
-    // Mark as read
     api(`/api/chat/messages/${convId}/read`, 'POST').catch(() => {});
   };
 
@@ -718,18 +890,42 @@
 
   function renderMessages() {
     const box = $('msgBox');
+    const isSpectator = S.user.role === 'admin' && S.activeConv && !S.activeConv.is_direct_admin;
+
     box.innerHTML = S.messages.map(m => {
-      const mine = m.sender_id === S.user.id;
+      const mine = !isSpectator && (m.sender_id === S.user.id);
+      const isDeleted = m.is_deleted === true || m.deleted_for_everyone === 1;
       const ticks = m.read_at ? '<span class="ticks read">✓✓</span>' : '<span class="ticks">✓</span>';
       const time = (m.created_at || '').slice(11, 16);
 
+      let senderHeader = '';
+      if (isSpectator || (!mine && S.activeConv && S.activeConv.rel_category)) {
+        senderHeader = `
+          <div class="sender-header">
+            <span class="sender-label">${escapeHtml(m.sender_name || 'User')}</span>
+            <span class="role-tag role-${(m.sender_role || '').toLowerCase()}">${m.sender_role || ''}</span>
+          </div>
+        `;
+      }
+
+      const bubbleClass = isDeleted
+        ? 'bubble deleted-bubble'
+        : (isSpectator ? 'bubble spectator-bubble' : 'bubble');
+
+      const bodyContent = isDeleted
+        ? '🚫 This message was deleted'
+        : escapeHtml(m.body);
+
+      const clickAttr = isDeleted ? '' : `onclick="openMsgActionSheet(${m.id})"`;
+
       return `
-        <div class="msg-row ${mine ? 'mine' : 'them'}">
-          <div class="bubble">
-            ${escapeHtml(m.body)}
+        <div class="msg-row ${mine ? 'mine' : 'them'}" id="msgRow_${m.id}">
+          <div class="${bubbleClass}" ${clickAttr}>
+            ${senderHeader}
+            <div>${bodyContent}</div>
             <div class="bubble-meta">
               <span>${time}</span>
-              ${mine ? ticks : ''}
+              ${mine && !isDeleted ? ticks : ''}
             </div>
           </div>
         </div>
@@ -772,6 +968,79 @@
     }
   };
 
+  // Message Action Sheet (Delete for Me, Delete for Everyone)
+  window.openMsgActionSheet = function(msgId) {
+    const msg = S.messages.find(m => m.id === msgId);
+    if (!msg || msg.is_deleted) return;
+
+    S.selectedMsg = msg;
+    const isSender = (msg.sender_id === S.user.id);
+    const isAdmin = (S.user.role === 'admin');
+
+    // 15-minute deletion window check
+    const msgAgeMinutes = (Date.now() - new Date(msg.created_at).getTime()) / 60000;
+    const canDeleteEveryone = isAdmin || (isSender && msgAgeMinutes <= 15);
+
+    $('sheetInfo').textContent = `Message from ${msg.sender_name || 'User'} (${(msg.created_at || '').slice(11, 16)})`;
+    $('btnDelEveryone').style.display = canDeleteEveryone ? 'flex' : 'none';
+
+    $('msgSheet').classList.add('active');
+  };
+
+  window.closeSheet = function() {
+    $('msgSheet').classList.remove('active');
+    S.selectedMsg = null;
+  };
+
+  window.onSheetBackdrop = function(e) {
+    if (e.target.id === 'msgSheet') closeSheet();
+  };
+
+  window.copySelectedMessage = function() {
+    if (!S.selectedMsg) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(S.selectedMsg.body);
+      Native.toast('Copied to clipboard');
+    }
+    closeSheet();
+  };
+
+  window.deleteMessageForMe = async function() {
+    if (!S.selectedMsg) return;
+    const msgId = S.selectedMsg.id;
+    closeSheet();
+
+    try {
+      await api(`/api/chat/messages/${msgId}/delete-for-me`, 'POST');
+      S.messages = S.messages.filter(m => m.id !== msgId);
+      renderMessages();
+      Native.vibrate(25);
+    } catch (e) {
+      alert('Failed to delete: ' + e.message);
+    }
+  };
+
+  window.deleteMessageForEveryone = async function() {
+    if (!S.selectedMsg) return;
+    const msgId = S.selectedMsg.id;
+    if (!confirm('Delete this message for everyone?')) return;
+    closeSheet();
+
+    try {
+      await api(`/api/chat/messages/${msgId}/delete-for-everyone`, 'POST');
+      const target = S.messages.find(m => m.id === msgId);
+      if (target) {
+        target.is_deleted = true;
+        target.body = 'This message was deleted';
+        target.deleted_for_everyone = 1;
+      }
+      renderMessages();
+      Native.vibrate(35);
+    } catch (e) {
+      alert('Failed to delete for everyone: ' + e.message);
+    }
+  };
+
   // Contacts
   window.openNewChatModal = async function() {
     if (S.activeTab === 'complaints') {
@@ -799,15 +1068,15 @@
     }
 
     if (!list.length) {
-      cont.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">No authorized contacts available.</div>';
+      cont.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted)">No authorized contacts available.</div>';
       return;
     }
 
     cont.innerHTML = list.map(u => `
       <div class="contact-item" onclick="startChatWith(${u.id})">
-        <div class="avatar" style="width:36px;height:36px;font-size:14px">${(u.name || u.username).charAt(0).toUpperCase()}</div>
+        <div class="avatar" style="width:38px;height:38px;font-size:15px">${(u.name || u.username).charAt(0).toUpperCase()}</div>
         <div style="flex:1">
-          <div style="font-weight:700;font-size:14px">${u.name || u.username}</div>
+          <div style="font-weight:750;font-size:14px">${escapeHtml(u.name || u.username)}</div>
           <div style="font-size:11.5px;color:var(--text-muted)">@${u.username}</div>
         </div>
         <span class="role-tag role-${u.role}">${u.role_label || u.role}</span>
@@ -855,20 +1124,26 @@
       const streamUrl = S.server.replace(/\/+$/, '') + '/api/chat/stream?ticket=' + ticket;
 
       S.es = new EventSource(streamUrl);
+
+      // Incoming message
       S.es.addEventListener('msg', (e) => {
         const data = JSON.parse(e.data);
         if (S.activeConv && S.activeConv.id === data.c) {
           S.messages.push(data.m);
           renderMessages();
           scrollToBottom();
+          playNotificationChime();
+          Native.vibrate(40);
           api(`/api/chat/messages/${data.c}/read`, 'POST').catch(() => {});
         } else {
+          playNotificationChime();
           Native.showNotification('New message from ' + data.m.sender_name, data.m.body);
           Native.vibrate(50);
           loadConversations();
         }
       });
 
+      // Read receipt
       S.es.addEventListener('read', (e) => {
         const data = JSON.parse(e.data);
         if (S.activeConv && S.activeConv.id === data.c) {
@@ -877,6 +1152,21 @@
         }
       });
 
+      // Message deleted for everyone
+      S.es.addEventListener('msg_deleted', (e) => {
+        const data = JSON.parse(e.data);
+        if (S.activeConv && S.activeConv.id === data.c) {
+          const target = S.messages.find(m => m.id === data.message_id);
+          if (target) {
+            target.is_deleted = true;
+            target.body = 'This message was deleted';
+            target.deleted_for_everyone = 1;
+            renderMessages();
+          }
+        }
+      });
+
+      // Access revoked
       S.es.addEventListener('revoked', () => {
         alert('🔒 Chat access has been disabled by Admin.');
         doLogout();
@@ -894,11 +1184,6 @@
   async function updateBadges() {
     try {
       const counts = await api('/api/chat/unread-count');
-      const bChat = $('bChats');
-      if (bChat) {
-        bChat.textContent = counts.chat || 0;
-        bChat.style.display = counts.chat > 0 ? 'inline-block' : 'none';
-      }
       const bComp = $('bComp');
       if (bComp) {
         bComp.textContent = counts.complaints || 0;

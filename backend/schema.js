@@ -936,6 +936,21 @@ function createTables() {
   db.run(`CREATE INDEX IF NOT EXISTS idx_chat_device_user ON chat_device_tokens(user_id)`);
 
   ensureColumn('password_setup_tokens', 'token_purpose', "TEXT DEFAULT 'panel_password'");
+
+  /* ============ P21 PHASE-2: MESSAGE DELETION (DELETE FOR ME & DELETE FOR EVERYONE) ============ */
+  ensureColumn('chat_messages', 'deleted_for_everyone', 'INTEGER DEFAULT 0');
+  ensureColumn('chat_messages', 'deleted_at', 'TEXT DEFAULT NULL');
+  ensureColumn('chat_messages', 'deleted_by', 'INTEGER DEFAULT NULL');
+
+  db.run(`CREATE TABLE IF NOT EXISTS chat_message_deletions (
+    message_id INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    deleted_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (message_id, user_id),
+    FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_cmd_user ON chat_message_deletions(user_id, message_id)`);
 }
 
 module.exports = { createTables };
