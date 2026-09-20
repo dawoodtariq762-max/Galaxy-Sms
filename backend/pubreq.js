@@ -318,9 +318,31 @@ module.exports = function mountPubreq(app, deps) {
     if (!user) return res.status(400).json({ error: 'Account not found' });
     const upd = db.run('UPDATE password_setup_tokens SET used=1 WHERE id=? AND used=0', [row.id]);
     if (!upd.changes) return res.status(400).json({ error: 'Invalid or already-used link' });
-    db.run('UPDATE users SET password=? WHERE id=?', [bcrypt.hashSync(String(password), 10), user.id]);
+
+    const hash = bcrypt.hashSync(String(password), 10);
+    if (row.token_purpose === 'chat_password') {
+      const existing = db.get('SELECT user_id FROM chat_credentials WHERE user_id=?', [user.id]);
+      if (existing) {
+        db.run(`UPDATE chat_credentials SET chat_password_hash=?, chat_enabled=1, failed_attempts=0, locked_until=NULL, password_set_at=datetime('now'), updated_at=datetime('now') WHERE user_id=?`, [hash, user.id]);
+      } else {
+        db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`, [user.id, hash]);
+      }
+      logAction({ ip: req.ip }, 'chat_password_setup_completed', 'chat', { id: user.id, username: user.username });
+      return res.json({ ok: true, username: user.username, purpose: 'chat_password' });
+    }
+
+    db.run('UPDATE users SET password=? WHERE id=?', [hash, user.id]);
     logAction({ ip: req.ip }, 'password_setup_completed', 'users', { id: user.id, username: user.username });
-    res.json({ ok: true, username: user.username });
+    res.json({ ok: true, username: user.username, purpose: 'panel_password' });
+  });
+
+  app.get('/api/pubreq/token-info', pubLimiter, (req, res) => {
+    const token = cleanStr(req.query.token, 128);
+    if (!token) return res.status(400).json({ error: 'Token required' });
+    const row = db.get('SELECT * FROM password_setup_tokens WHERE token_hash=? AND used=0 ORDER BY id DESC LIMIT 1', [otpHash(token)]);
+    if (!row || expired(row.expires_at)) return res.json({ valid: false });
+    const user = db.get('SELECT username FROM users WHERE id=?', [row.user_id]);
+    res.json({ valid: true, username: user ? user.username : '', purpose: row.token_purpose || 'panel_password' });
   });
 
   /* ---------- ADMIN: request management (sirf admin — backend enforced) ---------- */
@@ -384,6 +406,10 @@ module.exports = function mountPubreq(app, deps) {
       contact: r.contact, active: true, parentId,
     });
     if (!created.ok) return res.status(created.status || 400).json({ error: created.error });
+
+    /* P21: Dedicated chat credentials (isolated from panel password) */
+    const tempChatHash = bcrypt.hashSync(crypto.randomBytes(18).toString('base64url'), 10);
+    db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`, [created.id, tempChatHash]);
 
     /* one-time setup token (hashed, 24h) + welcome email */
     const token = genToken();

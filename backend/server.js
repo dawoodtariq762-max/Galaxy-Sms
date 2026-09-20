@@ -14,7 +14,7 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 const { createTables } = require('./schema');
 const { seed } = require('./seed');
-const { sign, authRequired, requireRole, descendantIds, SECRET } = require('./auth');
+const { sign, signChat, authRequired, chatAuthRequired, requireRole, descendantIds, SECRET } = require('./auth');
 const backup = require('./backup');
 const providerSync = require('./providerSync');
 const smsFts = require('./fts');
@@ -428,9 +428,9 @@ app.get('/test/:page', (req, res) => sendFrontendPage(res, 'test.html'));
 // serve frontend assets and static files from project root
 app.use(express.static(FRONTEND_ROOT));
 
-/* ===== P19e: INTERNAL CHAT + COMPLAINTS (isolated module — is line ko hata kar feature
+/* ===== P19e + P21: INTERNAL CHAT + SEPARATE CHAT AUTH (isolated module — is line ko hata kar feature
    poora disable/revert ho jata hai; kisi existing route/behaviour ko touch nahi karta) ===== */
-require('./chat')(app, { authRequired, requireRole, logAction });
+require('./chat')(app, { authRequired, chatAuthRequired, requireRole, logAction, signChat, SECRET });
 
 /* ===== P19i: PUBLIC PANEL REQUESTS + GMAIL OTP VERIFICATION (isolated module —
    is line ko hata kar feature poora revert ho jata hai; users creation sirf
@@ -1175,6 +1175,14 @@ app.post('/api/users', authRequired, (req, res) => {
 
   const created = insertUserAccount({ username, password, role, name, email, whatsapp, contact, skype, active, payment_type, parentId });
   if (!created.ok) return res.status(created.status || 400).json({ error: created.error });
+
+  // P21: Initialize separate chat credential for non-admin accounts
+  if (role !== 'admin') {
+    const chatPw = req.body && req.body.chat_password ? String(req.body.chat_password) : crypto.randomBytes(18).toString('base64url');
+    db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`,
+      [created.id, bcrypt.hashSync(chatPw, 10)]);
+  }
+
   logAction(req,'create_user','users',{username,role});
   res.json({ ok: true });
 });

@@ -398,6 +398,7 @@
 
       <div class="sb-section">Communication</div>
       <div class="nav-item" data-page="chat"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Chats</span><span class="gx-nav-badge" id="gxChatBadge" style="display:none"></span></div>
+      <div class="nav-item" data-page="chatAccounts"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Chat Accounts</span></div>
       <div class="nav-item" data-page="complaints"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Complaints</span><span class="gx-nav-badge" id="gxCompBadge" style="display:none"></span></div>
 
       <div class="sb-section">Users</div>
@@ -618,6 +619,7 @@
 
       <!-- P19e: INTERNAL CHAT + COMPLAINTS (GXChat builds UI at runtime) -->
       <section class="page" id="page-chat"></section>
+      <section class="page" id="page-chatAccounts"></section>
       <section class="page" id="page-complaints"></section>
 
       <section class="page" id="page-test">
@@ -765,7 +767,7 @@
 /* auth guard — admin only */
 if(window.API){ API.guard('admin'); }
 window.PX_PANEL_MODE='admin_ops';
-const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','aiKnowledge','payMgmt','chat','complaints','panelRequests']);
+const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','aiKnowledge','payMgmt','chat','chatAccounts','complaints','panelRequests']);
 function normalizePanelPage(id){ id=String(id||'dashboard'); return ADMIN_ALLOWED_PAGES.has(id)?id:'dashboard'; }
 function applyPanelSplitUi(){
   if(window.PX_PANEL_MODE!=='admin_light') return;
@@ -2689,6 +2691,293 @@ async function prqResend(id){
   catch (e) { alert('❌ ' + e.message); }
 }
 
+/* ================================================================
+ * P21: CHAT ACCOUNTS & SECURITY MANAGEMENT
+ * ================================================================ */
+let chatAccData = [], chatAccSearch = '', chatAccRole = '', chatAccStatus = '';
+
+function buildChatAccounts(){
+  const page = document.getElementById('page-chatAccounts');
+  if (!page) return;
+  page.innerHTML = `
+  <div class="page-head">
+    <div>
+      <h2>Chat Accounts & Security</h2>
+      <div class="breadcrumb"><b>Communication</b> › Separate Chat Authentication Management</div>
+    </div>
+    <div class="head-actions" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="initAllChatAccounts()" style="font-size:12.5px" title="Initialize credentials for any users without chat records">⚡ Init Missing Accounts</button>
+      <button class="btn btn-blue" onclick="loadChatAccounts()" style="font-size:12.5px">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="stats-grid" style="margin-bottom:18px">
+    <div class="stat-card dash-metric d-blue"><div class="stat-info"><p>Total Users</p><h3 id="caTotUsers">0</h3><span>System Accounts</span></div><div class="dash-go">👥</div></div>
+    <div class="stat-card dash-metric d-green"><div class="stat-info"><p>Chat Enabled</p><h3 id="caTotEnabled">0</h3><span>Active Chat Access</span></div><div class="dash-go">💬</div></div>
+    <div class="stat-card dash-metric d-pink"><div class="stat-info"><p>Chat Disabled</p><h3 id="caTotDisabled">0</h3><span>Access Revoked</span></div><div class="dash-go">🔒</div></div>
+    <div class="stat-card dash-metric d-orange"><div class="stat-info"><p>Passwords Configured</p><h3 id="caTotPwSet">0</h3><span>Ready for Login</span></div><div class="dash-go">🔑</div></div>
+  </div>
+
+  <div class="table-wrap" style="padding:14px 18px;margin-bottom:12px">
+    <div class="table-controls" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <div style="flex:1;min-width:200px">
+        <input type="text" id="caSearchInput" placeholder="Search by username, name or email..." oninput="chatAccSearch=this.value.trim().toLowerCase();renderChatAccounts();" style="width:100%"/>
+      </div>
+      <div>
+        <select id="caRoleSelect" onchange="chatAccRole=this.value;renderChatAccounts();" style="width:auto">
+          <option value="">All Roles</option>
+          <option value="admin">Admin</option>
+          <option value="manager">Managers</option>
+          <option value="agent">Agents</option>
+          <option value="client">Clients</option>
+        </select>
+      </div>
+      <div>
+        <select id="caStatusSelect" onchange="chatAccStatus=this.value;renderChatAccounts();" style="width:auto">
+          <option value="">All Chat Status</option>
+          <option value="enabled">Enabled Only</option>
+          <option value="disabled">Disabled Only</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="tscroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Name & Email</th>
+            <th>Role</th>
+            <th>Parent Account</th>
+            <th>Chat Access</th>
+            <th>Chat Password</th>
+            <th>Last Chat Login</th>
+            <th style="text-align:right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="caTableBody"></tbody>
+      </table>
+    </div>
+    <div class="table-foot"><div class="info" id="caTableInfo"></div></div>
+  </div>
+  <div class="hint" style="margin-top:10px">
+    🛡 <b>Security Policy:</b> Chat passwords are completely separate from web panel passwords for all non-admin users. Changing one password never alters the other. Passwords use one-way bcrypt hashes and are never stored or displayed in plaintext.
+  </div>`;
+
+  loadChatAccounts();
+}
+
+async function loadChatAccounts(){
+  try {
+    const res = await API.get('/chat/admin/accounts');
+    chatAccData = (res && res.accounts) || [];
+  } catch (e) {
+    chatAccData = [];
+    const b = document.getElementById('caTableBody');
+    if (b) b.innerHTML = `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">⚠ Failed to load accounts: ${pesc(e.message)}</td></tr>`;
+    return;
+  }
+  updateChatAccMetrics();
+  renderChatAccounts();
+}
+
+function updateChatAccMetrics(){
+  const tot = chatAccData.length;
+  let enabled = 0, disabled = 0, pwSet = 0;
+  chatAccData.forEach(a => {
+    if (a.role === 'admin') { enabled++; pwSet++; }
+    else {
+      if (a.chat_enabled === 1 || a.chat_enabled == null) enabled++; else disabled++;
+      if (a.has_chat_password) pwSet++;
+    }
+  });
+  const elTot = document.getElementById('caTotUsers'); if (elTot) elTot.textContent = tot;
+  const elEn = document.getElementById('caTotEnabled'); if (elEn) elEn.textContent = enabled;
+  const elDis = document.getElementById('caTotDisabled'); if (elDis) elDis.textContent = disabled;
+  const elPw = document.getElementById('caTotPwSet'); if (elPw) elPw.textContent = pwSet;
+}
+
+function renderChatAccounts(){
+  const tbody = document.getElementById('caTableBody');
+  if (!tbody) return;
+
+  let list = chatAccData;
+  if (chatAccSearch) {
+    list = list.filter(a =>
+      (a.username || '').toLowerCase().includes(chatAccSearch) ||
+      (a.name || '').toLowerCase().includes(chatAccSearch) ||
+      (a.email || '').toLowerCase().includes(chatAccSearch)
+    );
+  }
+  if (chatAccRole) {
+    list = list.filter(a => a.role === chatAccRole);
+  }
+  if (chatAccStatus === 'enabled') {
+    list = list.filter(a => a.role === 'admin' || a.chat_enabled === 1);
+  } else if (chatAccStatus === 'disabled') {
+    list = list.filter(a => a.role !== 'admin' && a.chat_enabled === 0);
+  }
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No matching user accounts found.</td></tr>';
+    const inf = document.getElementById('caTableInfo'); if (inf) inf.textContent = 'Showing 0 records';
+    return;
+  }
+
+  tbody.innerHTML = '';
+  list.forEach(a => {
+    const tr = document.createElement('tr');
+    const isAdmin = a.role === 'admin';
+    const isEnabled = isAdmin ? true : (a.chat_enabled === 1);
+
+    const roleTagClass = a.role === 'admin' ? 'tag-red' : a.role === 'manager' ? 'tag-mgr' : a.role === 'agent' ? 'tag-agt' : 'tag-cli';
+    const statusTag = isEnabled
+      ? '<span class="tag" style="background:rgba(37,217,164,.14);color:#25d9a4">✓ Enabled</span>'
+      : '<span class="tag" style="background:rgba(255,92,122,.14);color:#ff5c7a">✗ Disabled</span>';
+
+    const pwStatus = isAdmin
+      ? '<span class="muted" title="Admin uses panel credentials">Master Account</span>'
+      : a.has_chat_password
+        ? `<span class="tag tag-green" title="Set at ${pesc(a.password_set_at || '')}">Active Hash</span>`
+        : '<span class="tag tag-amber">Not Initialized</span>';
+
+    const lastLogin = a.last_login_at ? `<span class="muted" style="font-size:12px">${pesc(a.last_login_at)}</span>` : '<span class="muted">—</span>';
+    const parentDisp = a.parent_username ? `<span class="mono">${pesc(a.parent_username)}</span>` : '<span class="muted">—</span>';
+
+    let actionButtons = '';
+    if (isAdmin) {
+      actionButtons = '<span class="muted" style="font-size:12px">Protected Master</span>';
+    } else {
+      actionButtons = `
+        <button class="gx-btn gx-blue" onclick="openSetChatPasswordModal(${a.id}, '${pesc(a.username)}')" title="Set or Reset Chat Password" style="font-size:12px;padding:4px 9px">🔑 Password</button>
+        <button class="gx-btn" onclick="sendChatSetupLink(${a.id}, '${pesc(a.username)}')" title="Send Setup Link via Email" style="font-size:12px;padding:4px 9px">✉ Link</button>
+        <button class="gx-btn ${isEnabled ? 'gx-red' : 'gx-green'}" onclick="toggleChatAccount(${a.id}, ${isEnabled ? 0 : 1}, '${pesc(a.username)}')" title="${isEnabled ? 'Disable Chat Access' : 'Enable Chat Access'}" style="font-size:12px;padding:4px 9px">
+          ${isEnabled ? 'Disable' : 'Enable'}
+        </button>
+      `;
+    }
+
+    tr.innerHTML = `
+      <td class="mono"><b>${pesc(a.username)}</b></td>
+      <td><div><b>${pesc(a.name || a.username)}</b></div><div class="muted" style="font-size:11.5px">${pesc(a.email || 'No email')}</div></td>
+      <td><span class="tag ${roleTagClass}">${pesc(a.role.toUpperCase())}</span></td>
+      <td>${parentDisp}</td>
+      <td>${statusTag}</td>
+      <td>${pwStatus}</td>
+      <td>${lastLogin}</td>
+      <td style="text-align:right;white-space:nowrap">${actionButtons}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const inf = document.getElementById('caTableInfo');
+  if (inf) inf.textContent = `Showing ${list.length} of ${chatAccData.length} accounts`;
+}
+
+async function toggleChatAccount(userId, enable, username){
+  const action = enable ? 'enable' : 'disable';
+  if (!confirm(`Are you sure you want to ${action} chat access for "${username}"?`)) return;
+  try {
+    const res = await API.post(`/chat/admin/accounts/${userId}/toggle`, { chat_enabled: enable });
+    if (res && res.ok) {
+      loadChatAccounts();
+    }
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+}
+
+async function sendChatSetupLink(userId, username){
+  if (!confirm(`Generate and email a one-time Chat Password setup link to "${username}"?`)) return;
+  try {
+    const res = await API.post(`/chat/admin/accounts/${userId}/send-setup`, {});
+    if (res && res.ok) {
+      alert(`✅ Chat Password setup link created and emailed to ${res.email || username}.\n\nSetup URL:\n${res.setup_url}`);
+      loadChatAccounts();
+    }
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+}
+
+async function initAllChatAccounts(){
+  if (!confirm('Initialize chat accounts for all active users who do not have one yet?')) return;
+  try {
+    const res = await API.post('/chat/admin/accounts/init-all', {});
+    alert(`✅ Initialized ${res.initialized || 0} user chat accounts.`);
+    loadChatAccounts();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+}
+
+function openSetChatPasswordModal(userId, username){
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'setChatPwModal';
+  ov.innerHTML = `
+    <div class="modal" style="width:min(440px,96%)">
+      <div class="modal-head">
+        <h3>Set Chat Password: <span class="mono">${pesc(username)}</span></h3>
+        <button class="modal-close" onclick="closeModal('setChatPwModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin-bottom:14px;font-size:13px">
+          This sets the user's <b>dedicated chat password</b> for mobile app & messaging. The user's web panel password remains completely unaffected.
+        </p>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>New Chat Password <span class="req">*</span></label>
+          <div style="position:relative">
+            <input type="password" id="mChatPw1" placeholder="Min 6 characters" style="width:100%;padding-right:40px"/>
+            <button type="button" onclick="const p=document.getElementById('mChatPw1');p.type=p.type==='password'?'text':'password';" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Confirm Chat Password <span class="req">*</span></label>
+          <input type="password" id="mChatPw2" placeholder="Re-type password" style="width:100%"/>
+        </div>
+        <div id="mChatPwErr" class="msg err" style="display:none;margin-top:10px"></div>
+      </div>
+      <div class="modal-foot" style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost" onclick="closeModal('setChatPwModal')">Cancel</button>
+        <button class="btn btn-blue" id="mChatPwSave">Save Chat Password</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(ov);
+
+  ov.querySelector('#mChatPwSave').addEventListener('click', async () => {
+    const p1 = ov.querySelector('#mChatPw1').value;
+    const p2 = ov.querySelector('#mChatPw2').value;
+    const errBox = ov.querySelector('#mChatPwErr');
+
+    if (p1.length < 6) {
+      errBox.textContent = 'Password must be at least 6 characters.';
+      errBox.style.display = 'block';
+      return;
+    }
+    if (p1 !== p2) {
+      errBox.textContent = 'Passwords do not match.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      ov.querySelector('#mChatPwSave').disabled = true;
+      const res = await API.post(`/chat/admin/accounts/${userId}/password`, { password: p1 });
+      closeModal('setChatPwModal');
+      alert(`✅ Chat password updated successfully for ${username}.`);
+      loadChatAccounts();
+    } catch (e) {
+      errBox.textContent = e.message;
+      errBox.style.display = 'block';
+      ov.querySelector('#mChatPwSave').disabled = false;
+    }
+  });
+}
+
 async function loadAdminPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
@@ -2702,6 +2991,7 @@ async function loadAdminPageData(page){
     if(page==='test'){ await ensureAdminRates(); await loadTestNumbers(); return renderTest(); }
     if(page==='payMgmt') return loadPayMgmt();
     if(page==='chat') return window.GXChat?GXChat.open('chat'):null;
+    if(page==='chatAccounts') return buildChatAccounts();
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
     if(page==='panelRequests') return buildPanelRequests();
     if(page==='managers') return buildUserPage('manager');

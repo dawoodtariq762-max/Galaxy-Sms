@@ -907,6 +907,35 @@ function createTables() {
   )`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_pst_hash ON password_setup_tokens(token_hash, used)`);
 
+  /* ============ P21: SEPARATE CHAT AUTHENTICATION & MOBILE PUSH TABLES ============ */
+  db.run(`CREATE TABLE IF NOT EXISTS chat_credentials (
+    user_id              INTEGER PRIMARY KEY,
+    chat_password_hash   TEXT NOT NULL,
+    chat_enabled         INTEGER DEFAULT 1,
+    must_change_password INTEGER DEFAULT 0,
+    failed_attempts      INTEGER DEFAULT 0,
+    locked_until         TEXT DEFAULT NULL,
+    last_login_at        TEXT DEFAULT NULL,
+    password_set_at      TEXT DEFAULT (datetime('now')),
+    created_at           TEXT DEFAULT (datetime('now')),
+    updated_at           TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_cred_status ON chat_credentials(user_id, chat_enabled)`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS chat_device_tokens (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    token       TEXT NOT NULL,
+    platform    TEXT DEFAULT 'android',
+    app_version TEXT DEFAULT '',
+    updated_at  TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, token),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_device_user ON chat_device_tokens(user_id)`);
+
+  ensureColumn('password_setup_tokens', 'token_purpose', "TEXT DEFAULT 'panel_password'");
 }
 
 module.exports = { createTables };

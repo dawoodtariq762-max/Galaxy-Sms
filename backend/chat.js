@@ -1,7 +1,6 @@
 /**
- * backend/chat.js — P19e INTERNAL CHAT + COMPLAINTS (isolated module).
- * Mount: require('./chat')(app, { authRequired, requireRole, logAction })  (server.js me ek line)
- * Disable/revert: woh mount line hata do — baaki system par zero asar.
+ * backend/chat.js — P19e + P21: INTERNAL CHAT + SEPARATE CHAT AUTHENTICATION + MOBILE APP API.
+ * Mount: require('./chat')(app, { authRequired, chatAuthRequired, requireRole, logAction, signChat, SECRET })
  *
  * PERMISSION MATRIX (backend-enforced, users.parent_id se — koi doosra hierarchy nahi):
  *   client : apna agent (parent)                          | complaint -> admin
@@ -9,13 +8,19 @@
  *   manager: apne agents (children) + admin
  *   admin  : koi bhi active panel user; HAR conversation open/read/reply kar sakta hai
  *
+ * SEPARATE CHAT AUTHENTICATION (P21):
+ *   Non-admin users (manager, agent, client) have a dedicated chat password in chat_credentials.
+ *   Panel password changes do NOT affect chat password; chat password changes do NOT affect panel password.
+ *   Admin account uses the unified admin account password (verified with Admin Security Code).
+ *   JWT claims: { id, username, role, type: 'chat' } (30 days validity for mobile chat sessions).
+ *
  * REAL-TIME: SSE (GET /api/chat/stream?ticket=...) — same Node process, zero naya dependency.
  *   JWT URL me na jaye is liye one-time 60s ticket (POST /api/chat/ticket) use hota hai.
- *   jsdom/old browsers ke liye client polling fallback rakhta hai (chat.js).
- *   Heartbeat 25s (no DB). Broadcast sirf chat POST se — SMS/numbers paths untouched.
+ *   Heartbeat 25s (named 'hb'). Broadcast to participants + connected admins.
  */
 'use strict';
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const db = require('./db');
 
 const MSG_MAX = 2000, SUBJECT_MAX = 200, COMPLAINT_MAX = 4000;
@@ -24,14 +29,19 @@ const CONV_LIST_LIMIT = 60;
 const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', agent: 'Agent', client: 'Client' };
 
 /* ---------- tiny helpers ---------- */
-function displayUser(u) { return { id: u.id, username: u.username, name: (u.name && String(u.name).trim()) || u.username, role: u.role, role_label: ROLE_LABEL[u.role] || u.role }; }
+function displayUser(u) {
+  return {
+    id: u.id,
+    username: u.username,
+    name: (u.name && String(u.name).trim()) || u.username,
+    role: u.role,
+    role_label: ROLE_LABEL[u.role] || u.role
+  };
+}
 function getUser(id) { return db.get('SELECT * FROM users WHERE id=?', [id]); }
-/* P19e FIX: JWT payload me sirf {id,username,role} hota hai — parent_id DB row se aata hai.
-   (Bug: req.user.parent_id undefined tha => client->agent / agent->manager conv 403 ho rahi thi.) */
 function meUser(req) { return getUser(req.user.id) || req.user; }
 function intId(v) { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; }
 function cleanText(v, max) { const s = String(v == null ? '' : v).trim(); if (!s) return null; if (s.length > max) return null; return s; }
-/* XSS-safe render ke liye body ko kabhi raw HTML me insert nahi karte (client textContent use karta hai) */
 
 /* ---------- per-user send rate limit (60 msg/min, sliding) ---------- */
 const _sendBuckets = new Map();
@@ -46,18 +56,34 @@ function sendRateOk(userId) {
   return true;
 }
 
+/* ---------- chat login rate limit (25 attempts / 5 min per IP) ---------- */
+const _chatLoginBuckets = new Map();
+function chatLoginLimit(req, res, next) {
+  const now = Date.now();
+  const key = `cl:${req.ip || 'unknown'}`;
+  let b = _chatLoginBuckets.get(key);
+  if (!b || now > b.resetAt) { b = { count: 0, resetAt: now + 300000 }; _chatLoginBuckets.set(key, b); }
+  b.count++;
+  if (_chatLoginBuckets.size > 10000) for (const [k, v] of _chatLoginBuckets) if (now > v.resetAt) _chatLoginBuckets.delete(k);
+  if (b.count > 25) {
+    return res.status(429).json({ error: 'Too many chat login attempts. Please slow down.' });
+  }
+  next();
+}
+
 /* ---------- permission core (server-side ONLY source of truth) ---------- */
 function canStartChat(user, target) {
   if (!user || !target || user.id === target.id) return false;
   if (!target.active) return false;
   switch (user.role) {
-    case 'admin': return true;                                        // admin <-> koi bhi active user
+    case 'admin': return true; // admin <-> koi bhi active user
     case 'manager': return (target.role === 'agent' && target.parent_id === user.id) || target.role === 'admin';
     case 'agent':   return (target.role === 'client' && target.parent_id === user.id) || (target.role === 'manager' && target.id === user.parent_id);
     case 'client':  return target.role === 'agent' && target.id === user.parent_id;
     default: return false;
   }
 }
+
 /* conversation read/reply access: participant ya admin (admin-only global visibility) */
 function convAccess(user, conv) {
   if (!conv) return false;
@@ -79,6 +105,7 @@ function mapConv(r, meId) {
   const other = meId === r.a_id ? b : (meId === r.b_id ? a : null);
   return { id: r.id, user_a: a, user_b: b, other: other || undefined, created_at: r.created_at, last_message_at: r.last_message_at, last_message_text: r.last_message_text };
 }
+
 function unreadCounts(meId, convIds) {
   const out = {};
   if (!convIds.length) return out;
@@ -92,15 +119,13 @@ function unreadCounts(meId, convIds) {
 /* ---------- SSE: one-time tickets + connections ---------- */
 const sseTickets = new Map();   // ticket -> { userId, role, expires }
 const sseClients = new Map();   // userId -> Set<res>
-const HB_MS = 25000, MAX_SSE_TOTAL = 300, MAX_SSE_PER_USER = 5;
-/* P19g: heartbeat ab NAMED event bhi bhejta hai (event: hb). Purane clients isay ignore
- * kar dete hain (SSE spec — bina listener ke event drop), naya chat.js ise stream-liveness
- * detect karne ke liye use karta hai (zombie/buffered proxy stream pakarne ke liye).
- * Rollback: sseSend(res,'hb',...) wali line hata do, comment write wapas aa jayega. */
+const HB_MS = 25000, MAX_SSE_TOTAL = 1000, MAX_SSE_PER_USER = 10;
+
 const hbTimer = setInterval(() => {
   for (const set of sseClients.values()) for (const res of set) { try { sseSend(res, 'hb', { t: Date.now() }); } catch (e) {} }
 }, HB_MS);
 if (hbTimer.unref) hbTimer.unref();
+
 const ticketSweeper = setInterval(() => {
   const now = Date.now();
   for (const [t, v] of sseTickets) if (v.expires < now) sseTickets.delete(t);
@@ -108,6 +133,7 @@ const ticketSweeper = setInterval(() => {
 if (ticketSweeper.unref) ticketSweeper.unref();
 
 function sseSend(res, event, obj) { try { res.write(`event: ${event}\ndata: ${JSON.stringify(obj)}\n\n`); } catch (e) {} }
+
 /* participants + saare connected admins ko push (admin All-Chats live update) */
 function broadcast(conv, event, obj) {
   const targets = new Set([conv.user_a, conv.user_b]);
@@ -115,25 +141,293 @@ function broadcast(conv, event, obj) {
     for (const res of set)
       if (targets.has(res._gxUserId) || res._gxRole === 'admin') sseSend(res, event, obj);
 }
+
 function addClient(res, userId, role) {
   let set = sseClients.get(userId);
   if (!set) { set = new Set(); sseClients.set(userId, set); }
   set.add(res);
 }
+
 function dropClient(res, userId) {
   const set = sseClients.get(userId);
   if (set) { set.delete(res); if (!set.size) sseClients.delete(userId); }
 }
 
+function dropUserConnections(userId) {
+  const set = sseClients.get(userId);
+  if (set) {
+    for (const res of set) {
+      try {
+        sseSend(res, 'revoked', { reason: 'Chat access disabled by admin' });
+        res.end();
+      } catch (e) {}
+    }
+    sseClients.delete(userId);
+  }
+}
+
+/* Push notification dispatch hook (FCM / Web Push) */
+function dispatchPushNotification(conv, senderId, msg) {
+  try {
+    const targetId = conv.user_a === senderId ? conv.user_b : conv.user_a;
+    const activeStream = sseClients.get(targetId);
+    // If recipient is offline or has no active SSE connections, notify via registered device tokens
+    if (!activeStream || activeStream.size === 0) {
+      const tokens = db.all('SELECT token, platform FROM chat_device_tokens WHERE user_id=?', [targetId]);
+      if (tokens && tokens.length > 0) {
+        // Log push dispatch ready for FCM
+        if (process.env.DEBUG_PUSH) {
+          console.log(`[PUSH] Dispatching to user ${targetId} (${tokens.length} devices): "${msg.sender_name}: ${msg.body.slice(0, 40)}"`);
+        }
+      }
+    }
+  } catch (e) {}
+}
+
 /* ================================================================ */
 module.exports = function mountChat(app, deps) {
   const { authRequired, requireRole, logAction } = deps;
+  const chatAuth = deps.chatAuthRequired || authRequired;
+  const signChat = deps.signChat || (u => require('./auth').signChat(u));
+  const SECRET = deps.SECRET || process.env.JWT_SECRET || 'ms-sms-dev-secret-change-in-production';
+
+  /* ================================================================
+   * CHAT AUTHENTICATION (SEPARATE CREDENTIALS)
+   * ================================================================ */
+
+  /* ---------- POST /api/chat/auth/login ---------- */
+  app.post('/api/chat/auth/login', chatLoginLimit, (req, res) => {
+    const username = String((req.body && req.body.username) || '').trim();
+    const password = String((req.body && req.body.password) || '');
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
+    const user = db.get('SELECT * FROM users WHERE username=? COLLATE NOCASE', [username]);
+    if (!user) return res.status(401).json({ error: 'Invalid username or password' });
+    if (!user.active) return res.status(403).json({ error: 'Account disabled' });
+
+    // Admin uses master account password from users table
+    if (user.role === 'admin') {
+      if (!bcrypt.compareSync(password, user.password)) {
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
+      logAction({ user, ip: req.ip }, 'chat_login', 'chat', { username: user.username, role: 'admin' });
+      return res.json({
+        ok: true,
+        token: signChat(user),
+        user: { id: user.id, username: user.username, role: user.role, name: user.name || user.username }
+      });
+    }
+
+    // Non-admin roles (manager, agent, client) use dedicated chat_credentials
+    const cred = db.get('SELECT * FROM chat_credentials WHERE user_id=?', [user.id]);
+    if (!cred) {
+      return res.status(403).json({ error: 'Chat access is not enabled for this account. Contact Admin.' });
+    }
+    if (!cred.chat_enabled) {
+      return res.status(403).json({ error: 'Chat access has been disabled for this account. Contact Admin.' });
+    }
+    if (cred.locked_until && new Date(cred.locked_until).getTime() > Date.now()) {
+      return res.status(429).json({ error: 'Account temporarily locked due to multiple failed login attempts. Please try again later.' });
+    }
+
+    const match = bcrypt.compareSync(password, cred.chat_password_hash);
+    if (!match) {
+      const attempts = (cred.failed_attempts || 0) + 1;
+      const lockUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60000).toISOString().slice(0, 19).replace('T', ' ') : null;
+      db.run('UPDATE chat_credentials SET failed_attempts=?, locked_until=? WHERE user_id=?', [attempts, lockUntil, user.id]);
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Success: reset lockout counters and record login timestamp
+    db.run(`UPDATE chat_credentials SET failed_attempts=0, locked_until=NULL, last_login_at=datetime('now'), updated_at=datetime('now') WHERE user_id=?`, [user.id]);
+    logAction({ user, ip: req.ip }, 'chat_login', 'chat', { username: user.username, role: user.role });
+    return res.json({
+      ok: true,
+      token: signChat(user),
+      user: { id: user.id, username: user.username, role: user.role, name: user.name || user.username }
+    });
+  });
+
+  /* ---------- POST /api/chat/auth/change-password ---------- */
+  app.post('/api/chat/auth/change-password', chatAuth, (req, res) => {
+    const currentPassword = String((req.body && req.body.current_password) || '');
+    const newPassword = String((req.body && req.body.new_password) || '');
+    const confirmPassword = String((req.body && req.body.confirm_password) || '');
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password required' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    if (newPassword !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match' });
+
+    if (req.user.role === 'admin') {
+      const adminCode = String((req.body && req.body.admin_security_code) || '');
+      const secRow = db.get('SELECT admin_security_code FROM system_security ORDER BY id ASC LIMIT 1');
+      const expectedCode = (secRow && secRow.admin_security_code) || 'Dawood';
+      if (adminCode !== expectedCode) return res.status(400).json({ error: 'Invalid admin security code' });
+
+      const adminUser = db.get('SELECT password FROM users WHERE id=?', [req.user.id]);
+      if (!adminUser || !bcrypt.compareSync(currentPassword, adminUser.password)) {
+        return res.status(400).json({ error: 'Current password is incorrect' });
+      }
+      db.run(`UPDATE users SET password=?, updated_at=datetime('now') WHERE id=?`, [bcrypt.hashSync(newPassword, 10), req.user.id]);
+      logAction(req, 'admin_chat_password_changed', 'chat', { user_id: req.user.id });
+      return res.json({ ok: true, message: 'Admin password updated successfully' });
+    }
+
+    const cred = db.get('SELECT * FROM chat_credentials WHERE user_id=?', [req.user.id]);
+    if (!cred || !cred.chat_password_hash) {
+      return res.status(400).json({ error: 'Chat credential not found. Contact Admin.' });
+    }
+    if (!bcrypt.compareSync(currentPassword, cred.chat_password_hash)) {
+      return res.status(400).json({ error: 'Current chat password is incorrect' });
+    }
+
+    const newHash = bcrypt.hashSync(newPassword, 10);
+    db.run(`UPDATE chat_credentials SET chat_password_hash=?, failed_attempts=0, locked_until=NULL, password_set_at=datetime('now'), updated_at=datetime('now') WHERE user_id=?`, [newHash, req.user.id]);
+    logAction(req, 'user_chat_password_changed', 'chat', { user_id: req.user.id });
+    res.json({ ok: true, message: 'Chat password updated successfully' });
+  });
+
+  /* ================================================================
+   * ADMIN "CHAT ACCOUNTS" MANAGEMENT
+   * ================================================================ */
+
+  /* ---------- GET /api/chat/admin/accounts ---------- */
+  app.get('/api/chat/admin/accounts', chatAuth, requireRole('admin'), (req, res) => {
+    const rows = db.all(`
+      SELECT u.id, u.username, u.name, u.role, u.active AS user_active, u.email, u.contact, u.parent_id,
+             p.username AS parent_username,
+             c.chat_enabled, c.failed_attempts, c.locked_until, c.last_login_at, c.password_set_at,
+             CASE WHEN c.chat_password_hash IS NOT NULL AND c.chat_password_hash != '' THEN 1 ELSE 0 END AS has_chat_password
+      FROM users u
+      LEFT JOIN users p ON p.id = u.parent_id
+      LEFT JOIN chat_credentials c ON c.user_id = u.id
+      ORDER BY CASE u.role WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 WHEN 'agent' THEN 3 ELSE 4 END, u.username COLLATE NOCASE
+    `);
+    res.json({ accounts: rows });
+  });
+
+  /* ---------- POST /api/chat/admin/accounts/:userId/password ---------- */
+  app.post('/api/chat/admin/accounts/:userId/password', chatAuth, requireRole('admin'), (req, res) => {
+    const targetId = intId(req.params.userId);
+    if (!targetId) return res.status(400).json({ error: 'Invalid user ID' });
+    const target = getUser(targetId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.role === 'admin') return res.status(400).json({ error: 'Admin chat password follows admin panel password' });
+
+    const password = String((req.body && req.body.password) || '');
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    const hash = bcrypt.hashSync(password, 10);
+    const existing = db.get('SELECT user_id FROM chat_credentials WHERE user_id=?', [targetId]);
+    if (existing) {
+      db.run(`UPDATE chat_credentials SET chat_password_hash=?, chat_enabled=1, failed_attempts=0, locked_until=NULL, password_set_at=datetime('now'), updated_at=datetime('now') WHERE user_id=?`, [hash, targetId]);
+    } else {
+      db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`, [targetId, hash]);
+    }
+    logAction(req, 'admin_set_chat_password', 'chat', { target_id: targetId, username: target.username });
+    res.json({ ok: true, user_id: targetId, message: `Chat password updated for ${target.username}` });
+  });
+
+  /* ---------- POST /api/chat/admin/accounts/:userId/toggle ---------- */
+  app.post('/api/chat/admin/accounts/:userId/toggle', chatAuth, requireRole('admin'), (req, res) => {
+    const targetId = intId(req.params.userId);
+    if (!targetId) return res.status(400).json({ error: 'Invalid user ID' });
+    const target = getUser(targetId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.role === 'admin') return res.status(400).json({ error: 'Cannot disable admin chat access' });
+
+    const existing = db.get('SELECT * FROM chat_credentials WHERE user_id=?', [targetId]);
+    const currentStatus = existing ? existing.chat_enabled : 1;
+    const newStatus = (req.body && typeof req.body.chat_enabled !== 'undefined') ? (req.body.chat_enabled ? 1 : 0) : (currentStatus ? 0 : 1);
+
+    if (existing) {
+      db.run(`UPDATE chat_credentials SET chat_enabled=?, updated_at=datetime('now') WHERE user_id=?`, [newStatus, targetId]);
+    } else {
+      const dummyHash = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
+      db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled) VALUES (?,?,?)`, [targetId, dummyHash, newStatus]);
+    }
+
+    if (newStatus === 0) {
+      dropUserConnections(targetId);
+    }
+
+    logAction(req, 'admin_toggle_chat_enabled', 'chat', { target_id: targetId, username: target.username, chat_enabled: newStatus });
+    res.json({ ok: true, user_id: targetId, chat_enabled: newStatus });
+  });
+
+  /* ---------- POST /api/chat/admin/accounts/:userId/send-setup ---------- */
+  app.post('/api/chat/admin/accounts/:userId/send-setup', chatAuth, requireRole('admin'), (req, res) => {
+    const targetId = intId(req.params.userId);
+    if (!targetId) return res.status(400).json({ error: 'Invalid user ID' });
+    const target = getUser(targetId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (!target.email) return res.status(400).json({ error: 'User does not have an email address configured' });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHmac('sha256', SECRET).update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+    db.run(`INSERT INTO password_setup_tokens (user_id, token_hash, expires_at, token_purpose) VALUES (?,?,?,?)`,
+      [targetId, tokenHash, expiresAt, 'chat_password']);
+
+    const host = req.get('host') || '127.0.0.1';
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+    const setupUrl = `${proto}://${host}/set-password?token=${token}&type=chat`;
+
+    logAction(req, 'admin_send_chat_setup_token', 'chat', { target_id: targetId, email: target.email });
+    res.json({ ok: true, setup_url: setupUrl, email: target.email, message: `Setup link generated for ${target.username}` });
+  });
+
+  /* ---------- POST /api/chat/admin/accounts/init-all ---------- */
+  app.post('/api/chat/admin/accounts/init-all', chatAuth, requireRole('admin'), (req, res) => {
+    const uninit = db.all(`SELECT id, username FROM users WHERE role != 'admin' AND id NOT IN (SELECT user_id FROM chat_credentials)`);
+    let count = 0;
+    for (const u of uninit) {
+      const tempHash = bcrypt.hashSync(crypto.randomBytes(18).toString('base64url'), 10);
+      db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`, [u.id, tempHash]);
+      count++;
+    }
+    logAction(req, 'admin_init_all_chat_credentials', 'chat', { count });
+    res.json({ ok: true, initialized: count });
+  });
+
+  /* ================================================================
+   * MOBILE DEVICE PUSH TOKENS
+   * ================================================================ */
+
+  app.post('/api/chat/device-token', chatAuth, (req, res) => {
+    const token = String((req.body && req.body.token) || '').trim();
+    const platform = String((req.body && req.body.platform) || 'android').trim();
+    const appVersion = String((req.body && req.body.app_version) || '').trim();
+    if (!token) return res.status(400).json({ error: 'Device token required' });
+
+    db.run(`
+      INSERT INTO chat_device_tokens (user_id, token, platform, app_version, updated_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(user_id, token) DO UPDATE SET updated_at=datetime('now'), app_version=excluded.app_version
+    `, [req.user.id, token, platform, appVersion]);
+
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/chat/device-token', chatAuth, (req, res) => {
+    const token = String((req.body && req.body.token) || '').trim();
+    if (!token) {
+      db.run('DELETE FROM chat_device_tokens WHERE user_id=?', [req.user.id]);
+    } else {
+      db.run('DELETE FROM chat_device_tokens WHERE user_id=? AND token=?', [req.user.id, token]);
+    }
+    res.json({ ok: true });
+  });
+
+  /* ================================================================
+   * CHAT CONTACTS & CONVERSATIONS
+   * ================================================================ */
 
   /* ---------- contacts: jisse chat START karne ki permission hai ---------- */
-  app.get('/api/chat/contacts', authRequired, (req, res) => {
+  app.get('/api/chat/contacts', chatAuth, (req, res) => {
     const q = String(req.query.q || '').trim().toLowerCase();
     const like = `%${q}%`;
-    const me = meUser(req); /* DB row — parent_id sahi */
+    const me = meUser(req);
     let rows = [];
     if (req.user.role === 'admin') {
       rows = db.all(`SELECT * FROM users WHERE active=1 AND id<>? AND (username LIKE ? OR name LIKE ?) ORDER BY username LIMIT 50`, [req.user.id, like, like]);
@@ -149,21 +443,38 @@ module.exports = function mountChat(app, deps) {
     res.json(rows.map(displayUser));
   });
 
-  /* ---------- conversation list (mine | admin all) ---------- */
-  app.get('/api/chat/conversations', authRequired, (req, res) => {
+  /* ---------- conversation list (mine | admin all with filters) ---------- */
+  app.get('/api/chat/conversations', chatAuth, (req, res) => {
     const scope = String(req.query.scope || 'mine');
+    const filter = String(req.query.filter || 'all').toLowerCase();
     const q = String(req.query.q || '').trim().toLowerCase();
     const like = `%${q}%`;
+
     if (scope === 'all') {
       if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden — All Chats is admin-only' });
-      const rows = db.all(`${CONV_SELECT}
-        ${q ? `WHERE (ua.username LIKE ? OR ua.name LIKE ? OR ub.username LIKE ? OR ub.name LIKE ?)` : ''}
-        ORDER BY COALESCE(c.last_message_at, c.created_at) DESC LIMIT ${CONV_LIST_LIMIT}`,
-        q ? [like, like, like, like] : []);
+
+      let whereClauses = [];
+      let params = [];
+
+      if (filter === 'managers') {
+        whereClauses.push(`(ua.role='manager' OR ub.role='manager')`);
+      } else if (filter === 'agents') {
+        whereClauses.push(`(ua.role='agent' OR ub.role='agent')`);
+      } else if (filter === 'clients') {
+        whereClauses.push(`(ua.role='client' OR ub.role='client')`);
+      }
+
+      if (q) {
+        whereClauses.push(`(ua.username LIKE ? OR ua.name LIKE ? OR ub.username LIKE ? OR ub.name LIKE ?)`);
+        params.push(like, like, like, like);
+      }
+
+      const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const rows = db.all(`${CONV_SELECT} ${whereSql}
+        ORDER BY COALESCE(c.last_message_at, c.created_at) DESC LIMIT ${CONV_LIST_LIMIT}`, params);
       return res.json(rows.map(r => ({ ...mapConv(r, req.user.id), unread: 0 })));
     }
-    /* P19e FIX: participants ki identity JOIN se aati hai (pehle plain UNION rows thi —
-       mapConv ko "a_" aur "b_" prefixed fields chahiye, warna naam undefined dikhta). Do indexed scans + JOIN. */
+
     const rows = db.all(`SELECT t.id, t.created_at, t.last_message_at, t.last_message_text,
         t.user_a, t.user_b,
         ua.id AS a_id, ua.username AS a_username, ua.name AS a_name, ua.role AS a_role,
@@ -180,15 +491,13 @@ module.exports = function mountChat(app, deps) {
       ORDER BY COALESCE(t.last_message_at, t.created_at) DESC LIMIT ${CONV_LIST_LIMIT}`, [req.user.id, req.user.id]);
     const convIds = rows.map(r => r.id);
     const unread = unreadCounts(req.user.id, convIds);
-    const byId = new Map(rows.map(r => [r.id, r]));
     let out = rows.map(r => ({ ...mapConv(r, req.user.id), unread: unread[r.id] || 0 }));
     if (q) out = out.filter(c => (c.other && (c.other.name.toLowerCase().includes(q) || c.other.username.toLowerCase().includes(q))) || (c.last_message_text || '').toLowerCase().includes(q));
-    void byId;
     res.json(out);
   });
 
-  /* ---------- start (ya existing) conversation — permission matrix se ---------- */
-  app.post('/api/chat/conversations', authRequired, (req, res) => {
+  /* ---------- start (ya existing) conversation ---------- */
+  app.post('/api/chat/conversations', chatAuth, (req, res) => {
     const targetId = intId(req.body && req.body.user_id);
     if (!targetId) return res.status(400).json({ error: 'user_id required' });
     const target = getUser(targetId);
@@ -204,8 +513,8 @@ module.exports = function mountChat(app, deps) {
     res.json({ ok: true, conversation_id: conv.id });
   });
 
-  /* ---------- messages: paginated history (recent window + older on demand) ---------- */
-  app.get('/api/chat/messages/:id', authRequired, (req, res) => {
+  /* ---------- messages: paginated history ---------- */
+  app.get('/api/chat/messages/:id', chatAuth, (req, res) => {
     const conv = getConv(intId(req.params.id));
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     if (!convAccess(req.user, conv)) return res.status(403).json({ error: 'Forbidden — not your conversation' });
@@ -225,10 +534,21 @@ module.exports = function mountChat(app, deps) {
     res.json({ messages: page.map(mapMsg), has_older: hasOlder });
   });
 
-  function mapMsg(m) { return { id: m.id, conversation_id: m.conversation_id, sender_id: m.sender_id, sender_name: (m.name && String(m.name).trim()) || m.username, sender_role: ROLE_LABEL[m.role] || m.role, body: m.body, created_at: m.created_at, read_at: m.read_at || null }; }
+  function mapMsg(m) {
+    return {
+      id: m.id,
+      conversation_id: m.conversation_id,
+      sender_id: m.sender_id,
+      sender_name: (m.name && String(m.name).trim()) || m.username,
+      sender_role: ROLE_LABEL[m.role] || m.role,
+      body: m.body,
+      created_at: m.created_at,
+      read_at: m.read_at || null
+    };
+  }
 
   /* ---------- send message ---------- */
-  app.post('/api/chat/messages/:id', authRequired, (req, res) => {
+  app.post('/api/chat/messages/:id', chatAuth, (req, res) => {
     const conv = getConv(intId(req.params.id));
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     if (!convAccess(req.user, conv)) return res.status(403).json({ error: 'Forbidden — not your conversation' });
@@ -239,13 +559,23 @@ module.exports = function mountChat(app, deps) {
     const preview = body.length > 80 ? body.slice(0, 80) + '…' : body;
     db.run(`UPDATE chat_conversations SET last_message_at=datetime('now'), last_message_text=? WHERE id=?`, [preview, conv.id]);
     const sender = getUser(req.user.id) || req.user;
-    const msg = { id: Number(info.lastInsertRowid), conversation_id: conv.id, sender_id: req.user.id, sender_name: (sender.name && String(sender.name).trim()) || sender.username, sender_role: ROLE_LABEL[req.user.role] || req.user.role, body, created_at: new Date().toISOString().slice(0, 19).replace('T', ' '), read_at: null };
+    const msg = {
+      id: Number(info.lastInsertRowid),
+      conversation_id: conv.id,
+      sender_id: req.user.id,
+      sender_name: (sender.name && String(sender.name).trim()) || sender.username,
+      sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+      body,
+      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      read_at: null
+    };
     broadcast(conv, 'msg', { c: conv.id, m: msg });
+    dispatchPushNotification(conv, req.user.id, msg);
     res.json({ ok: true, message: msg });
   });
 
   /* ---------- mark read ---------- */
-  app.post('/api/chat/messages/:id/read', authRequired, (req, res) => {
+  app.post('/api/chat/messages/:id/read', chatAuth, (req, res) => {
     const conv = getConv(intId(req.params.id));
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     if (!convAccess(req.user, conv)) return res.status(403).json({ error: 'Forbidden — not your conversation' });
@@ -255,7 +585,7 @@ module.exports = function mountChat(app, deps) {
   });
 
   /* ---------- unread badge (chat) + open complaints badge ---------- */
-  app.get('/api/chat/unread-count', authRequired, (req, res) => {
+  app.get('/api/chat/unread-count', chatAuth, (req, res) => {
     const chat = db.get(`SELECT COUNT(*) c FROM chat_messages m JOIN chat_conversations c2 ON c2.id=m.conversation_id
       WHERE (c2.user_a=? OR c2.user_b=?) AND m.sender_id<>? AND m.read_at IS NULL`, [req.user.id, req.user.id, req.user.id]).c;
     let complaints = 0;
@@ -265,11 +595,12 @@ module.exports = function mountChat(app, deps) {
   });
 
   /* ---------- SSE: one-time ticket + stream ---------- */
-  app.post('/api/chat/ticket', authRequired, (req, res) => {
+  app.post('/api/chat/ticket', chatAuth, (req, res) => {
     const t = crypto.randomBytes(24).toString('hex');
     sseTickets.set(t, { userId: req.user.id, role: req.user.role, expires: Date.now() + 60000 });
     res.json({ ticket: t });
   });
+
   app.get('/api/chat/stream', (req, res) => {
     const t = String(req.query.ticket || '');
     const v = sseTickets.get(t);
@@ -286,11 +617,11 @@ module.exports = function mountChat(app, deps) {
   });
 
   /* ================================================================
-   * COMPLAINTS (separate system — normal chat se alag)
+   * COMPLAINTS
    * ================================================================ */
   const COMPLAINT_SELECT = `SELECT cm.*, u.username, u.name, u.role FROM complaints cm JOIN users u ON u.id=cm.sender_id`;
 
-  app.post('/api/complaints', authRequired, (req, res) => {
+  app.post('/api/complaints', chatAuth, (req, res) => {
     if (req.user.role === 'admin') return res.status(403).json({ error: 'Complaints are submitted to Admin' });
     const subject = cleanText(req.body && req.body.subject, SUBJECT_MAX);
     const body = cleanText(req.body && req.body.body, COMPLAINT_MAX);
@@ -300,7 +631,7 @@ module.exports = function mountChat(app, deps) {
     res.json({ ok: true, id: Number(info.lastInsertRowid) });
   });
 
-  app.get('/api/complaints', authRequired, (req, res) => {
+  app.get('/api/complaints', chatAuth, (req, res) => {
     const status = String(req.query.status || '').trim();
     const q = String(req.query.q || '').trim().toLowerCase();
     const like = `%${q}%`;
@@ -318,25 +649,48 @@ module.exports = function mountChat(app, deps) {
   });
 
   function mapComplaint(r) {
-    return { id: r.id, subject: r.subject, body: r.body, status: r.status, created_at: r.created_at, updated_at: r.updated_at,
-      status_updated_at: r.status_updated_at || null, status_updated_by: r.status_updated_by || '',
-      sender: { id: r.sender_id, username: r.username, name: (r.name && String(r.name).trim()) || r.username, role: r.role, role_label: ROLE_LABEL[r.role] || r.role } };
+    return {
+      id: r.id,
+      subject: r.subject,
+      body: r.body,
+      status: r.status,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      status_updated_at: r.status_updated_at || null,
+      status_updated_by: r.status_updated_by || '',
+      sender: {
+        id: r.sender_id,
+        username: r.username,
+        name: (r.name && String(r.name).trim()) || r.username,
+        role: r.role,
+        role_label: ROLE_LABEL[r.role] || r.role
+      }
+    };
   }
 
   function complaintAccess(user, cm) { return user.role === 'admin' || cm.sender_id === user.id; }
 
-  app.get('/api/complaints/:id', authRequired, (req, res) => {
+  app.get('/api/complaints/:id', chatAuth, (req, res) => {
     const cm = db.get('SELECT * FROM complaints WHERE id=?', [intId(req.params.id)]);
     if (!cm) return res.status(404).json({ error: 'Complaint not found' });
     if (!complaintAccess(req.user, cm)) return res.status(403).json({ error: 'Forbidden — not your complaint' });
     const replies = db.all(`SELECT cr.*, u.username, u.name, u.role FROM complaint_replies cr JOIN users u ON u.id=cr.sender_id
       WHERE cr.complaint_id=? ORDER BY cr.id ASC`, [cm.id]);
     const sender = getUser(cm.sender_id);
-    res.json({ ...mapComplaint({ ...cm, username: sender.username, name: sender.name, role: sender.role }),
-      replies: replies.map(r => ({ id: r.id, sender_id: r.sender_id, sender_name: (r.name && String(r.name).trim()) || r.username, sender_role: ROLE_LABEL[r.role] || r.role, body: r.body, created_at: r.created_at })) });
+    res.json({
+      ...mapComplaint({ ...cm, username: sender.username, name: sender.name, role: sender.role }),
+      replies: replies.map(r => ({
+        id: r.id,
+        sender_id: r.sender_id,
+        sender_name: (r.name && String(r.name).trim()) || r.username,
+        sender_role: ROLE_LABEL[r.role] || r.role,
+        body: r.body,
+        created_at: r.created_at
+      }))
+    });
   });
 
-  app.post('/api/complaints/:id/replies', authRequired, (req, res) => {
+  app.post('/api/complaints/:id/replies', chatAuth, (req, res) => {
     const cm = db.get('SELECT * FROM complaints WHERE id=?', [intId(req.params.id)]);
     if (!cm) return res.status(404).json({ error: 'Complaint not found' });
     if (!complaintAccess(req.user, cm)) return res.status(403).json({ error: 'Forbidden — not your complaint' });
@@ -347,7 +701,7 @@ module.exports = function mountChat(app, deps) {
     res.json({ ok: true, id: Number(info.lastInsertRowid) });
   });
 
-  app.post('/api/complaints/:id/status', authRequired, requireRole('admin'), (req, res) => {
+  app.post('/api/complaints/:id/status', chatAuth, requireRole('admin'), (req, res) => {
     const cm = db.get('SELECT * FROM complaints WHERE id=?', [intId(req.params.id)]);
     if (!cm) return res.status(404).json({ error: 'Complaint not found' });
     const status = String((req.body && req.body.status) || '').trim();

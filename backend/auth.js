@@ -14,6 +14,14 @@ function sign(user) {
   );
 }
 
+function signChat(user) {
+  return jwt.sign(
+    { id: user.id, username: user.username, role: user.role, type: 'chat' },
+    SECRET,
+    { expiresIn: '30d' }
+  );
+}
+
 // PHASE-1: per-user API rate limit (env API_RATE_PER_MIN, default 1200/min = 20 req/s/user)
 const _userBuckets = new Map();
 function perUserRateLimit(req, res) {
@@ -31,8 +39,25 @@ function perUserRateLimit(req, res) {
   return false;
 }
 
-// middleware: require valid token
+// middleware: require valid panel token (rejects chat-only tokens)
 function authRequired(req, res, next) {
+  const h = req.headers.authorization || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    req.user = jwt.verify(token, SECRET);
+    if (req.user && req.user.type === 'chat') {
+      return res.status(403).json({ error: 'Chat tokens cannot be used for panel access' });
+    }
+    if (perUserRateLimit(req, res)) return;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+// middleware: require valid token for chat (accepts either chat token or panel token)
+function chatAuthRequired(req, res, next) {
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token' });
@@ -71,4 +96,4 @@ function descendantIds(userId) {
   return ids;
 }
 
-module.exports = { sign, authRequired, requireRole, descendantIds, SECRET };
+module.exports = { sign, signChat, authRequired, chatAuthRequired, requireRole, descendantIds, SECRET };
