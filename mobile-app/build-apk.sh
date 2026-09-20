@@ -10,6 +10,21 @@ mkdir -p bin/classes bin/dex
 ANDROID_JAR="${ANDROID_JAR:-/opt/android-tools/android.jar}"
 R8_JAR="${R8_JAR:-/opt/android-tools/r8.jar}"
 
+if [ ! -f "$ANDROID_JAR" ] || [ ! -f "$R8_JAR" ]; then
+  echo "• Installing Android SDK platform jar and R8..."
+  sudo mkdir -p /opt/android-tools 2>/dev/null || mkdir -p /opt/android-tools
+  if [ ! -f "$ANDROID_JAR" ]; then
+    echo "  Downloading android-33 jar..."
+    curl -L -s -o "$ANDROID_JAR" https://github.com/Sable/android-platforms/raw/master/android-33/android.jar || \
+    sudo curl -L -s -o "$ANDROID_JAR" https://github.com/Sable/android-platforms/raw/master/android-33/android.jar
+  fi
+  if [ ! -f "$R8_JAR" ]; then
+    echo "  Downloading R8 jar..."
+    curl -L -s -o "$R8_JAR" https://maven.google.com/com/android/tools/r8/8.2.33/r8-8.2.33.jar || \
+    sudo curl -L -s -o "$R8_JAR" https://maven.google.com/com/android/tools/r8/8.2.33/r8-8.2.33.jar
+  fi
+fi
+
 if [ ! -f "$ANDROID_JAR" ]; then
   echo "Error: android.jar not found at $ANDROID_JAR"
   exit 1

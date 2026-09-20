@@ -1176,15 +1176,18 @@ app.post('/api/users', authRequired, (req, res) => {
   const created = insertUserAccount({ username, password, role, name, email, whatsapp, contact, skype, active, payment_type, parentId });
   if (!created.ok) return res.status(created.status || 400).json({ error: created.error });
 
-  // P21: Initialize separate chat credential for non-admin accounts
+  let assignedChatPw = null;
+  // P21: Initialize separate chat credential for non-admin accounts (unique 6-digit numeric password)
   if (role !== 'admin') {
-    const chatPw = req.body && req.body.chat_password ? String(req.body.chat_password) : crypto.randomBytes(18).toString('base64url');
+    assignedChatPw = (req.body && req.body.chat_password)
+      ? String(req.body.chat_password)
+      : String(crypto.randomInt(100000, 999999));
     db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`,
-      [created.id, bcrypt.hashSync(chatPw, 10)]);
+      [created.id, bcrypt.hashSync(assignedChatPw, 10)]);
   }
 
   logAction(req,'create_user','users',{username,role});
-  res.json({ ok: true });
+  res.json({ ok: true, id: created.id, chat_password: assignedChatPw });
 });
 
 // update user

@@ -33,8 +33,18 @@ done
 
 echo "== 4) Schema tables? =="
 grep -q "chat_conversations" backend/schema.js 2>/dev/null && ok "schema.js has chat tables" || bad "schema.js chat tables missing"
+grep -q "chat_message_deletions" backend/schema.js 2>/dev/null && ok "schema.js has Phase-2 deletions table" || bad "schema.js Phase-2 deletions table missing"
 
-echo "== 5) Range scoping (P19f) applied? =="
+echo "== 5) Phase-2 Endpoints & Deletions? =="
+grep -q "delete-for-me" backend/chat.js 2>/dev/null && ok "chat.js has delete-for-me endpoint" || bad "chat.js delete-for-me endpoint missing"
+grep -q "delete-for-everyone" backend/chat.js 2>/dev/null && ok "chat.js has delete-for-everyone endpoint" || bad "chat.js delete-for-everyone endpoint missing"
+grep -q "admin/search" backend/chat.js 2>/dev/null && ok "chat.js has admin global search endpoint" || bad "chat.js admin search missing"
+
+echo "== 6) Mobile APK & Assets? =="
+[ -f galaxy-chat-v1.apk ] && ok "galaxy-chat-v1.apk production build exists" || bad "galaxy-chat-v1.apk MISSING"
+[ -f mobile-app/assets/index.html ] && ok "mobile-app assets exist" || bad "mobile-app assets missing"
+
+echo "== 7) Range scoping (P19f) applied? =="
 grep -q "P19f FIX (owner: Range selectors role-scoped)" backend/server.js 2>/dev/null && ok "/api/ranges role-scoping present" || bad "/api/ranges scoping missing (purana server.js)"
 
 echo

@@ -1,5 +1,6 @@
 package com.galaxysms.chat;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -7,11 +8,13 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -19,12 +22,14 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends Activity {
 
     private WebView webView;
     private static final String CHANNEL_ID = "galaxy_chat_notifications";
     private static final String PREF_NAME = "galaxy_chat_prefs";
+    private static final AtomicInteger notifSeq = new AtomicInteger(1000);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,6 +37,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         createNotificationChannel();
+        requestRuntimePermissions();
 
         webView = findViewById(R.id.webView);
         WebSettings settings = webView.getSettings();
@@ -45,12 +51,13 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setSupportZoom(false);
         settings.setDisplayZoomControls(false);
+        settings.setMediaPlaybackRequiresUserGesture(false);
 
         // Security: Disable file access from file URLs
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
 
-        webView.setBackgroundColor(Color.parseColor("#0A0A0B"));
+        webView.setBackgroundColor(Color.parseColor("#070D1F"));
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -63,12 +70,41 @@ public class MainActivity extends Activity {
             }
         });
 
-        webView.setWebChromeClient(new WebChromeClient());
+        // Grant WebRTC microphone permissions to the WebView
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> {
+                    request.grant(request.getResources());
+                });
+            }
+        });
 
         // Expose Native Android Bridge to the WebView
         webView.addJavascriptInterface(new WebAppInterface(this), "GalaxyNative");
 
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    private void requestRuntimePermissions() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            boolean needNotif = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED;
+            boolean needMic = checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED;
+            if (needNotif || needMic) {
+                requestPermissions(new String[]{
+                    Manifest.permission.POST_NOTIFICATIONS,
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.MODIFY_AUDIO_SETTINGS
+                }, 101);
+            }
+        } else if (Build.VERSION.SDK_INT >= 23) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.MODIFY_AUDIO_SETTINGS
+                }, 102);
+            }
+        }
     }
 
     @Override
@@ -91,6 +127,7 @@ public class MainActivity extends Activity {
             channel.enableLights(true);
             channel.setLightColor(Color.parseColor("#30ABED"));
             channel.enableVibration(true);
+            channel.setVibrationPattern(new long[]{0, 180, 80, 180});
 
             NotificationManager notificationManager = getSystemService(NotificationManager.class);
             if (notificationManager != null) {
@@ -148,11 +185,13 @@ public class MainActivity extends Activity {
                 NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
                 if (nm == null) return;
 
+                int notifId = notifSeq.incrementAndGet();
+
                 Intent intent = new Intent(context, MainActivity.class);
                 intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 PendingIntent pendingIntent = PendingIntent.getActivity(
-                    context, 0, intent,
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
+                    context, notifId, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
                 );
 
                 android.app.Notification.Builder builder;
@@ -166,9 +205,11 @@ public class MainActivity extends Activity {
                        .setContentText(body)
                        .setSmallIcon(R.drawable.ic_launcher)
                        .setContentIntent(pendingIntent)
+                       .setPriority(android.app.Notification.PRIORITY_HIGH)
+                       .setDefaults(android.app.Notification.DEFAULT_ALL)
                        .setAutoCancel(true);
 
-                nm.notify((int) System.currentTimeMillis(), builder.build());
+                nm.notify(notifId, builder.build());
             } catch (Exception e) {}
         }
     }

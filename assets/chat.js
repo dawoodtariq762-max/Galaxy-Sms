@@ -91,6 +91,9 @@
 .gxc-older{align-self:center;margin:2px 0 8px}
 .gxc-inputbar{display:flex;gap:8px;align-items:flex-end;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--px-border,rgba(120,140,190,.25));position:sticky;bottom:0;background:var(--px-surface,#0D142C)}
 .gxc-emojibtn{width:38px;height:38px;min-width:38px;border-radius:10px;border:1px solid var(--px-border,rgba(120,140,190,.25));background:transparent;font-size:18px;cursor:pointer;color:var(--px-text,#E7EAF8)}
+.gxc-voicebtn{width:38px;height:38px;min-width:38px;border-radius:10px;border:1px solid var(--px-border,rgba(120,140,190,.25));background:transparent;font-size:18px;cursor:pointer;color:var(--px-text,#E7EAF8);display:flex;align-items:center;justify-content:center}
+.gxc-voicebtn.recording{background:#FF3B30;color:#fff;border-color:#FF3B30;animation:gxcPulse 1s infinite}
+@keyframes gxcPulse{0%,100%{opacity:1;}50%{opacity:0.5;}}
 .gxc-input{flex:1;min-width:0;resize:none;max-height:110px;min-height:40px;border-radius:12px;padding:9px 12px;font-size:13.5px;font-family:inherit;background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));color:var(--px-text,#E7EAF8)}
 .gxc-send{height:40px;min-width:40px;padding:0 16px;border-radius:12px;border:none;cursor:pointer;font-weight:700;font-size:13px;color:#fff;background:linear-gradient(96deg,var(--px-accent,#30ABED),#7F18B3)}
 .gxc-send:disabled{opacity:.5;cursor:not-allowed}
@@ -291,11 +294,72 @@
       <div class="gxc-msgs" id="gxcMsgs"></div>
       <div class="gxc-inputbar">
         <button class="gxc-emojibtn" id="gxcEmojibtn" type="button" title="Emoji">🙂</button>
+        <button class="gxc-voicebtn" id="gxcVoiceBtn" type="button" title="Record Voice">🎤</button>
         <textarea class="gxc-input" id="gxcInput" rows="1" maxlength="2000" placeholder="Type a message..."></textarea>
         <button class="gxc-send" id="gxcSend" type="button">Send</button>
       </div>`;
     $('gxcBack').addEventListener('click', () => { root.classList.remove('conv-open'); S.convId = null; updateFabVisibility(); renderConvList(); });
     $('gxcEmojibtn').addEventListener('click', (e) => { e.stopPropagation(); $('gxcEmojiPop').classList.toggle('show'); });
+
+    let mediaRecorder = null;
+    let voiceChunks = [];
+    let recStart = 0;
+    let recTimer = null;
+    const vbtn = $('gxcVoiceBtn');
+    if (vbtn) {
+      vbtn.addEventListener('click', async () => {
+        if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            voiceChunks = [];
+            mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) voiceChunks.push(e.data); };
+            mediaRecorder.onstop = async () => {
+              stream.getTracks().forEach(t => t.stop());
+              clearInterval(recTimer);
+              vbtn.classList.remove('recording');
+              vbtn.innerHTML = '🎤';
+              vbtn.title = 'Record Voice';
+              const duration = Math.max(1, Math.round((Date.now() - recStart) / 1000));
+              const blob = new Blob(voiceChunks, { type: 'audio/webm; codecs=opus' });
+              if (blob.size < 500) return;
+              try {
+                const token = localStorage.getItem('ms_token') || '';
+                const res = await fetch(`/api/chat/conversations/${S.convId}/voice?duration=${duration}`, {
+                  method: 'POST',
+                  headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'audio/webm' },
+                  body: blob
+                });
+                const data = await res.json();
+                if (data.ok && data.message) {
+                  appendMsg(data.message);
+                  loadConvs();
+                } else {
+                  alert('❌ Voice send failed: ' + (data.error || 'Unknown error'));
+                }
+              } catch (err) {
+                alert('❌ Voice send failed: ' + err.message);
+              }
+            };
+            mediaRecorder.start();
+            recStart = Date.now();
+            vbtn.classList.add('recording');
+            vbtn.innerHTML = '⏹';
+            recTimer = setInterval(() => {
+              const secs = Math.floor((Date.now() - recStart) / 1000);
+              const m = Math.floor(secs / 60);
+              const s = secs % 60;
+              vbtn.title = `Recording: ${m}:${s < 10 ? '0' : ''}${s} (Click to send)`;
+            }, 500);
+          } catch (e) {
+            alert('Microphone access denied or unavailable: ' + e.message);
+          }
+        } else {
+          mediaRecorder.stop();
+        }
+      });
+    }
+
     const inp = $('gxcInput');
     inp.addEventListener('input', () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 110) + 'px'; $('gxcSend').disabled = !inp.value.trim(); });
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCurrent(); } });
@@ -357,7 +421,64 @@
         ${canDeleteEveryone ? `<button type="button" class="gxc-act-btn danger btn-del-all" title="Delete for everyone">🚫 All</button>` : ''}
       </div>` : ''}`;
 
-    div.querySelector('.gxc-bubble').textContent = isDeleted ? 'This message was deleted' : m.body;
+    const bubble = div.querySelector('.gxc-bubble');
+    if (isDeleted) {
+      bubble.textContent = 'This message was deleted';
+    } else if (m.attachment_type === 'voice' && m.attachment_path) {
+      const token = localStorage.getItem('ms_token') || '';
+      const voiceUrl = `/api/chat/voice/${encodeURIComponent(m.attachment_path)}?token=${encodeURIComponent(token)}`;
+      bubble.innerHTML = `
+        <div class="gxc-voice-msg" style="display:flex;align-items:center;gap:10px;min-width:180px;padding:2px 0;">
+          <button type="button" class="gxc-v-play" style="width:34px;height:34px;border-radius:50%;background:#30ABED;border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;flex-shrink:0;">▶</button>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+            <div class="gxc-v-bar" style="height:5px;background:rgba(255,255,255,0.2);border-radius:3px;overflow:hidden;cursor:pointer;">
+              <div class="gxc-v-prog" style="width:0%;height:100%;background:#30ABED;transition:width 0.1s linear;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.65);">
+              <span class="gxc-v-time">0:00</span>
+              <span>${esc(m.body.replace(/^🎤\s*/, ''))}</span>
+            </div>
+          </div>
+          <audio preload="none" src="${voiceUrl}" style="display:none;"></audio>
+        </div>`;
+      const playBtn = bubble.querySelector('.gxc-v-play');
+      const audio = bubble.querySelector('audio');
+      const prog = bubble.querySelector('.gxc-v-prog');
+      const timeSpan = bubble.querySelector('.gxc-v-time');
+      const bar = bubble.querySelector('.gxc-v-bar');
+
+      playBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (audio.paused) {
+          document.querySelectorAll('audio').forEach(a => { if (a !== audio) { a.pause(); a.currentTime = 0; } });
+          document.querySelectorAll('.gxc-v-play').forEach(b => { if (b !== playBtn) b.textContent = '▶'; });
+          audio.play().then(() => { playBtn.textContent = '⏸'; }).catch(err => console.warn(err));
+        } else {
+          audio.pause();
+          playBtn.textContent = '▶';
+        }
+      });
+      audio.addEventListener('timeupdate', () => {
+        if (!audio.duration) return;
+        prog.style.width = ((audio.currentTime / audio.duration) * 100) + '%';
+        const mins = Math.floor(audio.currentTime / 60);
+        const secs = Math.floor(audio.currentTime % 60);
+        timeSpan.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      });
+      audio.addEventListener('ended', () => {
+        playBtn.textContent = '▶';
+        prog.style.width = '0%';
+        timeSpan.textContent = '0:00';
+      });
+      bar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!audio.duration) return;
+        const rect = bar.getBoundingClientRect();
+        audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
+      });
+    } else {
+      bubble.textContent = m.body;
+    }
 
     const delMeBtn = div.querySelector('.btn-del-me');
     if (delMeBtn) {

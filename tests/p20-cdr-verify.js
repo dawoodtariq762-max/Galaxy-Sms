@@ -127,7 +127,11 @@ async function bootPanel(page, tok, user) {
   const R2 = dbo.prepare("SELECT id FROM ranges WHERE name='PK-TWO'").get().id;
   await api('/api/numbers/import', 'POST', { range_id: R1, numbers: ['9231000000001', '9231000000002'] }, adm);
   await api('/api/numbers/import', 'POST', { range_id: R2, numbers: ['9232000000001'] }, adm);
-  await sleep(700);
+  for (let i = 0; i < 40; i++) {
+    const check = dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE number IN ('9231000000001','9231000000002','9232000000001')").get().c;
+    if (check >= 3) break;
+    await sleep(200);
+  }
   const N1 = dbo.prepare("SELECT id FROM numbers WHERE number='9231000000001'").get().id;
   const N2 = dbo.prepare("SELECT id FROM numbers WHERE number='9231000000002'").get().id;
   const N4 = dbo.prepare("SELECT id FROM numbers WHERE number='9232000000001'").get().id;

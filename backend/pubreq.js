@@ -138,7 +138,17 @@ function otpEmailHtml(code, minutes) {
     <p style="margin:0;color:#64748b;font-size:13px;">If you did NOT make this request, please ignore this email.</p>`,
     'Verification codes are for one-time use only.');
 }
-function welcomeEmailHtml(baseUrl, username, setupUrl, ttlHours) {
+function welcomeEmailHtml(baseUrl, username, setupUrl, ttlHours, chatPassword) {
+  const chatSection = chatPassword ? `
+    <div style="margin-top:20px;padding:16px;background:#0d152d;border-radius:12px;border:1px solid rgba(48,171,237,0.3);color:#f8fafc;">
+      <div style="font-weight:bold;font-size:15px;color:#30abed;margin-bottom:8px;">📱 Galaxy Chat Mobile App Access</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:13.5px;color:#e2e8f0;">
+        <tr><td style="padding:4px 0;color:#94a3b8;width:130px;">Chat Username</td><td style="padding:4px 0;"><b>${username}</b></td></tr>
+        <tr><td style="padding:4px 0;color:#94a3b8;">Chat Password</td><td style="padding:4px 0;"><code style="font-size:16px;letter-spacing:2px;font-weight:bold;color:#30abed;background:rgba(48,171,237,0.15);padding:2px 10px;border-radius:6px;">${chatPassword}</code></td></tr>
+      </table>
+      <div style="font-size:11.5px;color:#94a3b8;margin-top:10px;">* This dedicated 6-digit password is for your Galaxy Chat Android App and is completely separate from your web panel password.</div>
+    </div>` : '';
+
   return emailShell(`
     <div style="font-weight:bold;font-size:17px;margin-bottom:10px;">Welcome to Galaxy SMS! 🎉</div>
     <p style="margin:0 0 14px;">Your panel account is ready. Here are your details:</p>
@@ -146,10 +156,11 @@ function welcomeEmailHtml(baseUrl, username, setupUrl, ttlHours) {
       <tr><td style="padding:6px 0;color:#64748b;width:130px;">Panel URL</td><td style="padding:6px 0;"><b>${baseUrl}/panel-login</b></td></tr>
       <tr><td style="padding:6px 0;color:#64748b;">Username</td><td style="padding:6px 0;"><b>${username}</b></td></tr>
     </table>
-    <p style="margin:0 0 14px;">First step — set your password (one-time secure link):</p>
+    <p style="margin:0 0 14px;">First step — set your panel password (one-time secure link):</p>
     <div style="text-align:center;margin:20px 0;"><a href="${setupUrl}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:12px;padding:13px 30px;font-weight:bold;font-size:15px;">Set My Password</a></div>
     <p style="margin:0 0 6px;font-size:13px;color:#64748b;">This link is valid for <b>${ttlHours} hours</b> and can be used only once.</p>
-    <p style="margin:0;font-size:13px;color:#64748b;">If the button does not work, copy this link:<br/><span style="word-break:break-all;">${setupUrl}</span></p>`,
+    ${chatSection}
+    <p style="margin:16px 0 0;font-size:12.5px;color:#64748b;">If the button does not work, copy this link:<br/><span style="word-break:break-all;">${setupUrl}</span></p>`,
     'If you did not request this account, please ignore this email.');
 }
 
@@ -407,9 +418,9 @@ module.exports = function mountPubreq(app, deps) {
     });
     if (!created.ok) return res.status(created.status || 400).json({ error: created.error });
 
-    /* P21: Dedicated chat credentials (isolated from panel password) */
-    const tempChatHash = bcrypt.hashSync(crypto.randomBytes(18).toString('base64url'), 10);
-    db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`, [created.id, tempChatHash]);
+    /* P21: Dedicated chat credentials (isolated from panel password) — automatic 6-digit numeric chat password */
+    const generatedChatPw = String(crypto.randomInt(100000, 999999));
+    db.run(`INSERT INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime('now'))`, [created.id, bcrypt.hashSync(generatedChatPw, 10)]);
 
     /* one-time setup token (hashed, 24h) + welcome email */
     const token = genToken();
@@ -422,12 +433,12 @@ module.exports = function mountPubreq(app, deps) {
       [req.user.id, sqlNow(), created.id, sqlNow(), id]);
     logAction(req, 'panel_request_approved', 'panel_requests', { id, username: r.username, role, user_id: created.id });
 
-    sendMail(r.email, 'Galaxy SMS — Your Panel Account Is Ready', welcomeEmailHtml(base, r.username, setupUrl, ttlHours),
-      `Welcome to Galaxy SMS!\n\nPanel URL: ${base}/panel-login\nUsername: ${r.username}\nSet your password (one-time link, valid ${ttlHours} hours): ${setupUrl}`)
+    sendMail(r.email, 'Galaxy SMS — Your Panel & Chat Account Is Ready', welcomeEmailHtml(base, r.username, setupUrl, ttlHours, generatedChatPw),
+      `Welcome to Galaxy SMS!\n\nPanel URL: ${base}/panel-login\nUsername: ${r.username}\nSet your panel password (valid ${ttlHours} hours): ${setupUrl}\n\nGalaxy Chat App Credentials:\nUsername: ${r.username}\nChat Password: ${generatedChatPw} (dedicated 6-digit mobile password)`)
       .then(mr => {
         db.run('UPDATE panel_requests SET welcome_mail_status=?, mail_error=? WHERE id=?', [mr.status, mr.ok ? '' : (mr.error || ''), id]);
       });
-    res.json({ ok: true, user_id: created.id, username: r.username });
+    res.json({ ok: true, user_id: created.id, username: r.username, chat_password: generatedChatPw });
   });
 
   /* ---------- ADMIN: reject ---------- */

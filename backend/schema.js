@@ -941,6 +941,10 @@ function createTables() {
   ensureColumn('chat_messages', 'deleted_for_everyone', 'INTEGER DEFAULT 0');
   ensureColumn('chat_messages', 'deleted_at', 'TEXT DEFAULT NULL');
   ensureColumn('chat_messages', 'deleted_by', 'INTEGER DEFAULT NULL');
+  ensureColumn('chat_messages', 'attachment_path', 'TEXT DEFAULT NULL');
+  ensureColumn('chat_messages', 'attachment_type', 'TEXT DEFAULT NULL');
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_attachment ON chat_messages(attachment_path)`);
 
   db.run(`CREATE TABLE IF NOT EXISTS chat_message_deletions (
     message_id INTEGER NOT NULL,

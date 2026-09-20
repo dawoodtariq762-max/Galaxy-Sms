@@ -2851,9 +2851,8 @@ function renderChatAccounts(){
       actionButtons = '<span class="muted" style="font-size:12px">Protected Master</span>';
     } else {
       actionButtons = `
-        <button class="gx-btn gx-blue" onclick="openSetChatPasswordModal(${a.id}, '${pesc(a.username)}')" title="Set or Reset Chat Password" style="font-size:12px;padding:4px 9px">🔑 Password</button>
-        <button class="gx-btn" onclick="sendChatSetupLink(${a.id}, '${pesc(a.username)}')" title="Send Setup Link via Email" style="font-size:12px;padding:4px 9px">✉ Link</button>
-        <button class="gx-btn ${isEnabled ? 'gx-red' : 'gx-green'}" onclick="toggleChatAccount(${a.id}, ${isEnabled ? 0 : 1}, '${pesc(a.username)}')" title="${isEnabled ? 'Disable Chat Access' : 'Enable Chat Access'}" style="font-size:12px;padding:4px 9px">
+        <button class="gx-btn gx-blue" onclick="openSetChatPasswordModal(${a.id}, '${pesc(a.username)}')" title="Set or Reset Chat Password" style="font-size:12px;padding:5px 10px;font-weight:700">🔑 Set Password</button>
+        <button class="gx-btn ${isEnabled ? 'gx-red' : 'gx-green'}" onclick="toggleChatAccount(${a.id}, ${isEnabled ? 0 : 1}, '${pesc(a.username)}')" title="${isEnabled ? 'Disable Chat Access' : 'Enable Chat Access'}" style="font-size:12px;padding:5px 9px">
           ${isEnabled ? 'Disable' : 'Enable'}
         </button>
       `;
@@ -2925,18 +2924,17 @@ function openSetChatPasswordModal(userId, username){
       </div>
       <div class="modal-body">
         <p class="muted" style="margin-bottom:14px;font-size:13px">
-          This sets the user's <b>dedicated chat password</b> for mobile app & messaging. The user's web panel password remains completely unaffected.
+          Set the user's <b>dedicated 6-digit chat password</b> for mobile app messaging. The user's web panel password remains completely unaffected.
         </p>
+        <div style="margin-bottom:14px;text-align:right">
+          <button type="button" class="btn btn-ghost" id="btnGen6Digit" style="font-size:12px;padding:4px 10px;color:var(--accent)">🎲 Generate Random 6-Digit</button>
+        </div>
         <div class="form-group" style="margin-bottom:12px">
-          <label>New Chat Password <span class="req">*</span></label>
+          <label>Chat Password (6-digit numeric) <span class="req">*</span></label>
           <div style="position:relative">
-            <input type="password" id="mChatPw1" placeholder="Min 6 characters" style="width:100%;padding-right:40px"/>
+            <input type="text" id="mChatPw1" placeholder="e.g. 749201" style="width:100%;font-size:15px;letter-spacing:1px;font-weight:700;padding-right:40px"/>
             <button type="button" onclick="const p=document.getElementById('mChatPw1');p.type=p.type==='password'?'text':'password';" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)">👁</button>
           </div>
-        </div>
-        <div class="form-group">
-          <label>Confirm Chat Password <span class="req">*</span></label>
-          <input type="password" id="mChatPw2" placeholder="Re-type password" style="width:100%"/>
         </div>
         <div id="mChatPwErr" class="msg err" style="display:none;margin-top:10px"></div>
       </div>
@@ -2948,18 +2946,19 @@ function openSetChatPasswordModal(userId, username){
 
   document.body.appendChild(ov);
 
+  ov.querySelector('#btnGen6Digit').addEventListener('click', () => {
+    const random6 = String(Math.floor(100000 + Math.random() * 900000));
+    const input = ov.querySelector('#mChatPw1');
+    input.value = random6;
+    input.type = 'text';
+  });
+
   ov.querySelector('#mChatPwSave').addEventListener('click', async () => {
-    const p1 = ov.querySelector('#mChatPw1').value;
-    const p2 = ov.querySelector('#mChatPw2').value;
+    const p1 = ov.querySelector('#mChatPw1').value.trim();
     const errBox = ov.querySelector('#mChatPwErr');
 
     if (p1.length < 6) {
       errBox.textContent = 'Password must be at least 6 characters.';
-      errBox.style.display = 'block';
-      return;
-    }
-    if (p1 !== p2) {
-      errBox.textContent = 'Passwords do not match.';
       errBox.style.display = 'block';
       return;
     }
@@ -2968,7 +2967,7 @@ function openSetChatPasswordModal(userId, username){
       ov.querySelector('#mChatPwSave').disabled = true;
       const res = await API.post(`/chat/admin/accounts/${userId}/password`, { password: p1 });
       closeModal('setChatPwModal');
-      alert(`✅ Chat password updated successfully for ${username}.`);
+      alert(`✅ Galaxy Chat password for "${username}" set to:\n\n${p1}\n\nYou can share this with the user.`);
       loadChatAccounts();
     } catch (e) {
       errBox.textContent = e.message;

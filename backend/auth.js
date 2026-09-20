@@ -56,10 +56,10 @@ function authRequired(req, res, next) {
   }
 }
 
-// middleware: require valid token for chat (accepts either chat token or panel token)
+// middleware: require valid token for chat (accepts either chat token or panel token; header or query param)
 function chatAuthRequired(req, res, next) {
   const h = req.headers.authorization || '';
-  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  const token = h.startsWith('Bearer ') ? h.slice(7) : (req.query && req.query.token ? String(req.query.token) : null);
   if (!token) return res.status(401).json({ error: 'No token' });
   try {
     req.user = jwt.verify(token, SECRET);
