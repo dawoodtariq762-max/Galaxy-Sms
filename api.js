@@ -3,7 +3,7 @@
  * Uses localStorage token, adds Authorization header, redirects on 401.
  */
 (function () {
-  const AUTH_KEYS = ['ms_token','ms_role','ms_user','ms_name'];
+  const AUTH_KEYS = ['ms_token','ms_role','ms_user','ms_name','gx_chat_unlock_token','gx_agent_sec_unlocked'];
   function clearAuthStorage(){
     try{ AUTH_KEYS.forEach(k=>{ sessionStorage.removeItem(k); localStorage.removeItem(k); }); }catch(e){}
   }
@@ -21,6 +21,8 @@
     const opt = { method, headers: { 'Content-Type': 'application/json' } };
     const t = TOKEN();
     if (t) opt.headers['Authorization'] = 'Bearer ' + t;
+    const unlock = sessionStorage.getItem('gx_chat_unlock_token');
+    if (unlock) opt.headers['X-Chat-Unlock-Token'] = unlock;
     if (body !== undefined) opt.body = JSON.stringify(body);
     const r = await fetch('/api' + path, opt);
     if (r.status === 401) { clearAuthStorage(); location.href = '/panel-login'; throw new Error('Session expired'); }
@@ -31,9 +33,11 @@
 
   // PHASE-2: multipart upload helper (large CSV imports without JSON body)
   async function upload(path, formData) {
-    const opt = { method: 'POST', body: formData };
+    const opt = { method: 'POST', body: formData, headers: {} };
     const t = TOKEN();
     if (t) opt.headers['Authorization'] = 'Bearer ' + t;
+    const unlock = sessionStorage.getItem('gx_chat_unlock_token');
+    if (unlock) opt.headers['X-Chat-Unlock-Token'] = unlock;
     const r = await fetch('/api' + path, opt);
     if (r.status === 401) { clearAuthStorage(); location.href = '/panel-login'; throw new Error('Session expired'); }
     const data = await r.json().catch(() => ({}));

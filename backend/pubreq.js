@@ -141,12 +141,15 @@ function otpEmailHtml(code, minutes) {
 function welcomeEmailHtml(baseUrl, username, setupUrl, ttlHours, chatPassword) {
   const chatSection = chatPassword ? `
     <div style="margin-top:20px;padding:16px;background:#0d152d;border-radius:12px;border:1px solid rgba(48,171,237,0.3);color:#f8fafc;">
-      <div style="font-weight:bold;font-size:15px;color:#30abed;margin-bottom:8px;">📱 Galaxy Chat Mobile App Access</div>
+      <div style="font-weight:bold;font-size:15px;color:#30abed;margin-bottom:8px;">📱 Galaxy Chat App & Security Credentials</div>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:13.5px;color:#e2e8f0;">
-        <tr><td style="padding:4px 0;color:#94a3b8;width:130px;">Chat Username</td><td style="padding:4px 0;"><b>${username}</b></td></tr>
-        <tr><td style="padding:4px 0;color:#94a3b8;">Chat Password</td><td style="padding:4px 0;"><code style="font-size:16px;letter-spacing:2px;font-weight:bold;color:#30abed;background:rgba(48,171,237,0.15);padding:2px 10px;border-radius:6px;">${chatPassword}</code></td></tr>
+        <tr><td style="padding:4px 0;color:#94a3b8;width:140px;">Chat Username</td><td style="padding:4px 0;"><b>${username}</b></td></tr>
+        <tr><td style="padding:4px 0;color:#94a3b8;">Chat Security PIN</td><td style="padding:4px 0;"><code style="font-size:16px;letter-spacing:2px;font-weight:bold;color:#30abed;background:rgba(48,171,237,0.15);padding:2px 10px;border-radius:6px;">${chatPassword}</code></td></tr>
       </table>
-      <div style="font-size:11.5px;color:#94a3b8;margin-top:10px;">* This dedicated 6-digit password is for your Galaxy Chat Android App and is completely separate from your web panel password.</div>
+      <div style="font-size:12.5px;color:#cbd5e1;margin-top:10px;line-height:1.45;">
+        <b>Chat Security:</b> Your Chat security PIN is also required to unlock the Chat and Payment sections inside the Agent Panel.<br/>
+        <span style="font-size:11.5px;color:#94a3b8;">* This dedicated 6-digit PIN is completely separate from your web panel login password.</span>
+      </div>
     </div>` : '';
 
   return emailShell(`
@@ -434,7 +437,7 @@ module.exports = function mountPubreq(app, deps) {
     logAction(req, 'panel_request_approved', 'panel_requests', { id, username: r.username, role, user_id: created.id });
 
     sendMail(r.email, 'Galaxy SMS — Your Panel & Chat Account Is Ready', welcomeEmailHtml(base, r.username, setupUrl, ttlHours, generatedChatPw),
-      `Welcome to Galaxy SMS!\n\nPanel URL: ${base}/panel-login\nUsername: ${r.username}\nSet your panel password (valid ${ttlHours} hours): ${setupUrl}\n\nGalaxy Chat App Credentials:\nUsername: ${r.username}\nChat Password: ${generatedChatPw} (dedicated 6-digit mobile password)`)
+      `Welcome to Galaxy SMS!\n\nPanel URL: ${base}/panel-login\nUsername: ${r.username}\nSet your panel password (valid ${ttlHours} hours): ${setupUrl}\n\nGalaxy Chat App & Security PIN:\nUsername: ${r.username}\nChat Security PIN: ${generatedChatPw} (dedicated 6-digit PIN)\nChat Security: Your Chat security PIN is also required to unlock the Chat and Payment sections inside the Agent Panel.`)
       .then(mr => {
         db.run('UPDATE panel_requests SET welcome_mail_status=?, mail_error=? WHERE id=?', [mr.status, mr.ok ? '' : (mr.error || ''), id]);
       });

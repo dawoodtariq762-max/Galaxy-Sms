@@ -268,7 +268,21 @@ const CONNECTORS = {
     }
 
     const res = await fetch(full, init);
-    if (!res.ok) throw new Error(`provider HTTP ${res.status}`);
+    if (!res.ok) {
+      let bodySnippet = '';
+      try {
+        const rawText = await res.text();
+        bodySnippet = rawText
+          .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer ***')
+          .replace(/(token|key|api_key|password|secret|auth|access_token)[=:"']\s*([A-Za-z0-9._~+/-]{4,})/gi, '$1=***')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 200);
+      } catch (_) {}
+      const detail = bodySnippet ? `: ${bodySnippet}` : '';
+      throw new Error(`provider HTTP ${res.status}${detail}`);
+    }
     const json = await res.json().catch(() => null);
     if (json === null) throw new Error('provider returned non-JSON');
 

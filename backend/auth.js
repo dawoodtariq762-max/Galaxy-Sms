@@ -64,6 +64,25 @@ function chatAuthRequired(req, res, next) {
   try {
     req.user = jwt.verify(token, SECRET);
     if (perUserRateLimit(req, res)) return;
+
+    // P21: If caller is accessing chat via panel token and role is agent, check chat unlock if enabled
+    if (req.user && req.user.type !== 'chat' && req.user.role === 'agent') {
+      const cred = db.get('SELECT chat_enabled, chat_password_hash FROM chat_credentials WHERE user_id=?', [req.user.id]);
+      if (cred && cred.chat_enabled === 1 && cred.chat_password_hash) {
+        const unlockToken = req.headers['x-chat-unlock-token'] || (req.query && req.query.unlock_token);
+        let unlocked = false;
+        if (unlockToken) {
+          try {
+            const dec = jwt.verify(unlockToken, SECRET);
+            if (dec && dec.type === 'chat_unlocked' && dec.id === req.user.id) unlocked = true;
+          } catch (_) {}
+        }
+        if (!unlocked) {
+          return res.status(403).json({ error: 'Chat security PIN verification required', locked: true });
+        }
+      }
+    }
+
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Invalid or expired token' });

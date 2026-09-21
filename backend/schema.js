@@ -943,6 +943,8 @@ function createTables() {
   ensureColumn('chat_messages', 'deleted_by', 'INTEGER DEFAULT NULL');
   ensureColumn('chat_messages', 'attachment_path', 'TEXT DEFAULT NULL');
   ensureColumn('chat_messages', 'attachment_type', 'TEXT DEFAULT NULL');
+  ensureColumn('chat_messages', 'attachment_name', 'TEXT DEFAULT NULL');
+  ensureColumn('chat_messages', 'attachment_size', 'INTEGER DEFAULT NULL');
 
   db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_attachment ON chat_messages(attachment_path)`);
 

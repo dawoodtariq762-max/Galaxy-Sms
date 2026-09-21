@@ -27,6 +27,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
 const db = require('./db');
 
 const MSG_MAX = 2000, SUBJECT_MAX = 200, COMPLAINT_MAX = 4000;
@@ -276,6 +278,82 @@ module.exports = function mountChat(app, deps) {
       token: signChat(user),
       user: { id: user.id, username: user.username, role: user.role, name: user.name || user.username }
     });
+  });
+
+  /* ================================================================
+   * PANEL LOCK VERIFICATION (guarded sections: Chat & Payment)
+   * Validates user's Chat App password / PIN against chat_credentials
+   * ================================================================ */
+  app.get('/api/chat/auth/lock-status', authRequired, (req, res) => {
+    const user = db.get('SELECT * FROM users WHERE id=?', [req.user.id]);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    if (user.role === 'admin') {
+      return res.json({ chat_security_enabled: false, locked: false, unlocked: true });
+    }
+
+    const cred = db.get('SELECT chat_enabled, chat_password_hash FROM chat_credentials WHERE user_id=?', [user.id]);
+    const isSecurityActive = !!(cred && cred.chat_enabled === 1 && cred.chat_password_hash);
+
+    const unlockHeader = req.headers['x-chat-unlock-token'];
+    let unlocked = !isSecurityActive;
+    if (isSecurityActive && unlockHeader) {
+      try {
+        const decoded = jwt.verify(unlockHeader, SECRET);
+        if (decoded && decoded.type === 'chat_unlocked' && decoded.id === user.id) {
+          unlocked = true;
+        }
+      } catch (_) {}
+    }
+
+    return res.json({
+      chat_security_enabled: isSecurityActive,
+      locked: isSecurityActive && !unlocked,
+      unlocked: unlocked
+    });
+  });
+
+  app.post('/api/chat/auth/verify-lock', authRequired, (req, res) => {
+    const password = String((req.body && req.body.password) || '').trim();
+    if (!password) return res.status(400).json({ error: 'Password or PIN is required' });
+
+    const user = db.get('SELECT * FROM users WHERE id=?', [req.user.id]);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    if (!user.active) return res.status(403).json({ error: 'Account disabled' });
+
+    // Admin uses master account password
+    if (user.role === 'admin') {
+      if (!bcrypt.compareSync(password, user.password)) {
+        return res.status(400).json({ ok: false, error: 'Invalid password or PIN' });
+      }
+      const unlockToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'chat_unlocked' }, SECRET, { expiresIn: '12h' });
+      return res.json({ ok: true, message: 'Unlocked successfully', unlock_token: unlockToken });
+    }
+
+    const cred = db.get('SELECT chat_enabled, chat_password_hash, failed_attempts, locked_until FROM chat_credentials WHERE user_id=?', [user.id]);
+    if (!cred || !cred.chat_password_hash) {
+      return res.status(400).json({ ok: false, error: 'Chat PIN has not been set for your account. Please contact administrator.' });
+    }
+
+    if (cred.chat_enabled === 0) {
+      return res.status(400).json({ ok: false, error: 'Chat Security is currently disabled for your account.' });
+    }
+
+    if (cred.locked_until && new Date(cred.locked_until) > new Date()) {
+      return res.status(429).json({ ok: false, error: 'Account temporarily locked due to multiple failed attempts. Please try again later.' });
+    }
+
+    const match = bcrypt.compareSync(password, cred.chat_password_hash);
+    if (!match) {
+      const attempts = (cred.failed_attempts || 0) + 1;
+      const lockUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60000).toISOString().slice(0, 19).replace('T', ' ') : null;
+      db.run('UPDATE chat_credentials SET failed_attempts=?, locked_until=? WHERE user_id=?', [attempts, lockUntil, user.id]);
+      return res.status(400).json({ ok: false, error: 'Incorrect Chat App password / PIN' });
+    }
+
+    db.run(`UPDATE chat_credentials SET failed_attempts=0, locked_until=NULL, updated_at=datetime('now') WHERE user_id=?`, [user.id]);
+    logAction(req, 'verify_chat_lock', 'chat', { user_id: user.id, username: user.username });
+    const unlockToken = jwt.sign({ id: user.id, username: user.username, role: user.role, type: 'chat_unlocked' }, SECRET, { expiresIn: '12h' });
+    return res.json({ ok: true, message: 'Unlocked successfully', unlock_token: unlockToken });
   });
 
   app.post('/api/chat/auth/change-password', chatAuth, (req, res) => {
@@ -590,12 +668,157 @@ module.exports = function mountChat(app, deps) {
       body: isDeleted ? 'This message was deleted' : m.body,
       attachment_path: isDeleted ? null : (m.attachment_path || null),
       attachment_type: isDeleted ? null : (m.attachment_type || null),
+      attachment_name: isDeleted ? null : (m.attachment_name || null),
+      attachment_size: isDeleted ? null : (m.attachment_size || null),
       is_deleted: isDeleted,
       deleted_at: m.deleted_at || null,
       created_at: m.created_at,
       read_at: m.read_at || null
     };
   }
+
+  /* ================================================================
+   * FILE ATTACHMENTS (.txt, .csv)
+   * ================================================================ */
+  const uploadDir = path.join(__dirname, '..', 'data', 'chat_uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  const uploadStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      const safeExt = (ext === '.csv') ? '.csv' : '.txt';
+      cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${safeExt}`);
+    }
+  });
+
+  const fileFilter = (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (ext !== '.txt' && ext !== '.csv') {
+      return cb(new Error('Only .txt and .csv files are supported'));
+    }
+    const allowedMimes = [
+      'text/plain', 'text/csv', 'application/csv', 'text/x-csv',
+      'application/x-csv', 'application/vnd.ms-excel', 'text/comma-separated-values'
+    ];
+    const mime = (file.mimetype || '').toLowerCase();
+    if (!allowedMimes.includes(mime) && !mime.startsWith('text/')) {
+      return cb(new Error('Invalid MIME type for file'));
+    }
+    cb(null, true);
+  };
+
+  const chatUpload = multer({
+    storage: uploadStorage,
+    fileFilter,
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  });
+
+  function handleChatUpload(req, res, next) {
+    chatUpload.single('file')(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File size exceeds maximum limit of 10MB' });
+        }
+        return res.status(400).json({ error: err.message || 'File upload failed' });
+      }
+      next();
+    });
+  }
+
+  /* ---------- upload attachment to conversation ---------- */
+  app.post('/api/chat/conversations/:id/upload', chatAuth, handleChatUpload, (req, res) => {
+    const conv = getConv(intId(req.params.id));
+    if (!conv) {
+      if (req.file) try { fs.unlinkSync(req.file.path); } catch(_) {}
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (!convAccess(req.user, conv)) {
+      if (req.file) try { fs.unlinkSync(req.file.path); } catch(_) {}
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'File is required' });
+    }
+
+    // Security content inspection: check head bytes
+    try {
+      const fd = fs.openSync(req.file.path, 'r');
+      const buf = Buffer.alloc(512);
+      const bytesRead = fs.readSync(fd, buf, 0, 512, 0);
+      fs.closeSync(fd);
+      const head = buf.subarray(0, bytesRead).toString('latin1');
+      if (head.startsWith('\x7fELF') || head.startsWith('MZ') || /<script|<\?php/i.test(head)) {
+        try { fs.unlinkSync(req.file.path); } catch(_) {}
+        return res.status(400).json({ error: 'File rejected by security validation.' });
+      }
+    } catch (err) {
+      try { fs.unlinkSync(req.file.path); } catch(_) {}
+      return res.status(500).json({ error: 'File validation failed.' });
+    }
+
+    const safeOriginalName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ext = path.extname(safeOriginalName).toLowerCase();
+    const fileType = (ext === '.csv') ? 'csv' : 'txt';
+    const fileSize = req.file.size;
+    const relPath = path.basename(req.file.path);
+    const bodyText = String(req.body.body || '').trim() || safeOriginalName;
+
+    const info = db.run(`
+      INSERT INTO chat_messages (conversation_id, sender_id, body, attachment_path, attachment_type, attachment_name, attachment_size)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [conv.id, req.user.id, bodyText, relPath, fileType, safeOriginalName, fileSize]);
+
+    db.run(`UPDATE chat_conversations SET last_message_at=datetime('now'), last_message_text=? WHERE id=?`,
+      [`📎 ${safeOriginalName}`, conv.id]);
+
+    const sender = getUser(req.user.id) || req.user;
+    const msg = {
+      id: Number(info.lastInsertRowid),
+      conversation_id: conv.id,
+      sender_id: req.user.id,
+      sender_name: (sender.name && String(sender.name).trim()) || sender.username,
+      sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+      body: bodyText,
+      attachment_path: relPath,
+      attachment_type: fileType,
+      attachment_name: safeOriginalName,
+      attachment_size: fileSize,
+      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      read_at: null,
+      is_deleted: false
+    };
+
+    broadcast(conv, 'msg', { c: conv.id, m: msg });
+    dispatchPushNotification(conv, req.user.id, msg);
+    res.json({ ok: true, message: msg });
+  });
+
+  /* ---------- download attachment ---------- */
+  app.get('/api/chat/messages/:id/download', chatAuth, (req, res) => {
+    const msgId = intId(req.params.id);
+    if (!msgId) return res.status(400).json({ error: 'Invalid message ID' });
+    const msg = db.get('SELECT * FROM chat_messages WHERE id=?', [msgId]);
+    if (!msg || !msg.attachment_path) return res.status(404).json({ error: 'Attachment not found' });
+    if (msg.deleted_for_everyone === 1) return res.status(410).json({ error: 'Attachment has been deleted' });
+
+    const conv = getConv(msg.conversation_id);
+    if (!conv || !convAccess(req.user, conv)) return res.status(403).json({ error: 'Forbidden' });
+
+    const safeName = path.basename(msg.attachment_path);
+    const filePath = path.resolve(uploadDir, safeName);
+    if (!filePath.startsWith(uploadDir) || !fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on storage' });
+    }
+
+    const dlName = msg.attachment_name || safeName;
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(dlName)}"`);
+    res.setHeader('Content-Type', msg.attachment_type === 'csv' ? 'text/csv' : 'text/plain');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.sendFile(filePath);
+  });
 
   /* ---------- send message ---------- */
   app.post('/api/chat/messages/:id', chatAuth, (req, res) => {

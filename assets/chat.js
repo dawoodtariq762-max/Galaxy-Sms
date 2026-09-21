@@ -31,6 +31,7 @@
   function fmtTime(ts) { const d = new Date(String(ts).replace(' ', 'T') + 'Z'); if (isNaN(d)) return ''; return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
   function fmtDay(ts) { const d = new Date(String(ts).replace(' ', 'T') + 'Z'); if (isNaN(d)) return ''; const today = new Date(); const yst = new Date(Date.now() - 864e5); const same = (a, b) => a.toDateString() === b.toDateString(); return same(d, today) ? 'Today' : (same(d, yst) ? 'Yesterday' : d.toLocaleDateString([], { day: 'numeric', month: 'short', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })); }
   function fmtListTime(ts) { if (!ts) return ''; const d = new Date(String(ts).replace(' ', 'T') + 'Z'); if (isNaN(d)) return ''; const today = new Date(); return d.toDateString() === today.toDateString() ? fmtTime(ts) : d.toLocaleDateString([], { day: '2-digit', month: 'short' }); }
+  function formatBytes(bytes) { if (!bytes || bytes === 0) return '0 B'; const k = 1024, s = ['B', 'KB', 'MB', 'GB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + s[i]; }
 
   /* ================= CSS (scoped, Galaxy theme) ================= */
   const CSS = `
@@ -78,11 +79,27 @@
 /* P19k #1: pathological long unbroken strings (URLs/keys) — bubble width ke andar hi wrap */
 .gxc-bubble{overflow-wrap:anywhere}
 .gxc-bubble.deleted{font-style:italic;opacity:.68;background:rgba(255,255,255,.04)!important;border:1px dashed rgba(255,255,255,.2)!important}
-.gxc-msg-acts{display:none;position:absolute;top:-8px;right:0;background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));border-radius:8px;padding:2px;gap:4px;z-index:10}
-.gxc-row:hover .gxc-msg-acts{display:flex}
-.gxc-act-btn{background:none;border:none;color:var(--px-muted,#9BA3C9);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:4px}
-.gxc-act-btn:hover{color:#fff;background:rgba(255,255,255,.1)}
-.gxc-act-btn.danger:hover{color:#FF5C7A}
+/* P21: Message action trigger (⋯) & dropdown */
+.gxc-msg-menu-wrap{display:none;position:absolute;top:-8px;right:0;z-index:20}
+.gxc-row:hover .gxc-msg-menu-wrap{display:block}
+.gxc-msg-menu-btn{background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));color:var(--px-text,#E7EAF8);width:24px;height:24px;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+.gxc-msg-menu-btn:hover{background:var(--px-surface-3,#151A3A);color:#30ABED;border-color:rgba(48,171,237,.5)}
+.gxc-msg-dropdown{position:absolute;top:28px;right:0;background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.3));border-radius:10px;padding:4px;display:none;flex-direction:column;min-width:140px;box-shadow:0 12px 30px rgba(0,0,0,.6);z-index:100}
+.gxc-msg-dropdown.show{display:flex}
+.gxc-menu-item{background:none;border:none;color:var(--px-text,#E7EAF8);font-size:12px;text-align:left;padding:7px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.gxc-menu-item:hover{background:rgba(48,171,237,.14);color:#30ABED}
+.gxc-menu-item.danger:hover{background:rgba(255,92,122,.16);color:#FF5C7A}
+/* P21: File attachments in chat */
+.gxc-file-card{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;margin:4px 0 6px}
+.gxc-file-icon{font-size:22px}
+.gxc-file-info{flex:1;min-width:0}
+.gxc-file-name{font-weight:600;font-size:12.5px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gxc-file-size{font-size:11px;color:var(--px-dim,#7A83A8);margin-top:2px}
+.gxc-file-dl{background:rgba(48,171,237,.18);border:1px solid rgba(48,171,237,.35);color:#30ABED;border-radius:6px;padding:4px 9px;font-size:11.5px;font-weight:600;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.gxc-file-dl:hover{background:#30ABED;color:#fff}
+.gxc-attach-preview{display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(48,171,237,.1);border:1px solid rgba(48,171,237,.25);border-radius:8px;margin-bottom:6px;font-size:12px;color:var(--px-text)}
+.gxc-attach-preview .gxc-attach-x{background:none;border:none;color:var(--px-dim);cursor:pointer;font-size:14px;margin-left:auto}
+.gxc-attach-preview .gxc-attach-x:hover{color:#FF5C7A}
 .gxc-row.mine .gxc-bubble{background:linear-gradient(135deg,rgba(48,171,237,.22),rgba(127,24,179,.20));border:1px solid rgba(48,171,237,.30);border-bottom-right-radius:4px;color:var(--px-text,#E7EAF8)}
 .gxc-row.theirs .gxc-bubble{background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));border-bottom-left-radius:4px;color:var(--px-text,#E7EAF8)}
 .gxc-mmeta{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--px-dim,#7A83A8);margin:2px 4px 0}
@@ -144,7 +161,7 @@
 
   /* ================= CHAT PAGE ================= */
   function buildChatPage() {
-    const page = $('page-chat'); if (!page) return;
+    const page = $('chatContentView') || $('page-chat'); if (!page) return;
     ensureStyle();
     if (page.dataset.built) return; page.dataset.built = '1';
     page.innerHTML = `
@@ -291,18 +308,122 @@
       <div class="gxc-msgs" id="gxcMsgs"></div>
       <div class="gxc-inputbar">
         <button class="gxc-emojibtn" id="gxcEmojibtn" type="button" title="Emoji">🙂</button>
-        <textarea class="gxc-input" id="gxcInput" rows="1" maxlength="2000" placeholder="Type a message..."></textarea>
+        <button class="gxc-emojibtn" id="gxcAttachBtn" type="button" title="Attach file (.txt, .csv)">📎</button>
+        <input type="file" id="gxcFileInput" accept=".txt,.csv" style="display:none">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div id="gxcAttachPreview" class="gxc-attach-preview" style="display:none"></div>
+          <textarea class="gxc-input" id="gxcInput" rows="1" maxlength="2000" placeholder="Type a message..."></textarea>
+        </div>
         <button class="gxc-send" id="gxcSend" type="button">Send</button>
       </div>`;
     $('gxcBack').addEventListener('click', () => { root.classList.remove('conv-open'); S.convId = null; updateFabVisibility(); renderConvList(); });
     $('gxcEmojibtn').addEventListener('click', (e) => { e.stopPropagation(); $('gxcEmojiPop').classList.toggle('show'); });
 
+    let selectedFile = null;
+    const fileInp = $('gxcFileInput');
+    const attachBtn = $('gxcAttachBtn');
+    const attachPrev = $('gxcAttachPreview');
     const inp = $('gxcInput');
-    inp.addEventListener('input', () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 110) + 'px'; $('gxcSend').disabled = !inp.value.trim(); });
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCurrent(); } });
-    $('gxcSend').addEventListener('click', sendCurrent);
+    const sendBtn = $('gxcSend');
+
+    function updateAttachUI() {
+      if (!selectedFile) {
+        attachPrev.style.display = 'none';
+        attachPrev.innerHTML = '';
+        sendBtn.disabled = !inp.value.trim();
+        return;
+      }
+      const isCsv = selectedFile.name.toLowerCase().endsWith('.csv');
+      attachPrev.style.display = 'flex';
+      attachPrev.innerHTML = `
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isCsv ? '📊' : '📄'} <b>${esc(selectedFile.name)}</b> (${formatBytes(selectedFile.size)})</span>
+        <button type="button" class="gxc-attach-x" title="Remove attachment">✕</button>
+      `;
+      attachPrev.querySelector('.gxc-attach-x').addEventListener('click', () => {
+        selectedFile = null;
+        fileInp.value = '';
+        updateAttachUI();
+      });
+      sendBtn.disabled = false;
+    }
+
+    attachBtn.addEventListener('click', () => fileInp.click());
+    fileInp.addEventListener('change', () => {
+      if (fileInp.files && fileInp.files[0]) {
+        const f = fileInp.files[0];
+        const ext = (f.name || '').split('.').pop().toLowerCase();
+        if (ext !== 'txt' && ext !== 'csv') {
+          alert('❌ Only .txt and .csv files are supported.');
+          fileInp.value = '';
+          return;
+        }
+        if (f.size > 10 * 1024 * 1024) {
+          alert('❌ File exceeds maximum 10MB limit.');
+          fileInp.value = '';
+          return;
+        }
+        selectedFile = f;
+        updateAttachUI();
+      }
+    });
+
+    inp.addEventListener('input', () => {
+      inp.style.height = 'auto';
+      inp.style.height = Math.min(inp.scrollHeight, 110) + 'px';
+      sendBtn.disabled = (!inp.value.trim() && !selectedFile);
+    });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+    sendBtn.addEventListener('click', doSend);
+
+    async function doSend() {
+      const body = inp.value.trim();
+      if (!body && !selectedFile) return;
+      sendBtn.disabled = true;
+
+      try {
+        if (selectedFile) {
+          const fd = new FormData();
+          fd.append('file', selectedFile);
+          if (body) fd.append('body', body);
+          const t = sessionStorage.getItem('ms_token') || localStorage.getItem('ms_token');
+          const unlock = sessionStorage.getItem('gx_chat_unlock_token');
+          const headers = {};
+          if (t) headers['Authorization'] = 'Bearer ' + t;
+          if (unlock) headers['X-Chat-Unlock-Token'] = unlock;
+
+          const r = await fetch(`/api/chat/conversations/${S.convId}/upload`, {
+            method: 'POST',
+            headers,
+            body: fd
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || 'Upload failed');
+          selectedFile = null;
+          fileInp.value = '';
+          updateAttachUI();
+          inp.value = '';
+          inp.style.height = 'auto';
+          if (data.message) {
+            appendMsg(data.message);
+            loadConvs();
+          }
+        } else {
+          inp.value = '';
+          inp.style.height = 'auto';
+          const r = await API.post(`/chat/messages/${S.convId}`, { body });
+          appendMsg(r.message);
+          loadConvs();
+        }
+      } catch (err) {
+        alert('❌ ' + err.message);
+      } finally {
+        sendBtn.disabled = (!inp.value.trim() && !selectedFile);
+        inp.focus();
+      }
+    }
+
     if (window.visualViewport) visualViewport.addEventListener('resize', () => { const m = $('gxcMsgs'); if (m) m.scrollTop = m.scrollHeight; });
-    $('gxcSend').disabled = true;
+    sendBtn.disabled = true;
     await loadHistory(true);
     markReadSoon();
     /* P19g: conversation open hote hi (agar fallback poll chal raha hai) usse turant
@@ -350,40 +471,101 @@
     const msgAgeMinutes = (Date.now() - new Date(String(m.created_at).replace(' ', 'T') + 'Z').getTime()) / 60000;
     const canDeleteEveryone = !isDeleted && (IS_ADMIN || (mine && msgAgeMinutes <= 15));
 
-    div.innerHTML = `${!mine ? `<div class="gxc-sender">${esc(m.sender_name)} · ${esc(m.sender_role)}</div>` : ''}
-      <div class="gxc-bubble${isDeleted ? ' deleted' : ''}"></div>
-      <div class="gxc-mmeta"><span>${esc(fmtTime(m.created_at))}</span>${mine && !isDeleted ? `<span class="gxc-ticks${m.read_at ? ' read' : ''}" title="${m.read_at ? 'Read' : 'Sent'}">${m.read_at ? '✓✓' : '✓'}</span>` : ''}</div>
-      ${!isDeleted ? `<div class="gxc-msg-acts">
-        <button type="button" class="gxc-act-btn btn-del-me" title="Delete for me">🗑️ Me</button>
-        ${canDeleteEveryone ? `<button type="button" class="gxc-act-btn danger btn-del-all" title="Delete for everyone">🚫 All</button>` : ''}
-      </div>` : ''}`;
-
-    div.querySelector('.gxc-bubble').textContent = isDeleted ? 'This message was deleted' : m.body;
-
-    const delMeBtn = div.querySelector('.btn-del-me');
-    if (delMeBtn) {
-      delMeBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        try {
-          await API.post(`/chat/messages/${m.id}/delete-for-me`, {});
-          div.remove();
-        } catch (err) { alert('❌ ' + err.message); }
-      });
+    let bodyHtml = '';
+    if (isDeleted) {
+      bodyHtml = '<span style="font-style:italic;opacity:.7">This message was deleted</span>';
+    } else {
+      if (m.attachment_path) {
+        const isCsv = (m.attachment_type === 'csv');
+        const token = sessionStorage.getItem('ms_token') || localStorage.getItem('ms_token') || '';
+        const unlock = sessionStorage.getItem('gx_chat_unlock_token') || '';
+        const dlUrl = `/api/chat/messages/${m.id}/download?token=${encodeURIComponent(token)}${unlock ? `&unlock_token=${encodeURIComponent(unlock)}` : ''}`;
+        bodyHtml += `
+          <div class="gxc-file-card">
+            <div class="gxc-file-icon">${isCsv ? '📊' : '📄'}</div>
+            <div class="gxc-file-info">
+              <div class="gxc-file-name" title="${esc(m.attachment_name || 'file')}">${esc(m.attachment_name || 'file')}</div>
+              <div class="gxc-file-size">${formatBytes(m.attachment_size)} · ${isCsv ? 'CSV' : 'TXT'}</div>
+            </div>
+            <a class="gxc-file-dl" href="${dlUrl}" target="_blank" download="${esc(m.attachment_name || 'file')}" title="Download">⬇ Download</a>
+          </div>
+        `;
+      }
+      if (m.body && (!m.attachment_path || m.body !== m.attachment_name)) {
+        bodyHtml += `<div>${esc(m.body)}</div>`;
+      }
     }
 
-    const delAllBtn = div.querySelector('.btn-del-all');
-    if (delAllBtn) {
-      delAllBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm('Delete this message for everyone?')) return;
-        try {
-          await API.post(`/chat/messages/${m.id}/delete-for-everyone`, {});
-          const b = div.querySelector('.gxc-bubble');
-          if (b) { b.textContent = 'This message was deleted'; b.classList.add('deleted'); }
-          const acts = div.querySelector('.gxc-msg-acts');
-          if (acts) acts.remove();
-        } catch (err) { alert('❌ ' + err.message); }
-      });
+    div.innerHTML = `${!mine ? `<div class="gxc-sender">${esc(m.sender_name)} · ${esc(m.sender_role)}</div>` : ''}
+      <div class="gxc-bubble${isDeleted ? ' deleted' : ''}">${bodyHtml}</div>
+      <div class="gxc-mmeta"><span>${esc(fmtTime(m.created_at))}</span>${mine && !isDeleted ? `<span class="gxc-ticks${m.read_at ? ' read' : ''}" title="${m.read_at ? 'Read' : 'Sent'}">${m.read_at ? '✓✓' : '✓'}</span>` : ''}</div>
+      ${!isDeleted ? `
+        <div class="gxc-msg-menu-wrap">
+          <button type="button" class="gxc-msg-menu-btn" title="Options">⋯</button>
+          <div class="gxc-msg-dropdown">
+            <button type="button" class="gxc-menu-item btn-copy-msg">📋 Copy</button>
+            <button type="button" class="gxc-menu-item danger btn-del-me">🗑️ Delete for Me</button>
+            ${canDeleteEveryone ? `<button type="button" class="gxc-menu-item danger btn-del-all">🚫 Delete for Everyone</button>` : ''}
+          </div>
+        </div>
+      ` : ''}`;
+
+    if (!isDeleted) {
+      const menuBtn = div.querySelector('.gxc-msg-menu-btn');
+      const dropdown = div.querySelector('.gxc-msg-dropdown');
+
+      if (menuBtn && dropdown) {
+        menuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.gxc-msg-dropdown.show').forEach(d => { if (d !== dropdown) d.classList.remove('show'); });
+          dropdown.classList.toggle('show');
+        });
+      }
+
+      const copyBtn = div.querySelector('.btn-copy-msg');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dropdown.classList.remove('show');
+          const cleanText = m.body || m.attachment_name || '';
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(cleanText);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = cleanText; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+          }
+          menuBtn.innerHTML = '✓';
+          setTimeout(() => { if (menuBtn) menuBtn.innerHTML = '⋯'; }, 1500);
+        });
+      }
+
+      const delMeBtn = div.querySelector('.btn-del-me');
+      if (delMeBtn) {
+        delMeBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          dropdown.classList.remove('show');
+          try {
+            await API.post(`/chat/messages/${m.id}/delete-for-me`, {});
+            div.remove();
+          } catch (err) { alert('❌ ' + err.message); }
+        });
+      }
+
+      const delAllBtn = div.querySelector('.btn-del-all');
+      if (delAllBtn) {
+        delAllBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          dropdown.classList.remove('show');
+          if (!confirm('Delete this message for everyone?')) return;
+          try {
+            await API.post(`/chat/messages/${m.id}/delete-for-everyone`, {});
+            const b = div.querySelector('.gxc-bubble');
+            if (b) { b.innerHTML = '<span style="font-style:italic;opacity:.7">This message was deleted</span>'; b.classList.add('deleted'); }
+            const wrap = div.querySelector('.gxc-msg-menu-wrap');
+            if (wrap) wrap.remove();
+          } catch (err) { alert('❌ ' + err.message); }
+        });
+      }
     }
 
     return div;
@@ -408,18 +590,6 @@
       if (S.hasOlder && olderBtn) el.insertBefore(frag, olderBtn.nextSibling); else el.insertBefore(frag, el.firstChild);
       el.scrollTop = el.scrollHeight - prevH;
     } catch (e) { alert('❌ ' + e.message); }
-  }
-
-  async function sendCurrent() {
-    const inp = $('gxcInput'); if (!inp) return;
-    const body = inp.value.trim();
-    if (!body) return; /* empty rejection (UI side) */
-    inp.value = ''; inp.style.height = 'auto'; $('gxcSend').disabled = true;
-    try {
-      const r = await API.post(`/chat/messages/${S.convId}`, { body });
-      appendMsg(r.message);
-      loadConvs();
-    } catch (e) { inp.value = body; alert('❌ ' + e.message); }
   }
 
   function appendMsg(m) {
@@ -831,7 +1001,13 @@
   /* ================= public API ================= */
   window.GXChat = {
     open(page) {
-      if (page === 'chat') { buildChatPage(); startRealtime(); refreshBadges(); loadConvs(); }
+      if (page === 'chat') {
+        const lockView = document.getElementById('chatLockView');
+        if (lockView && lockView.style.display !== 'none') {
+          return;
+        }
+        buildChatPage(); startRealtime(); refreshBadges(); loadConvs();
+      }
       else if (page === 'complaints') { buildComplaintsPage(); startRealtime(); refreshBadges(); loadComplaints(); }
     },
     refreshBadges,

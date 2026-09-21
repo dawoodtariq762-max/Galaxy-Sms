@@ -339,6 +339,32 @@
   }
   .send-btn:disabled { opacity: 0.35; cursor: default; }
 
+  /* P21: File Attachments in Chat */
+  .bubble-file-card {
+    display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px 12px; margin: 4px 0 6px;
+  }
+  .file-icon { font-size: 22px; flex-shrink: 0; }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name { font-weight: 650; font-size: 13px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .file-dl-btn {
+    background: rgba(56,189,248,0.18); border: 1px solid rgba(56,189,248,0.35); color: #38BDF8;
+    border-radius: 8px; padding: 5px 10px; font-size: 11.5px; font-weight: 700; text-decoration: none;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  }
+  .file-dl-btn:active { background: #38BDF8; color: #fff; }
+
+  .attach-preview-bar {
+    display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+    background: rgba(14,165,233,0.12); border-top: 1px solid rgba(14,165,233,0.25);
+    font-size: 12.5px; color: var(--text); flex-shrink: 0;
+  }
+  .attach-preview-bar .attach-x {
+    background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; margin-left: auto;
+  }
+  .attach-preview-bar .attach-x:hover { color: var(--danger); }
+
   /* Action Sheet for Messages */
   .sheet-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.72);
@@ -514,11 +540,11 @@
     <!-- Messages populated here -->
   </div>
 
+  <div class="attach-preview-bar" id="attachPreview" style="display:none"></div>
   <div class="chat-input-bar">
-    <!-- Normal typing input -->
+    <button type="button" class="action-icon-btn" id="btnAttach" onclick="openFilePicker()" title="Attach file (.txt, .csv)">📎</button>
+    <input type="file" id="filePicker" accept=".txt,.csv" style="display:none" onchange="onFileSelected(this)">
     <textarea class="chat-input" id="mInput" rows="1" placeholder="Type a message..." oninput="autoExpand(this)"></textarea>
-
-    <!-- Text send button -->
     <button class="send-btn" id="mSend" onclick="sendMessage()">➤</button>
   </div>
 </div>
@@ -1047,6 +1073,13 @@
     } catch (e) {}
   }
 
+  function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024, s = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + s[i];
+  }
+
   function renderMessages() {
     const box = $('msgBox');
     const isSpectator = S.user.role === 'admin' && S.activeConv && !S.activeConv.is_direct_admin;
@@ -1071,18 +1104,34 @@
       if (isDeleted) {
         contentHtml = '<div>🚫 This message was deleted</div>';
       } else {
-        contentHtml = `<div>${escapeHtml(m.body)}</div>`;
+        if (m.attachment_path) {
+          const isCsv = (m.attachment_type === 'csv');
+          const dlUrl = `${S.server}/api/chat/messages/${m.id}/download?token=${encodeURIComponent(S.token)}`;
+          contentHtml += `
+            <div class="bubble-file-card">
+              <div class="file-icon">${isCsv ? '📊' : '📄'}</div>
+              <div class="file-info">
+                <div class="file-name">${escapeHtml(m.attachment_name || 'file')}</div>
+                <div class="file-meta">${formatBytes(m.attachment_size)} · ${isCsv ? 'CSV' : 'TXT'}</div>
+              </div>
+              <a class="file-dl-btn" href="${dlUrl}" target="_blank" download="${escapeHtml(m.attachment_name || 'file')}" onclick="event.stopPropagation()">⬇ Download</a>
+            </div>
+          `;
+        }
+        if (m.body && (!m.attachment_path || m.body !== m.attachment_name)) {
+          contentHtml += `<div>${escapeHtml(m.body)}</div>`;
+        }
       }
 
       const bubbleClass = isDeleted
         ? 'bubble deleted-bubble'
         : (isSpectator ? 'bubble spectator-bubble' : 'bubble');
 
-      const clickAttr = isDeleted ? '' : `onclick="openMsgActionSheet(${m.id})"`;
+      const pressAttr = isDeleted ? '' : `onpointerdown="startMsgPress(${m.id}, event)" onpointerup="cancelMsgPress()" onpointercancel="cancelMsgPress()" oncontextmenu="openMsgActionSheet(${m.id}); return false;"`;
 
       return `
         <div class="msg-row ${mine ? 'mine' : 'them'}" id="msgRow_${m.id}">
-          <div class="${bubbleClass}" ${clickAttr}>
+          <div class="${bubbleClass}" ${pressAttr}>
             ${senderHeader}
             ${contentHtml}
             <div class="bubble-meta">
@@ -1109,28 +1158,118 @@
     el.style.height = Math.min(el.scrollHeight, 110) + 'px';
   };
 
+  /* P21: File attachments */
+  let selectedChatFile = null;
+
+  window.openFilePicker = function() {
+    $('filePicker').click();
+  };
+
+  window.onFileSelected = function(inp) {
+    if (inp.files && inp.files[0]) {
+      const f = inp.files[0];
+      const ext = (f.name || '').split('.').pop().toLowerCase();
+      if (ext !== 'txt' && ext !== 'csv') {
+        alert('Only .txt and .csv files are supported');
+        inp.value = '';
+        return;
+      }
+      if (f.size > 10 * 1024 * 1024) {
+        alert('File exceeds 10MB limit');
+        inp.value = '';
+        return;
+      }
+      selectedChatFile = f;
+      renderAttachPreview();
+    }
+  };
+
+  window.clearAttachFile = function() {
+    selectedChatFile = null;
+    $('filePicker').value = '';
+    renderAttachPreview();
+  };
+
+  function renderAttachPreview() {
+    const bar = $('attachPreview');
+    if (!selectedChatFile) {
+      bar.style.display = 'none';
+      bar.innerHTML = '';
+      return;
+    }
+    const isCsv = selectedChatFile.name.toLowerCase().endsWith('.csv');
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isCsv ? '📊' : '📄'} <b>${escapeHtml(selectedChatFile.name)}</b> (${formatBytes(selectedChatFile.size)})</span>
+      <button type="button" class="attach-x" onclick="clearAttachFile()">✕</button>
+    `;
+  }
+
   window.sendMessage = async function() {
     const input = $('mInput');
     const text = input.value.trim();
-    if (!text || !S.activeConv) return;
+    if (!text && !selectedChatFile) return;
+    if (!S.activeConv) return;
 
     input.value = '';
     autoExpand(input);
 
     try {
       Native.vibrate(20);
-      const res = await api(`/api/chat/messages/${S.activeConv.id}`, 'POST', { body: text });
-      if (res && res.message) {
-        S.messages.push(res.message);
-        renderMessages();
-        scrollToBottom();
+      if (selectedChatFile) {
+        const fd = new FormData();
+        fd.append('file', selectedChatFile);
+        if (text) fd.append('body', text);
+
+        const r = await fetch(`${S.server}/api/chat/conversations/${S.activeConv.id}/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + S.token
+          },
+          body: fd
+        });
+        const res = await r.json();
+        if (!r.ok) throw new Error(res.error || 'Upload failed');
+        clearAttachFile();
+        if (res && res.message) {
+          S.messages.push(res.message);
+          renderMessages();
+          scrollToBottom();
+        }
+      } else {
+        const res = await api(`/api/chat/messages/${S.activeConv.id}`, 'POST', { body: text });
+        if (res && res.message) {
+          S.messages.push(res.message);
+          renderMessages();
+          scrollToBottom();
+        }
       }
     } catch (e) {
       alert('Failed to send: ' + e.message);
     }
   };
 
-  // Message Action Sheet (Delete for Me, Delete for Everyone)
+  /* P21: Long Press Message Action Sheet */
+  let pressTimer = null;
+  let didLongPress = false;
+
+  window.startMsgPress = function(msgId, e) {
+    didLongPress = false;
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      didLongPress = true;
+      try { Native.vibrate(30); } catch (_) {}
+      openMsgActionSheet(msgId);
+    }, 450);
+  };
+
+  window.cancelMsgPress = function() {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  };
+
   window.openMsgActionSheet = function(msgId) {
     const msg = S.messages.find(m => m.id === msgId);
     if (!msg || msg.is_deleted) return;
@@ -1159,10 +1298,14 @@
 
   window.copySelectedMessage = function() {
     if (!S.selectedMsg) return;
+    const cleanText = S.selectedMsg.body || S.selectedMsg.attachment_name || '';
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(S.selectedMsg.body);
-      Native.toast('Copied to clipboard');
+      navigator.clipboard.writeText(cleanText);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = cleanText; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
     }
+    Native.toast('Copied to clipboard');
     closeSheet();
   };
 
