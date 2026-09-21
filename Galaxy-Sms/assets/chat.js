@@ -161,7 +161,7 @@
 
   /* ================= CHAT PAGE ================= */
   function buildChatPage() {
-    const page = $('page-chat'); if (!page) return;
+    const page = $('chatContentView') || $('page-chat'); if (!page) return;
     ensureStyle();
     if (page.dataset.built) return; page.dataset.built = '1';
     page.innerHTML = `
@@ -1001,7 +1001,13 @@
   /* ================= public API ================= */
   window.GXChat = {
     open(page) {
-      if (page === 'chat') { buildChatPage(); startRealtime(); refreshBadges(); loadConvs(); }
+      if (page === 'chat') {
+        const lockView = document.getElementById('chatLockView');
+        if (lockView && lockView.style.display !== 'none') {
+          return;
+        }
+        buildChatPage(); startRealtime(); refreshBadges(); loadConvs();
+      }
       else if (page === 'complaints') { buildComplaintsPage(); startRealtime(); refreshBadges(); loadComplaints(); }
     },
     refreshBadges,

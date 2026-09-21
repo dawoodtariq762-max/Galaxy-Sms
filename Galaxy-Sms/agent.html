@@ -518,7 +518,24 @@
       </section>
 
       <!-- P19e: INTERNAL CHAT + COMPLAINTS (GXChat builds UI at runtime) -->
-      <section class="page" id="page-chat"></section>
+      <section class="page" id="page-chat">
+        <!-- IN-PAGE CHAT SECURITY LOCK -->
+        <div id="chatLockView" style="display:none;padding:50px 16px;text-align:center">
+          <div class="card" style="max-width:440px;margin:20px auto;padding:40px 32px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.55);border:1px solid rgba(48,171,237,.3);border-radius:22px;background:linear-gradient(180deg,rgba(20,24,48,.96),rgba(12,16,36,.98))">
+            <div style="width:68px;height:68px;border-radius:34px;background:rgba(48,171,237,.14);border:1px solid rgba(48,171,237,.35);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#30ABED">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <h2 style="font-size:24px;margin:0 0 8px;font-weight:720;color:#FFFFFF">Chat Security</h2>
+            <p style="color:var(--text-2,#C9CCD2);font-size:14.5px;margin:0 0 24px">Enter your Security PIN</p>
+            <div style="max-width:300px;margin:0 auto">
+              <input type="password" id="chatPinInput" placeholder="Security PIN" maxlength="32" autocomplete="off" style="font-size:22px;letter-spacing:6px;text-align:center;padding:12px 14px;width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')unlockSectionWithPin('chat')">
+              <div id="chatPinErr" style="color:#FF5C7A;font-size:13px;margin-top:10px;min-height:20px;display:none"></div>
+              <button class="btn btn-blue" id="btnUnlockChat" style="width:100%;margin-top:18px;height:46px;font-size:15px;font-weight:700" onclick="unlockSectionWithPin('chat')">Unlock</button>
+            </div>
+          </div>
+        </div>
+        <div id="chatContentView" style="display:none"></div>
+      </section>
       <section class="page" id="page-complaints"></section>
 
       <!-- CLIENTS -->
@@ -532,6 +549,24 @@
 
       <!-- PAYMENT SECTION -->
             <section class="page" id="page-payment">
+        <!-- IN-PAGE PAYMENT SECURITY LOCK -->
+        <div id="paymentLockView" style="display:none;padding:50px 16px;text-align:center">
+          <div class="card" style="max-width:440px;margin:20px auto;padding:40px 32px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.55);border:1px solid rgba(48,171,237,.3);border-radius:22px;background:linear-gradient(180deg,rgba(20,24,48,.96),rgba(12,16,36,.98))">
+            <div style="width:68px;height:68px;border-radius:34px;background:rgba(48,171,237,.14);border:1px solid rgba(48,171,237,.35);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#30ABED">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <h2 style="font-size:24px;margin:0 0 8px;font-weight:720;color:#FFFFFF">Payment Security</h2>
+            <p style="color:var(--text-2,#C9CCD2);font-size:14.5px;margin:0 0 24px">Enter your Security PIN</p>
+            <div style="max-width:300px;margin:0 auto">
+              <input type="password" id="paymentPinInput" placeholder="Security PIN" maxlength="32" autocomplete="off" style="font-size:22px;letter-spacing:6px;text-align:center;padding:12px 14px;width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')unlockSectionWithPin('payment')">
+              <div id="paymentPinErr" style="color:#FF5C7A;font-size:13px;margin-top:10px;min-height:20px;display:none"></div>
+              <button class="btn btn-blue" id="btnUnlockPayment" style="width:100%;margin-top:18px;height:46px;font-size:15px;font-weight:700" onclick="unlockSectionWithPin('payment')">Unlock</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAYMENT CONTENT VIEW -->
+        <div id="paymentContentView" style="display:none">
         <div class="page-head"><div><h2>Payment Section</h2><div class="breadcrumb"><b>Payments</b> › Wallet & Requests</div></div></div>
         <div class="stats-grid">
           <div class="stat-card dash-metric d-blue"><div class="stat-info"><p>Daily Balance</p><h3 id="agtDailyBal">$0</h3><span id="agtDailyMin">Minimum: $0</span></div><div class="dash-go">D</div></div>
@@ -544,6 +579,8 @@
         </div>
         <div class="table-wrap" style="padding:15px 17px;margin-top:16px"><div class="table-controls"><div class="tc-left"><label>Payment History</label></div><div class="tc-right"><button type="button" class="gx-btn gx-blue"  onclick="loadAgentPayment()" data-tip="Refresh" title="Refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button></div></div></div>
         <div class="table-wrap"><div class="tscroll"><table><thead><tr><th>ID</th><th>Type</th><th>Amount</th><th>Binance UID</th><th>Status</th><th>Requested</th><th>TXID</th><th>Proof</th></tr></thead><tbody id="agtPayBody"></tbody></table></div><div class="table-foot"><div class="info" id="agtPayInfo"></div></div></div>
+      
+        </div>
       </section>
     </div>
   </div>
@@ -630,8 +667,6 @@
 <script>
 if(window.API){ API.guard('agent'); }
 /* P21: Security Lock for Chat and Payment */
-let pendingLockedPage = null;
-let pendingLockedEl = null;
 let chatSecurityEnabled = true;
 
 function isChatPaymentUnlocked(){
@@ -645,8 +680,9 @@ function updateNavLockIndicators(){
   const isUnlocked = isChatPaymentUnlocked();
   const chatLockEl = document.getElementById('chatNavLock');
   const payLockEl = document.getElementById('payNavLock');
-  if(chatLockEl) chatLockEl.style.display = (isUnlocked || chatSecurityEnabled === false) ? 'none' : 'inline-block';
-  if(payLockEl) payLockEl.style.display = (isUnlocked || chatSecurityEnabled === false) ? 'none' : 'inline-block';
+  const showLock = (!isUnlocked && chatSecurityEnabled !== false);
+  if(chatLockEl) chatLockEl.style.display = showLock ? 'inline-block' : 'none';
+  if(payLockEl) payLockEl.style.display = showLock ? 'inline-block' : 'none';
 }
 
 async function checkChatSecurityEnabled(){
@@ -666,66 +702,27 @@ async function checkChatSecurityEnabled(){
   }
 }
 
-async function shouldRequireLock(id){
-  if(id !== 'chat' && id !== 'payment') return false;
-  if(isChatPaymentUnlocked()) return false;
-  const active = await checkChatSecurityEnabled();
-  return active;
-}
+async function unlockSectionWithPin(section){
+  const isChat = (section === 'chat');
+  const inp = document.getElementById(isChat ? 'chatPinInput' : 'paymentPinInput');
+  const err = document.getElementById(isChat ? 'chatPinErr' : 'paymentPinErr');
+  const btn = document.getElementById(isChat ? 'btnUnlockChat' : 'btnUnlockPayment');
+  const pin = (inp ? inp.value : '').trim();
 
-function openChatLock(pageId, el){
-  pendingLockedPage = pageId || 'chat';
-  pendingLockedEl = el;
-  const isPay = (pageId === 'payment');
-  const title = isPay ? 'Payment Section Protected' : 'Internal Chat Protected';
-  const desc = isPay
-    ? 'This section contains sensitive financial and wallet data. Enter your <b>6-digit Chat App PIN / Password</b> to unlock access.'
-    : 'Enter your <b>6-digit Chat App PIN / Password</b> to unlock Internal Chat.';
-  document.getElementById('chatLockModalTitleText').textContent = title;
-  document.getElementById('chatLockDesc').innerHTML = desc;
-  const inp = document.getElementById('chatLockInput');
-  const err = document.getElementById('chatLockErr');
-  inp.value = '';
-  err.style.display = 'none';
-  err.textContent = '';
-  document.getElementById('chatLockModal').classList.add('show');
-  setTimeout(() => inp.focus(), 150);
-}
-
-function cancelChatLock(){
-  document.getElementById('chatLockModal').classList.remove('show');
-  pendingLockedPage = null;
-  pendingLockedEl = null;
-}
-
-function relockChatPayment(){
-  sessionStorage.removeItem('gx_chat_unlock_token');
-  sessionStorage.removeItem('gx_agent_sec_unlocked');
-  window.__chatUnlocked = false;
-  updateNavLockIndicators();
-  const cur = document.querySelector('.page.active');
-  const id = cur ? cur.id.replace('page-', '') : '';
-  if(id === 'chat' || id === 'payment'){
-    const dashNav = document.querySelector('.ritem[data-page="dashboard"]');
-    showPage('dashboard', dashNav);
-  }
-  alert('🔒 Chat & Payment have been locked.');
-}
-
-async function submitChatLock(){
-  const inp = document.getElementById('chatLockInput');
-  const err = document.getElementById('chatLockErr');
-  const btn = document.getElementById('btnChatLockSubmit');
-  const pin = (inp.value || '').trim();
   if(!pin){
-    err.textContent = 'Please enter your Chat PIN / password';
-    err.style.display = 'block';
-    inp.focus();
+    if(err){
+      err.textContent = 'Please enter your Security PIN';
+      err.style.display = 'block';
+    }
+    if(inp) inp.focus();
     return;
   }
-  btn.disabled = true;
-  btn.textContent = 'Verifying...';
-  err.style.display = 'none';
+
+  if(btn){
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+  }
+  if(err) err.style.display = 'none';
 
   try {
     const token = sessionStorage.getItem('ms_token') || localStorage.getItem('ms_token');
@@ -745,43 +742,75 @@ async function submitChatLock(){
       sessionStorage.setItem('gx_agent_sec_unlocked', '1');
       window.__chatUnlocked = true;
       updateNavLockIndicators();
-      document.getElementById('chatLockModal').classList.remove('show');
-      const targetPage = pendingLockedPage;
-      const targetEl = pendingLockedEl;
-      pendingLockedPage = null;
-      pendingLockedEl = null;
-      if(targetPage){
-        showPage(targetPage, targetEl);
-      }
+      if(inp) inp.value = '';
+      if(err){ err.style.display = 'none'; err.textContent = ''; }
+      revealUnlockedSection(section);
     } else {
-      err.textContent = data.error || 'Incorrect Chat App PIN / password';
-      err.style.display = 'block';
-      inp.select();
-      inp.focus();
+      if(err){
+        err.textContent = data.error || 'Access denied. Incorrect Security PIN';
+        err.style.display = 'block';
+      }
+      if(inp){ inp.select(); inp.focus(); }
     }
   } catch(e){
-    err.textContent = 'Verification failed: ' + e.message;
-    err.style.display = 'block';
+    if(err){
+      err.textContent = 'Verification failed: ' + e.message;
+      err.style.display = 'block';
+    }
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Verify & Unlock';
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = 'Unlock';
+    }
   }
 }
 
-// Check lock status on load
+function revealUnlockedSection(section){
+  if(section === 'payment'){
+    const lockView = document.getElementById('paymentLockView');
+    const contentView = document.getElementById('paymentContentView');
+    if(lockView) lockView.style.display = 'none';
+    if(contentView) contentView.style.display = 'block';
+    loadAgentPayment();
+  } else if(section === 'chat'){
+    const lockView = document.getElementById('chatLockView');
+    const contentView = document.getElementById('chatContentView');
+    if(lockView) lockView.style.display = 'none';
+    if(contentView) contentView.style.display = 'block';
+    if(window.GXChat) GXChat.open('chat');
+  }
+}
+
+function relockChatPayment(){
+  sessionStorage.removeItem('gx_chat_unlock_token');
+  sessionStorage.removeItem('gx_agent_sec_unlocked');
+  window.__chatUnlocked = false;
+  updateNavLockIndicators();
+
+  const paymentLockView = document.getElementById('paymentLockView');
+  const paymentContentView = document.getElementById('paymentContentView');
+  if(paymentLockView) paymentLockView.style.display = 'block';
+  if(paymentContentView) paymentContentView.style.display = 'none';
+
+  const chatLockView = document.getElementById('chatLockView');
+  const chatContentView = document.getElementById('chatContentView');
+  if(chatLockView) chatLockView.style.display = 'block';
+  if(chatContentView) chatContentView.style.display = 'none';
+
+  const cur = document.querySelector('.page.active');
+  const id = cur ? cur.id.replace('page-', '') : '';
+  if(id === 'chat' || id === 'payment'){
+    const dashNav = document.querySelector('.ritem[data-page="dashboard"]');
+    showPage('dashboard', dashNav);
+  }
+  alert('🔒 Chat & Payment have been locked.');
+}
+
+// Initial check on load
 checkChatSecurityEnabled().catch(()=>{});
 
 /* NAV */
 async function showPage(id,el){
-  if(id === 'chat' || id === 'payment'){
-    if(!isChatPaymentUnlocked()){
-      const needLock = await shouldRequireLock(id);
-      if(needLock){
-        openChatLock(id, el);
-        return;
-      }
-    }
-  }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const pg=document.getElementById('page-'+id);
   if(pg)pg.classList.add('active');
@@ -790,7 +819,50 @@ async function showPage(id,el){
   if(el)el.classList.add('active');
   document.getElementById('pageTitle').textContent=(el?el.querySelector('.lbl').textContent:'Dashboard');
   window.scrollTo({top:0,behavior:'smooth'});
-  if(typeof loadAgentPageData==='function')loadAgentPageData(id);
+
+  if(id === 'payment'){
+    await checkChatSecurityEnabled();
+    const isUnlocked = isChatPaymentUnlocked();
+    const lockView = document.getElementById('paymentLockView');
+    const contentView = document.getElementById('paymentContentView');
+    if(!isUnlocked){
+      if(lockView) lockView.style.display = 'block';
+      if(contentView) contentView.style.display = 'none';
+      const pinInp = document.getElementById('paymentPinInput');
+      if(pinInp){ pinInp.value = ''; setTimeout(() => pinInp.focus(), 100); }
+      const err = document.getElementById('paymentPinErr');
+      if(err){ err.style.display = 'none'; err.textContent = ''; }
+      return; // Do NOT load payment info or UID
+    } else {
+      if(lockView) lockView.style.display = 'none';
+      if(contentView) contentView.style.display = 'block';
+      loadAgentPayment();
+      return;
+    }
+  }
+
+  if(id === 'chat'){
+    await checkChatSecurityEnabled();
+    const isUnlocked = isChatPaymentUnlocked();
+    const lockView = document.getElementById('chatLockView');
+    const contentView = document.getElementById('chatContentView');
+    if(!isUnlocked){
+      if(lockView) lockView.style.display = 'block';
+      if(contentView) contentView.style.display = 'none';
+      const pinInp = document.getElementById('chatPinInput');
+      if(pinInp){ pinInp.value = ''; setTimeout(() => pinInp.focus(), 100); }
+      const err = document.getElementById('chatPinErr');
+      if(err){ err.style.display = 'none'; err.textContent = ''; }
+      return; // Do NOT load chat conversations or messages
+    } else {
+      if(lockView) lockView.style.display = 'none';
+      if(contentView) contentView.style.display = 'block';
+      if(window.GXChat) GXChat.open('chat');
+      return;
+    }
+  }
+
+  if(typeof loadAgentPageData==='function') loadAgentPageData(id);
 }
 
 document.querySelectorAll('.ritem[data-page]').forEach(n=>n.addEventListener('click',()=>showPage(n.dataset.page,n)));
@@ -1310,7 +1382,13 @@ async function loadAgentPageData(page){
     if(page==='bulkAlloc'){ await Promise.allSettled([loadClients(), loadNumberSummaryForBulk()]); return; }
     if(page==='clients'){ buildClients(); return loadClients(); }
     if(page==='chat'){
-      if(!isChatPaymentUnlocked()){ openChatLock('chat'); return; }
+      if(!isChatPaymentUnlocked()){
+        const lockView = document.getElementById('chatLockView');
+        const contentView = document.getElementById('chatContentView');
+        if(lockView) lockView.style.display = 'block';
+        if(contentView) contentView.style.display = 'none';
+        return;
+      }
       return window.GXChat?GXChat.open('chat'):null;
     }
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
@@ -1319,7 +1397,13 @@ async function loadAgentPageData(page){
     if(page==='clientStats'){ if(!document.getElementById('csBody')) buildClientStats(); return loadSms(); }
     if(['rangeStats','numberStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'Body')) buildDrill(k); return loadSms(); }
     if(page==='payment'){
-      if(!isChatPaymentUnlocked()){ openChatLock('payment'); return; }
+      if(!isChatPaymentUnlocked()){
+        const lockView = document.getElementById('paymentLockView');
+        const contentView = document.getElementById('paymentContentView');
+        if(lockView) lockView.style.display = 'block';
+        if(contentView) contentView.style.display = 'none';
+        return;
+      }
       return loadAgentPayment();
     }
   }catch(e){console.warn('loadAgentPageData failed',page,e);}

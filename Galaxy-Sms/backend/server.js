@@ -4005,7 +4005,10 @@ app.get('/api/panel-sharing/numbers', authRequired, requireRole('admin'), (req,r
   if(q){where.push('(LOWER(n.number) LIKE ? OR LOWER(r.name) LIKE ?)'); params.push('%'+String(q).toLowerCase()+'%','%'+String(q).toLowerCase()+'%');}
   if(range){where.push('r.name=?'); params.push(range);}
   const total=db.get(`SELECT COUNT(*) c FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')}`,params)?.c||0;
-  const limitRaw=String(req.query.limit||25); const limit=limitRaw.toLowerCase()==='all'?Math.min(total||1,100000):Math.min(Math.max(parseInt(limitRaw)||25,1),10000);
+  const limitRaw=String(req.query.limit||25);
+  let limit = parseInt(limitRaw, 10);
+  if (isNaN(limit) || limit < 1) limit = 25;
+  if (limit > 5000) limit = 5000;
   const totalPages=Math.max(1,Math.ceil(total/limit)); const page=Math.min(Math.max(parseInt(req.query.page||1)||1,1),totalPages); const offset=(page-1)*limit;
   const rows=db.all(`SELECT n.id,n.number,n.range_id,r.name AS range_name FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')} ORDER BY r.name COLLATE NOCASE,n.number LIMIT ? OFFSET ?`,[...params,limit,offset]);
   return {rows,total,page,limit,totalPages};

@@ -82,7 +82,10 @@ app.get('/api/panel-sharing/numbers', authRequired, requireRole('admin'), (req,r
   if(q){where.push('(LOWER(n.number) LIKE ? OR LOWER(r.name) LIKE ?)'); params.push('%'+String(q).toLowerCase()+'%','%'+String(q).toLowerCase()+'%');}
   if(range){where.push('r.name=?'); params.push(range);}
   const total=db.get(`SELECT COUNT(*) c FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')}`,params)?.c||0;
-  const limitRaw=String(req.query.limit||25); const limit=limitRaw.toLowerCase()==='all'?Math.min(total||1,100000):Math.min(Math.max(parseInt(limitRaw)||25,1),10000);
+  const limitRaw=String(req.query.limit||25);
+  let limit = parseInt(limitRaw, 10);
+  if (isNaN(limit) || limit < 1) limit = 25;
+  if (limit > 5000) limit = 5000;
   const totalPages=Math.max(1,Math.ceil(total/limit)); const page=Math.min(Math.max(parseInt(req.query.page||1)||1,1),totalPages); const offset=(page-1)*limit;
   const rows=db.all(`SELECT n.id,n.number,n.range_id,r.name AS range_name FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')} ORDER BY r.name COLLATE NOCASE,n.number LIMIT ? OFFSET ?`,[...params,limit,offset]);
   return res.json({rows,total,page,limit,totalPages});
@@ -444,7 +447,12 @@ async function run() {
     // Test limit=5000
     r = await fetch(`${base}/api/panel-sharing/numbers?limit=5000`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
     psData = await r.json();
-    assert(r.status === 200 && psData.limit === 5000, 'Panel sharing limit=5000 supported without clamp');
+    assert(r.status === 200 && psData.limit === 5000, 'Panel sharing limit=5000 supported');
+
+    // Test safe maximum clamp to 5000 when exceeding
+    r = await fetch(`${base}/api/panel-sharing/numbers?limit=10000`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    psData = await r.json();
+    assert(r.status === 200 && psData.limit === 5000, 'Panel sharing limit clamped to safe maximum 5000');
 
     // Verify UI files
     const psHtml = fs.readFileSync(path.join(__dirname, '../panel-sharing.html'), 'utf8');
@@ -452,6 +460,10 @@ async function run() {
 
     const agtHtml = fs.readFileSync(path.join(__dirname, '../agent.html'), 'utf8');
     assert(agtHtml.includes('chatNavLock') && agtHtml.includes('payNavLock') && agtHtml.includes('isChatPaymentUnlocked'), 'agent.html has chat & payment lock indicators and unlock verification');
+    assert(agtHtml.includes('id="paymentLockView"') && agtHtml.includes('id="paymentContentView"'), 'agent.html has paymentLockView and paymentContentView');
+    assert(agtHtml.includes('id="chatLockView"') && agtHtml.includes('id="chatContentView"'), 'agent.html has chatLockView and chatContentView');
+    assert(agtHtml.includes('id="paymentPinInput"') && agtHtml.includes('id="btnUnlockPayment"'), 'agent.html has paymentPinInput and btnUnlockPayment');
+    assert(agtHtml.includes('id="chatPinInput"') && agtHtml.includes('id="btnUnlockChat"'), 'agent.html has chatPinInput and btnUnlockChat');
 
   } finally {
     server.close();
