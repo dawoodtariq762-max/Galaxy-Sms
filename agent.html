@@ -466,7 +466,7 @@
 
       <!-- SMS NUMBERS -->
       <section class="page" id="page-numbers">
-        <div class="page-head"><div><h2>SMS Numbers</h2><div class="breadcrumb"><b>SMS Numbers</b> › My Numbers</div></div>
+        <div class="page-head"><div><h2>SMS Numbers <span class="gx-num-page-badge" style="font-size:14px;font-weight:600;color:var(--text,#e6ecfb);background:rgba(255,255,255,.08);padding:3px 9px;border-radius:6px;margin-left:10px;vertical-align:middle;display:inline-flex;align-items:center;gap:6px">Numbers: <span id="numPageCount">0</span> <button type="button" class="gx-copy-num-btn" id="btnCopyPageNumbers" onclick="copyCurrentPageNumbers(this)" title="Copy numbers" aria-label="Copy numbers" style="background:none;border:none;cursor:pointer;font-size:15px;padding:0;line-height:1;display:inline-flex;align-items:center;color:#38bdf8">📋</button></span></h2><div class="breadcrumb"><b>SMS Numbers</b> › My Numbers</div></div>
           <div class="head-actions">
             <button type="button" class="gx-btn gx-green"  onclick="openAllocAll()" data-tip="Allocate Selected" title="Allocate Selected" aria-label="Allocate Selected"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
             <button type="button" class="gx-btn danger" data-tip="Unallocate Selected" aria-label="Unallocate Selected" onclick="unallocSel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg></button>
@@ -485,8 +485,8 @@
             </div>
           </div>
           <div class="table-controls">
-            <div class="tc-left"><label>Show Records:</label><select id="numLen" onchange="renderNumbers()"><option>10</option><option selected>25</option><option value="All">All</option></select>
-            <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
+            <div class="tc-left"><label>Show Records:</label><select id="numLen" onchange="renderNumbers()"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option><option>1000</option><option>5000</option><option value="All">All</option></select>
+            <div class="exp-btns"><button type="button" class="gx-btn gx-blue" onclick="copyCurrentPageNumbers(this)" data-tip="Copy numbers" title="Copy numbers" aria-label="Copy numbers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
             <div class="tc-right"><label>Search:</label><input type="text" id="numSearch" oninput="renderNumbers()" placeholder="Search..."/></div></div>
           <div class="bulk-bar"><span class="info" id="selInfo">0 selected</span></div>
         </div>
@@ -1510,21 +1510,18 @@ async function renderNumbers(){
   state.page=data.page||1;state.totalPages=data.totalPages||1;
   numData=(data.rows||[]).map(r=>({id:r.id,range_id:r.range_id,range:r.range_name||'',number:r.number,rate:r.effective_rate||r.rate||'',client:r.client_name||'',client_id:r.client_id,sd:r.sd_limit||0,sw:r.sw_limit||0}));
   body.innerHTML=numData.map(r=>`<tr><td><input type="checkbox" class="rc" data-id="${r.id}" onchange="updSel()"/></td><td>${r.range}</td><td><b>${r.number}</b></td><td class="cell-money">${r.rate}</td><td>${r.client?`<span class="tag tag-cli">${r.client}</span>`:'<span class="tag tag-gray">Unallocated</span>'}</td><td class="muted">SD : ${r.sd} | SW : ${r.sw}</td></tr>`).join('')||`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No numbers found</td></tr>`;
+  const currentNumbers = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
+  const countEl = document.getElementById('numPageCount');
+  if(countEl) countEl.textContent = currentNumbers.length.toLocaleString();
   const badgeCount = document.getElementById('numBadgeCount');
-  if(badgeCount) badgeCount.textContent = (data.total !== undefined ? data.total : numData.length);
-  numInfo.innerHTML=`Showing ${agtShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers <button type="button" class="gx-copy-num-btn" onclick="copyNumbersOnly()" title="Copy Numbers Only" style="margin-left:6px;background:none;border:none;cursor:pointer;font-size:14px;color:#38bdf8" aria-label="Copy Numbers">📋</button>`;
+  if(badgeCount) badgeCount.textContent = currentNumbers.length.toLocaleString();
+  numInfo.innerHTML=`Showing ${agtShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers <button type="button" class="gx-copy-num-btn" onclick="copyCurrentPageNumbers(this)" title="Copy numbers" style="margin-left:6px;background:none;border:none;cursor:pointer;font-size:14px;color:#38bdf8" aria-label="Copy numbers">📋</button>`;
   const pag=numInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,state,renderNumbers);updSel();
 }
-async function copyNumbersOnly(){
-  const checked = (typeof selIds === 'function') ? selIds() : [];
-  let list = [];
-  if (checked.length > 0) {
-    list = (numData || []).filter(r => checked.includes(r.id)).map(r => String(r.number || '').trim()).filter(Boolean);
-  } else {
-    list = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
-  }
+async function copyCurrentPageNumbers(btn){
+  const list = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
   if (!list.length) {
-    alert('No numbers to copy.');
+    alert('No numbers on current page to copy.');
     return;
   }
   const text = list.join('\n');
@@ -1542,16 +1539,18 @@ async function copyNumbersOnly(){
       document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    const btn = document.getElementById('btnCopyNumbersOnly');
-    if (btn) {
-      const orig = btn.textContent;
-      btn.textContent = '✅';
-      setTimeout(() => { btn.textContent = orig; }, 1500);
+    const target = btn || document.getElementById('btnCopyPageNumbers') || document.getElementById('btnCopyNumbersOnly');
+    if (target) {
+      const origHtml = target.innerHTML;
+      target.innerHTML = '<span style="font-size:12px;color:#10b981;font-weight:600">Copied ✓</span>';
+      setTimeout(() => { target.innerHTML = origHtml; }, 1500);
     }
   } catch (err) {
     alert('Failed to copy numbers: ' + err.message);
   }
 }
+window.copyCurrentPageNumbers = copyCurrentPageNumbers;
+function copyNumbersOnly(btn){ return copyCurrentPageNumbers(btn); }
 window.copyNumbersOnly = copyNumbersOnly;
 async function loadNumbers(){return renderNumbers();}
 async function loadNumberSummaryForBulk(){

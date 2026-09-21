@@ -380,7 +380,7 @@
 
     <!-- SMS NUMBERS (assigned, view only) -->
     <section class="page" id="page-numbers">
-      <div class="page-head"><div><h2>SMS Numbers</h2><div class="breadcrumb"><b>My Panel</b> › Allocated Numbers</div></div>
+      <div class="page-head"><div><h2>SMS Numbers <span class="gx-num-page-badge" style="font-size:14px;font-weight:600;color:var(--text,#e6ecfb);background:rgba(255,255,255,.08);padding:3px 9px;border-radius:6px;margin-left:10px;vertical-align:middle;display:inline-flex;align-items:center;gap:6px">Numbers: <span id="numPageCount">0</span> <button type="button" class="gx-copy-num-btn" id="btnCopyPageNumbers" onclick="copyCurrentPageNumbers(this)" title="Copy numbers" aria-label="Copy numbers" style="background:none;border:none;cursor:pointer;font-size:15px;padding:0;line-height:1;display:inline-flex;align-items:center;color:#38bdf8">📋</button></span></h2><div class="breadcrumb"><b>My Panel</b> › Allocated Numbers</div></div>
         <div class="head-actions"><span class="masknote">🔒 Only numbers allocated to you</span></div></div>
       <div class="toolbar"><div class="filter-row">
         <select class="sel-lg" id="numRange"><option value="">Select Range</option></select>
@@ -388,8 +388,8 @@
         <button type="button" class="gx-btn"  onclick="document.getElementById('numRange').value='';document.getElementById('numSearch').value='';renderNumbers()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
       </div></div>
       <div class="table-wrap" style="padding:15px 17px;margin-top:0"><div class="table-controls">
-        <div class="tc-left"><label>Show Records:</label><select id="numLen" onchange="renderNumbers()"><option>10</option><option selected>25</option><option>50</option><option value="All">All</option></select>
-        <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
+        <div class="tc-left"><label>Show Records:</label><select id="numLen" onchange="renderNumbers()"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option><option value="All">All</option></select>
+        <div class="exp-btns"><button type="button" class="gx-btn gx-blue" onclick="copyCurrentPageNumbers(this)" data-tip="Copy numbers" title="Copy numbers" aria-label="Copy numbers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
         <div class="tc-right"><label>Search:</label><input type="text" id="numSearch" oninput="renderNumbers()" placeholder="Search..."/></div></div></div>
       <div class="table-wrap"><div class="tscroll"><table>
         <thead><tr><th class="sortable" onclick="sortNum('range')">Range <span class="sort">⇅</span></th><th class="sortable" onclick="sortNum('number')">Number <span class="sort" id="nSortHint">⇅</span></th><th>Payterm</th><th>Status</th><th>Payout</th><th>Last SMS Time</th><th>Limits</th></tr></thead>
@@ -624,9 +624,44 @@ async function renderNumbers(){
   state.page=data.page||1;state.totalPages=data.totalPages||1;
   numData=(data.rows||[]).map(r=>({range:r.range_name||'',number:r.number,payterm:r.payterm||'Weekly',status:'Active',payout:r.payout,last_sms_at:r.last_sms_at||'',sd:r.sd_limit||0,sw:r.sw_limit||0}));
   body.innerHTML=numData.map(r=>`<tr><td>${r.range}</td><td><b>${r.number}</b></td><td><span class="tag tag-gray">${r.payterm}</span></td><td><span class="tag tag-green">${r.status}</span></td><td data-label="Payout"><b>${cliPay(r.payout)}</b></td><td><span class="last-sms">${r.last_sms_at||'—'}</span></td><td class="muted">SD : ${r.sd} | SW : ${r.sw}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No allocated numbers found</td></tr>`;
-  numInfo.textContent=`Showing ${cliShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers`;
+  const currentNumbers = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
+  const countEl = document.getElementById('numPageCount');
+  if(countEl) countEl.textContent = currentNumbers.length.toLocaleString();
+  numInfo.innerHTML=`Showing ${cliShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers <button type="button" class="gx-copy-num-btn" onclick="copyCurrentPageNumbers(this)" title="Copy numbers" style="margin-left:6px;background:none;border:none;cursor:pointer;font-size:14px;color:#38bdf8" aria-label="Copy numbers">📋</button>`;
   const pag=numInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,state,renderNumbers);
 }
+async function copyCurrentPageNumbers(btn){
+  const list = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
+  if (!list.length) {
+    alert('No numbers on current page to copy.');
+    return;
+  }
+  const text = list.join('\n');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    const target = btn || document.getElementById('btnCopyPageNumbers');
+    if (target) {
+      const origHtml = target.innerHTML;
+      target.innerHTML = '<span style="font-size:12px;color:#10b981;font-weight:600">Copied ✓</span>';
+      setTimeout(() => { target.innerHTML = origHtml; }, 1500);
+    }
+  } catch (err) {
+    alert('Failed to copy numbers: ' + err.message);
+  }
+}
+window.copyCurrentPageNumbers = copyCurrentPageNumbers;
 async function loadNumbers(){return renderNumbers();}
 
 /* SERVER-SIDE SMS STATS (performance) */
