@@ -923,12 +923,6 @@ function createTables() {
   )`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_chat_cred_status ON chat_credentials(user_id, chat_enabled)`);
 
-  /* Ensure all non-admin users have a chat_credentials entry so security locks are strictly enforced */
-  try {
-    db.run(`INSERT OR IGNORE INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at)
-      SELECT id, password, 1, datetime('now') FROM users WHERE role != 'admin'`);
-  } catch (_) {}
-
   db.run(`CREATE TABLE IF NOT EXISTS chat_device_tokens (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL,

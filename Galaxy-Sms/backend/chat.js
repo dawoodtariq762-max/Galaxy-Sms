@@ -292,13 +292,11 @@ module.exports = function mountChat(app, deps) {
     }
 
     const cred = db.get('SELECT chat_enabled, chat_password_hash FROM chat_credentials WHERE user_id=?', [user.id]);
-    if (cred && (cred.chat_enabled === 0 || cred.chat_enabled === false)) {
-      return res.json({ chat_security_enabled: false, locked: false, unlocked: true });
-    }
+    const isSecurityActive = !!(cred && cred.chat_enabled === 1 && cred.chat_password_hash);
 
     const unlockHeader = req.headers['x-chat-unlock-token'];
-    let unlocked = false;
-    if (unlockHeader) {
+    let unlocked = !isSecurityActive;
+    if (isSecurityActive && unlockHeader) {
       try {
         const decoded = jwt.verify(unlockHeader, SECRET);
         if (decoded && decoded.type === 'chat_unlocked' && decoded.id === user.id) {
@@ -308,8 +306,8 @@ module.exports = function mountChat(app, deps) {
     }
 
     return res.json({
-      chat_security_enabled: true,
-      locked: !unlocked,
+      chat_security_enabled: isSecurityActive,
+      locked: isSecurityActive && !unlocked,
       unlocked: unlocked
     });
   });
@@ -331,27 +329,25 @@ module.exports = function mountChat(app, deps) {
       return res.json({ ok: true, message: 'Unlocked successfully', unlock_token: unlockToken });
     }
 
-    let cred = db.get('SELECT chat_enabled, chat_password_hash, failed_attempts, locked_until FROM chat_credentials WHERE user_id=?', [user.id]);
-    if (!cred) {
-      db.run('INSERT OR IGNORE INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime("now"))', [user.id, user.password]);
-      cred = db.get('SELECT chat_enabled, chat_password_hash, failed_attempts, locked_until FROM chat_credentials WHERE user_id=?', [user.id]);
+    const cred = db.get('SELECT chat_enabled, chat_password_hash, failed_attempts, locked_until FROM chat_credentials WHERE user_id=?', [user.id]);
+    if (!cred || !cred.chat_password_hash) {
+      return res.status(400).json({ ok: false, error: 'Chat PIN has not been set for your account. Please contact administrator.' });
     }
 
-    if (cred && cred.locked_until && new Date(cred.locked_until) > new Date()) {
+    if (cred.chat_enabled === 0) {
+      return res.status(400).json({ ok: false, error: 'Chat Security is currently disabled for your account.' });
+    }
+
+    if (cred.locked_until && new Date(cred.locked_until) > new Date()) {
       return res.status(429).json({ ok: false, error: 'Account temporarily locked due to multiple failed attempts. Please try again later.' });
     }
 
-    let match = cred && cred.chat_password_hash ? bcrypt.compareSync(password, cred.chat_password_hash) : false;
-    // Fallback: if separate PIN not yet set, match against user account password
-    if (!match && user.password && (!cred || user.password !== cred.chat_password_hash)) {
-      match = bcrypt.compareSync(password, user.password);
-    }
-
+    const match = bcrypt.compareSync(password, cred.chat_password_hash);
     if (!match) {
-      const attempts = ((cred && cred.failed_attempts) || 0) + 1;
+      const attempts = (cred.failed_attempts || 0) + 1;
       const lockUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60000).toISOString().slice(0, 19).replace('T', ' ') : null;
       db.run('UPDATE chat_credentials SET failed_attempts=?, locked_until=? WHERE user_id=?', [attempts, lockUntil, user.id]);
-      return res.status(400).json({ ok: false, error: 'Incorrect Chat Security PIN or Password' });
+      return res.status(400).json({ ok: false, error: 'Incorrect Chat App password / PIN' });
     }
 
     db.run(`UPDATE chat_credentials SET failed_attempts=0, locked_until=NULL, updated_at=datetime('now') WHERE user_id=?`, [user.id]);

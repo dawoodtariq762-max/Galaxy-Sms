@@ -540,7 +540,7 @@
       </div>
       <div class="table-controls">
         <div class="tc-left"><label>Show Records:</label><select id="numLen" onchange="renderNumbers()"><option>10</option><option selected>25</option><option>50</option><option value="All">All</option></select>
-        <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
+        <div class="exp-btns"><button type="button" class="gx-btn gx-blue" onclick="copyNumbersOnly()" data-tip="Copy Numbers Only" title="Copy Numbers Only" aria-label="Copy Numbers Only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
         <div class="tc-right"><label>Search:</label><input type="text" id="numSearch" oninput="renderNumbers()" placeholder="Search..."/></div></div>
       <div class="bulk-bar"><span class="info" id="selInfo">0 selected</span></div>
     </div>
@@ -1373,9 +1373,42 @@ async function renderNumbers(){
   state.page=data.page||1; state.totalPages=data.totalPages||1;
   numData=(data.rows||[]).map(r=>({id:r.id,range_id:r.range_id,range:r.range_name||'',number:r.number,rate:r.effective_rate||r.rate||'',agent:r.agent_name||'',agent_id:r.agent_id,sd:r.sd_limit||0,sw:r.sw_limit||0}));
   body.innerHTML=numData.map(r=>`<tr><td data-label="Selected"><input type="checkbox" class="rc" data-id="${r.id}" onchange="updSel()"/></td><td data-label="Range">${r.range}</td><td data-label="Number" class="gx-num"><b>${r.number}</b></td><td data-label="Country" class="muted">${(window.GX&&(GX.countryOf(r.number)||{}).name)||'—'}</td><td data-label="My Rate" class="cell-money">${r.rate}</td><td data-label="Agent">${r.agent?`<span class="tag tag-agt">${r.agent}</span>`:'<span class="tag tag-gray">—</span>'}</td><td data-label="Limits" class="muted">SD : ${r.sd} | SW : ${r.sw}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No numbers found</td></tr>`;
-  numInfo.textContent=`Showing ${serverShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers`;
+  numInfo.innerHTML=`Showing ${serverShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers <button type="button" class="gx-copy-num-btn" onclick="copyNumbersOnly()" title="Copy Numbers Only" style="margin-left:6px;background:none;border:none;cursor:pointer;font-size:14px;color:#38bdf8" aria-label="Copy Numbers">📋</button>`;
   const pag=numInfo.closest('.table-foot')?.querySelector('.pagination'); if(pag&&window.drawServerPagination)drawServerPagination(pag,state,renderNumbers); updSel();
 }
+async function copyNumbersOnly(){
+  const checked = (typeof selIds === 'function') ? selIds() : [];
+  let list = [];
+  if (checked.length > 0) {
+    list = (numData || []).filter(r => checked.includes(r.id)).map(r => String(r.number || '').trim()).filter(Boolean);
+  } else {
+    list = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
+  }
+  if (!list.length) {
+    alert('No numbers to copy.');
+    return;
+  }
+  const text = list.join('\n');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    alert(`Copied ${list.length} numbers to clipboard!`);
+  } catch (err) {
+    alert('Failed to copy numbers: ' + err.message);
+  }
+}
+window.copyNumbersOnly = copyNumbersOnly;
 async function loadNumbers(){ return renderNumbers(); }
 async function loadNumberSummaryForBulk(){
   try{

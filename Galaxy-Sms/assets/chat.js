@@ -1002,13 +1002,8 @@
   window.GXChat = {
     open(page) {
       if (page === 'chat') {
-        const isAgent = (ME.role === 'agent');
-        const isUnlocked = !!(sessionStorage.getItem('gx_chat_unlock_token'));
-        if (isAgent && !isUnlocked) {
-          const lockView = document.getElementById('chatLockView');
-          const contentView = document.getElementById('chatContentView');
-          if (lockView) lockView.style.display = 'block';
-          if (contentView) contentView.style.display = 'none';
+        const lockView = document.getElementById('chatLockView');
+        if (lockView && lockView.style.display !== 'none') {
           return;
         }
         buildChatPage(); startRealtime(); refreshBadges(); loadConvs();
@@ -1027,11 +1022,7 @@
   function fabInit() {
     if (!ME.id) return; /* not logged in — api.js guard handles redirect */
     ensureChatFab();
-    const isAgent = (ME.role === 'agent');
-    const isUnlocked = !!(sessionStorage.getItem('gx_chat_unlock_token'));
-    if (!isAgent || isUnlocked) {
-      startRealtime();
-    }
+    startRealtime();
     refreshBadges();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fabInit);

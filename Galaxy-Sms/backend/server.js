@@ -1219,11 +1219,12 @@ app.delete('/api/users/:id', authRequired, (req, res) => {
     db.execNoSave('BEGIN');
 
     // 1. Re-parent / detach child users to prevent FK constraint failure
-    db.runNoSave('UPDATE users SET parent_id = ? WHERE parent_id = ?', [target.parent_id || null, id]);
     if (target.role === 'manager') {
+      db.runNoSave('UPDATE users SET parent_id = NULL WHERE parent_id = ?', [id]);
       db.runNoSave('UPDATE numbers SET manager_id = NULL WHERE manager_id = ?', [id]);
       db.runNoSave('DELETE FROM cli_limits WHERE manager_id = ?', [id]);
     } else if (target.role === 'agent') {
+      db.runNoSave('UPDATE users SET parent_id = ? WHERE parent_id = ?', [target.parent_id || null, id]);
       db.runNoSave("UPDATE numbers SET agent_id = NULL, client_id = NULL, payout = '0' WHERE agent_id = ?", [id]);
       db.runNoSave('DELETE FROM agent_wallets WHERE agent_id = ?', [id]);
       db.runNoSave('DELETE FROM sharing_users WHERE agent_user_id = ?', [id]);
@@ -2131,7 +2132,7 @@ const NUMBER_PAGE_MAX_ADMIN = Math.max(NUMBER_PAGE_MAX, parseInt(process.env.NUM
    A lower-role user cannot get a bigger page by tampering with limit/all params: values are clamped here.
    Previous behaviour (recorded for rollback): every role capped at NUMBER_PAGE_MAX (1000);
    admin 'all' capped at NUMBER_PAGE_MAX_ADMIN (5000). */
-const ROLE_PAGE_MAX = { admin: 100000, manager: 5000, agent: 5000, client: 500, test: 500 };
+const ROLE_PAGE_MAX = { admin: 100000, manager: 5000, agent: 1000, client: 500, test: 500 };
 const ROLE_ALL_MAX  = { admin: 200000 }; /* 'All' page-size allowed for admin only; others fall back to their role cap */
 function rolePageMax(role) { return ROLE_PAGE_MAX[role] || 500; }
 /* P11: memory-safe big-page responses. Pages <= STREAM_JSON_MAX_ROWS are built
@@ -3775,13 +3776,10 @@ app.put('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res
 /* P21: Enforce Chat Security Unlock on Agent Payment endpoints */
 function requireAgentChatUnlock(req, res, next) {
   if (!req.user || req.user.role !== 'agent') return next();
-  if (req.user.type === 'chat') return next();
-
-  const cred = db.get('SELECT chat_enabled FROM chat_credentials WHERE user_id = ?', [req.user.id]);
-  if (cred && (cred.chat_enabled === 0 || cred.chat_enabled === false)) {
+  const cred = db.get('SELECT chat_enabled, chat_password_hash FROM chat_credentials WHERE user_id=?', [req.user.id]);
+  if (!cred || cred.chat_enabled !== 1 || !cred.chat_password_hash) {
     return next();
   }
-
   const token = req.headers['x-chat-unlock-token'];
   if (!token) {
     return res.status(403).json({ error: 'Chat security PIN verification required to access payment section', locked: true });
