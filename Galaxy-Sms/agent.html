@@ -407,7 +407,7 @@
       </div>
 
       <div class="rsec">Communication</div>
-      <div class="ritem" data-page="chat"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="lbl">Chat</span><span class="gx-nav-badge" id="gxChatBadge" style="display:none"></span></div>
+      <div class="ritem" data-page="chat"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="lbl">Chat</span><span class="gx-nav-lock" id="chatNavLock" style="margin-left:auto;font-size:12px;opacity:0.85">🔒</span><span class="gx-nav-badge" id="gxChatBadge" style="display:none"></span></div>
       <div class="ritem" data-page="complaints"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="lbl">Complaints</span><span class="gx-nav-badge" id="gxCompBadge" style="display:none"></span></div>
       <div class="ritem" data-page="clients"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg><span class="lbl">Client Management</span></div>
 
@@ -419,7 +419,7 @@
         <div class="rsubitem" data-page="rangeStats"><span class="d"></span><span class="lbl">Range Stats</span></div>
         <div class="rsubitem" data-page="numberStats"><span class="d"></span><span class="lbl">Number Stats</span></div>
       </div>
-      <div class="ritem" data-page="payment"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span class="lbl">Payment Section</span></div>
+      <div class="ritem" data-page="payment"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span class="lbl">Payment Section</span><span class="gx-nav-lock" id="payNavLock" style="margin-left:auto;font-size:12px;opacity:0.85">🔒</span></div>
     </nav>
   </aside>
 
@@ -634,28 +634,47 @@ let pendingLockedPage = null;
 let pendingLockedEl = null;
 let chatSecurityEnabled = true;
 
+function isChatPaymentUnlocked(){
+  const token = sessionStorage.getItem('gx_chat_unlock_token');
+  if(token) return true;
+  if(chatSecurityEnabled === false) return true;
+  return false;
+}
+
+function updateNavLockIndicators(){
+  const isUnlocked = isChatPaymentUnlocked();
+  const chatLockEl = document.getElementById('chatNavLock');
+  const payLockEl = document.getElementById('payNavLock');
+  if(chatLockEl) chatLockEl.style.display = (isUnlocked || chatSecurityEnabled === false) ? 'none' : 'inline-block';
+  if(payLockEl) payLockEl.style.display = (isUnlocked || chatSecurityEnabled === false) ? 'none' : 'inline-block';
+}
+
 async function checkChatSecurityEnabled(){
   try {
     const res = await API.get('/chat/auth/lock-status');
     chatSecurityEnabled = !!(res && res.chat_security_enabled);
+    if(res && res.unlocked){
+      sessionStorage.setItem('gx_agent_sec_unlocked', '1');
+      updateNavLockIndicators();
+      return false;
+    }
+    updateNavLockIndicators();
     return chatSecurityEnabled;
   } catch (e) {
+    updateNavLockIndicators();
     return chatSecurityEnabled;
   }
 }
 
 async function shouldRequireLock(id){
   if(id !== 'chat' && id !== 'payment') return false;
-  // If already unlocked in this session
-  const unlock = sessionStorage.getItem('gx_chat_unlock_token');
-  if(unlock) return false;
-  // Check if admin has enabled chat security for this user
+  if(isChatPaymentUnlocked()) return false;
   const active = await checkChatSecurityEnabled();
   return active;
 }
 
 function openChatLock(pageId, el){
-  pendingLockedPage = pageId;
+  pendingLockedPage = pageId || 'chat';
   pendingLockedEl = el;
   const isPay = (pageId === 'payment');
   const title = isPay ? 'Payment Section Protected' : 'Internal Chat Protected';
@@ -683,6 +702,7 @@ function relockChatPayment(){
   sessionStorage.removeItem('gx_chat_unlock_token');
   sessionStorage.removeItem('gx_agent_sec_unlocked');
   window.__chatUnlocked = false;
+  updateNavLockIndicators();
   const cur = document.querySelector('.page.active');
   const id = cur ? cur.id.replace('page-', '') : '';
   if(id === 'chat' || id === 'payment'){
@@ -724,6 +744,7 @@ async function submitChatLock(){
       }
       sessionStorage.setItem('gx_agent_sec_unlocked', '1');
       window.__chatUnlocked = true;
+      updateNavLockIndicators();
       document.getElementById('chatLockModal').classList.remove('show');
       const targetPage = pendingLockedPage;
       const targetEl = pendingLockedEl;
@@ -747,13 +768,18 @@ async function submitChatLock(){
   }
 }
 
+// Check lock status on load
+checkChatSecurityEnabled().catch(()=>{});
+
 /* NAV */
 async function showPage(id,el){
   if(id === 'chat' || id === 'payment'){
-    const needLock = await shouldRequireLock(id);
-    if(needLock){
-      openChatLock(id, el);
-      return;
+    if(!isChatPaymentUnlocked()){
+      const needLock = await shouldRequireLock(id);
+      if(needLock){
+        openChatLock(id, el);
+        return;
+      }
     }
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -766,20 +792,7 @@ async function showPage(id,el){
   window.scrollTo({top:0,behavior:'smooth'});
   if(typeof loadAgentPageData==='function')loadAgentPageData(id);
 }
-  if((id === 'chat' || id === 'payment') && !isChatPaymentUnlocked()){
-    openChatLock(id, el);
-    return;
-  }
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  const pg=document.getElementById('page-'+id);
-  if(pg)pg.classList.add('active');
-  document.querySelectorAll('.ritem').forEach(n=>n.classList.remove('active'));
-  document.querySelectorAll('.rsubitem').forEach(n=>n.classList.remove('active'));
-  if(el)el.classList.add('active');
-  document.getElementById('pageTitle').textContent=(el?el.querySelector('.lbl').textContent:'Dashboard');
-  window.scrollTo({top:0,behavior:'smooth'});
-  if(typeof loadAgentPageData==='function')loadAgentPageData(id);
-}
+
 document.querySelectorAll('.ritem[data-page]').forEach(n=>n.addEventListener('click',()=>showPage(n.dataset.page,n)));
 document.querySelectorAll('.rsubitem').forEach(s=>s.addEventListener('click',()=>{showPage(s.dataset.page,s);const p=s.closest('.rsub').previousElementSibling;if(p)p.classList.add('active');}));
 function toggleSub(subId,pId){document.getElementById(subId).classList.toggle('open');document.getElementById(pId).classList.toggle('open');}

@@ -76,6 +76,18 @@ app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), requ
   res.json({ agent_id: req.user.id, binance_uid: '123456789' });
 });
 
+app.get('/api/panel-sharing/numbers', authRequired, requireRole('admin'), (req,res)=>{
+  const q=String(req.query.search||'').trim(); const range=String(req.query.range||'').trim();
+  const where=['n.manager_id IS NULL','n.agent_id IS NULL','n.client_id IS NULL',"COALESCE(r.deleted_at,'')=''"], params=[];
+  if(q){where.push('(LOWER(n.number) LIKE ? OR LOWER(r.name) LIKE ?)'); params.push('%'+String(q).toLowerCase()+'%','%'+String(q).toLowerCase()+'%');}
+  if(range){where.push('r.name=?'); params.push(range);}
+  const total=db.get(`SELECT COUNT(*) c FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')}`,params)?.c||0;
+  const limitRaw=String(req.query.limit||25); const limit=limitRaw.toLowerCase()==='all'?Math.min(total||1,100000):Math.min(Math.max(parseInt(limitRaw)||25,1),10000);
+  const totalPages=Math.max(1,Math.ceil(total/limit)); const page=Math.min(Math.max(parseInt(req.query.page||1)||1,1),totalPages); const offset=(page-1)*limit;
+  const rows=db.all(`SELECT n.id,n.number,n.range_id,r.name AS range_name FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')} ORDER BY r.name COLLATE NOCASE,n.number LIMIT ? OFFSET ?`,[...params,limit,offset]);
+  return res.json({rows,total,page,limit,totalPages});
+});
+
 let passed = 0;
 let failed = 0;
 function assert(cond, msg) {
@@ -395,6 +407,51 @@ async function run() {
     const clientToken = jwt.sign({ id: 5, username: 'client1', role: 'client' }, SECRET);
     r = await fetch(`${base}/api/chat/messages/${csvMsgId}/download?token=${clientToken}`);
     assert(r.status === 403, 'Unauthorized user blocked from downloading file (403)');
+
+    console.log('\n--- 8. Panel Sharing Page Size (25, 50, 100, 500, 1000, 2000, 5000, all) & Download ---');
+    // Seed ranges and 250 numbers
+    db.run(`INSERT INTO ranges (name, country, currency, payment_type) VALUES ('TEST-SHARING-RANGE', 'UK', 'USD', 'daily')`);
+    const testRange = db.get(`SELECT id FROM ranges WHERE name='TEST-SHARING-RANGE'`);
+    for (let i = 1; i <= 250; i++) {
+      db.run(`INSERT INTO numbers (number, range_id) VALUES (?, ?)`, [`+447111000${String(i).padStart(3, '0')}`, testRange.id]);
+    }
+
+    // Test limit=25
+    r = await fetch(`${base}/api/panel-sharing/numbers?limit=25`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    let psData = await r.json();
+    assert(r.status === 200 && psData.rows.length === 25, 'Panel sharing limit=25 returns 25 rows');
+
+    // Test limit=50
+    r = await fetch(`${base}/api/panel-sharing/numbers?limit=50`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    psData = await r.json();
+    assert(r.status === 200 && psData.rows.length === 50, 'Panel sharing limit=50 returns 50 rows');
+
+    // Test limit=100
+    r = await fetch(`${base}/api/panel-sharing/numbers?limit=100`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    psData = await r.json();
+    assert(r.status === 200 && psData.rows.length === 100, 'Panel sharing limit=100 returns 100 rows');
+
+    // Test limit=500 (returns all 250 available)
+    r = await fetch(`${base}/api/panel-sharing/numbers?limit=500`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    psData = await r.json();
+    assert(r.status === 200 && psData.rows.length === 250, 'Panel sharing limit=500 returns 250 rows on 1 page');
+
+    // Test limit=2000
+    r = await fetch(`${base}/api/panel-sharing/numbers?limit=2000`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    psData = await r.json();
+    assert(r.status === 200 && psData.limit === 2000, 'Panel sharing limit=2000 supported without clamp');
+
+    // Test limit=5000
+    r = await fetch(`${base}/api/panel-sharing/numbers?limit=5000`, { headers: { 'Authorization': `Bearer ${adminToken}` } });
+    psData = await r.json();
+    assert(r.status === 200 && psData.limit === 5000, 'Panel sharing limit=5000 supported without clamp');
+
+    // Verify UI files
+    const psHtml = fs.readFileSync(path.join(__dirname, '../panel-sharing.html'), 'utf8');
+    assert(psHtml.includes('id="numLimit"') && psHtml.includes('value="5000"') && psHtml.includes('downloadAllFilteredNumbers'), 'panel-sharing.html has dropdown options (25-5000) and download function');
+
+    const agtHtml = fs.readFileSync(path.join(__dirname, '../agent.html'), 'utf8');
+    assert(agtHtml.includes('chatNavLock') && agtHtml.includes('payNavLock') && agtHtml.includes('isChatPaymentUnlocked'), 'agent.html has chat & payment lock indicators and unlock verification');
 
   } finally {
     server.close();
