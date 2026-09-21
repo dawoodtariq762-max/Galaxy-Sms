@@ -1219,11 +1219,12 @@ app.delete('/api/users/:id', authRequired, (req, res) => {
     db.execNoSave('BEGIN');
 
     // 1. Re-parent / detach child users to prevent FK constraint failure
-    db.runNoSave('UPDATE users SET parent_id = ? WHERE parent_id = ?', [target.parent_id || null, id]);
     if (target.role === 'manager') {
+      db.runNoSave('UPDATE users SET parent_id = NULL WHERE parent_id = ?', [id]);
       db.runNoSave('UPDATE numbers SET manager_id = NULL WHERE manager_id = ?', [id]);
       db.runNoSave('DELETE FROM cli_limits WHERE manager_id = ?', [id]);
     } else if (target.role === 'agent') {
+      db.runNoSave('UPDATE users SET parent_id = ? WHERE parent_id = ?', [target.parent_id || null, id]);
       db.runNoSave("UPDATE numbers SET agent_id = NULL, client_id = NULL, payout = '0' WHERE agent_id = ?", [id]);
       db.runNoSave('DELETE FROM agent_wallets WHERE agent_id = ?', [id]);
       db.runNoSave('DELETE FROM sharing_users WHERE agent_user_id = ?', [id]);
