@@ -1,0 +1,23 @@
+{
+  "name": "pwbench-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PowerX temporary benchmark laboratory — standalone, removable, isolated bench-DB only. NOT a panel feature.",
+  "scripts": {
+    "bench:selftest": "node pwbench.js selftest",
+    "bench:inventory": "node pwbench.js inventory",
+    "bench:ingest": "node pwbench.js ingest",
+    "bench:users": "node pwbench.js users",
+    "bench:allocation": "node pwbench.js allocation",
+    "bench:isolation": "node pwbench.js isolation",
+    "bench:combined": "node pwbench.js combined",
+    "bench:burst": "node pwbench.js burst",
+    "bench:random": "node pwbench.js random",
+    "bench:soak": "node pwbench.js soak",
+    "bench:extreme": "node pwbench.js extreme",
+    "bench:full": "node pwbench.js full",
+    "bench:stop": "node pwbench.js stop",
+    "bench:report": "node pwbench.js report",
+    "bench:cleanup": "node pwbench.js cleanup"
+  }
+}

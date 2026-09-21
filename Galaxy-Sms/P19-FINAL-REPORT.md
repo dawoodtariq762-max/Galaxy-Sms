@@ -1,0 +1,902 @@
+# GALAXY SMS — P19 FINAL REPORT (FIX #1–#4 + NEW FEATURE)
+
+**Task:** "GALAXY SMS — REQUIRED FIXES + NEW FEATURES" (4 items)
+**Date:** 2026-09-15 · **Base commit:** `1e0e004` (main)
+**Verdict:** All 4 items implemented and verified. Backend suite **112/112 PASS**, UI suite **36/36 PASS**. During verification **1 pre-existing CRITICAL bug** (not caused by this task) was found and minimally fixed — see item 15. No unrelated system was changed.
+
+---
+
+## 1. Overall summary (what changed, in one screen)
+
+| Fix | What it does now | Files |
+|---|---|---|
+| FIX #1 AI allocation limit | Default 500→**100**, admin-configurable 1–5000, backend-enforced, survives restart. Panel/admin/manager limits untouched. | `backend/assistant.js`, `backend/schema.js`, `admin.html` |
+| FIX #2 delete + SMS cleanup | Number deleted WITH its SMS ⇒ records vanish from dashboard/stats/reports immediately; no resurrection on refresh; DST-safe; ledger immutable. Delete WITHOUT SMS ⇒ old behaviour kept. | `backend/server.js` |
+| FIX #3 CLI filter | "SMS Support" page (= **SMS Report**) me CLI dropdown/box **removed** for Admin/Manager/Agent. CLI filtering now lives in **SMS Detailed Report** as a server-side, role-scoped **facet** (tick CLI → list of CLIs + SMS + payout → click → filtered). Client panel untouched. | `backend/server.js`, `admin.html`, `manager.html`, `agent.html` |
+| FIX #4 (NEW) Admin allocation rate override | Rate Management range rate = default; **only Admin** may override per-allocation (stored on `numbers.rate`); two allocations to same agent with different rates coexist; payment ledger snapshots rate at SMS time; rate ≠ payment frequency. | `backend/server.js`, `admin.html` |
+
+`api.js` **unchanged** (0 diff) → **no `?v=` bump needed**. `client.html` **unchanged**. Single Node process + single SQLite file preserved (PM2 instances:1).
+
+---
+
+## 2. FIX #1 — Root cause & exact behaviour
+
+- **Before:** AI assistant's allocation flow allowed up to 500/quantity with no configurable cap; the hard-coded limit lived only inside the assistant intent code.
+- **Now (exact behaviour):**
+  - Default **100** per range (`AI_ALLOC_DEFAULT_MAX = 100`, `backend/assistant.js:39`).
+  - Admin can change it in the **existing AI Knowledge settings UI** (`admin.html` AI Settings → "AI Allocation Limit" input + Save). Stored in the **existing settings architecture** (`assistant_settings` KV table, key `alloc_max`) — **no new settings system**.
+  - Backend enforcement at **both** steps of the AI flow: quantity entry (`assistant.js:391`) and confirm step re-check (`assistant.js:411`). Over-limit reply: *"The maximum I can provide is N numbers per range."* Under-limit quantities pass normally (availability may still refuse for pool reasons — unchanged behaviour).
+  - Range 1–5000 (hard cap `AI_ALLOC_HARD_CAP`), integer only. Invalid values → HTTP 400.
+  - **Only the AI flow is capped.** Panel (admin/manager) bulk allocation and smart-divide panel paths are untouched (verified: panel allocated 8 when AI limit was 5).
+  - Survives restart (value read from DB each time; verified in restart test P2-1/P2-3).
+
+## 3. FIX #1 — APIs / schema / implementation locations
+
+- **API:** `GET /api/assistant/knowledge` → response now includes `settings.alloc_max` (`assistant.js:296`). `PUT /api/assistant/knowledge-settings` accepts `alloc_max` (`assistant.js:326–333`); admin-only (manager/agent get 403 — pre-existing role gate, unchanged).
+- **Schema:** `backend/schema.js:253` — seed `INSERT INTO assistant_settings (key,value) VALUES ('alloc_max','100')` if absent (settings/migration affects future only; existing DBs get the default on next boot; admin's saved value always wins).
+- **UI:** `admin.html:447–448` input `#aiAllocMax` + Save button; `admin.html:1638` auto-fill from settings; `admin.html:1659` `saveAiAllocMax()` (PUT) with client-side 1–5000 guard and Roman-Urdu alert.
+
+## 4. FIX #1 — Tests performed + results (all PASS)
+
+Default=100 (F1-1) · flow mentions "max 100" (F1-2) · qty 150 refused with exact message (F1-3) · qty 100 passes limit (F1-4) · admin sets 50 → qty 60 refused (F1-5/6) · invalid `abc`/`0`/`-5`/`5001`/`2.5` → 400 (F1-7 — `2.5` rejection was **hardened during testing**, see item 16) · manager PUT → 403, agent PUT → 403 (F1-8) · 100/200/500/1000 accepted (F1-9) · AI executes 3 at limit 5 (F1-11) · AI refuses 6 at limit 5 with exact message (F1-12) · panel allocates 8 > AI limit 5 unaffected (F1-13) · value survives restart + still enforced after restart (P2-1/P2-3) · UI auto-fill, save path, invalid-UI-block (UI-A2…A5).
+
+---
+
+## 5. FIX #2 — Root cause
+
+When a number was deleted together with its SMS, the `sms_records` rows were deleted, but the **daily stats table kept the aggregate rows** (sms count / payout per UK date+owner+CLI). Additionally the **read caches** (dashboard, stats-summary, sms lists) were keyed by version counters that were **not bumped** by the delete, so stale summaries kept being served and "re-appeared" after refresh. A second, subtler bug: the stats-decrement computed the UK date of each deleted SMS with a fixed `+60min` offset — **wrong during BST for winter (GMT) timestamps**, so winter rows could survive as stale aggregates.
+
+## 6. FIX #2 — Implementation (files/locations)
+
+- `backend/server.js` `deleteNumbersFromRows()` (line 2293):
+  - For each deleted SMS row the daily-stats decrement now uses **`ukStatDate(ts)`** (line 87) — the exact DST-safe UK-date helper the ingest path uses — instead of the fixed +60min offset. Old line preserved in comment for rollback.
+  - Calls `bumpNumbersVer()` after the delete.
+- Cache invalidation (already-existing version-key system, **reused** — no new cache layer): `numbers_ver` is now passed as `verKey` to `cachedJson(...)` on: **dashboard summary, `/api/stats-summary/*`, `/api/sms/clis`, `/api/sms-numbers`, `/api/sms/paged` (cached variant)**. Effect: any delete/import/allocation instantly invalidates all derived views.
+- Ledger untouched (immutability preserved). Delete-without-SMS path untouched.
+
+## 7. FIX #2 — Tests performed + results (all PASS)
+
+Baseline 9-today/10-total (incl. 1 winter GMT row + 1 UK-boundary row inserted exactly as ingest would key them) → delete n0 WITH sms: `deleted_sms=4` (F2-3) · dashboard drops 3/4 **immediately** (F2-4/5) · **second refresh identical — no resurrection** (F2-6) · deleted CLIs 111/222 gone, survivors 333/444/555/888 intact (F2-7/8) · **winter row removed under the correct UK key 2026-01-15** — the old buggy code would have keyed 2026-01-16 during BST and left the row stale (F2-9) · report rows gone (F2-10/11) · no orphan/negative stats rows (F2-12) · **payment ledger count unchanged** before=8 after=8 (F2-13) · `sms_records` fully deleted (F2-14) · delete n2 WITHOUT sms: history/reports/dashboard all preserved (F2-15…18) · dashboard consistent after server restart (P2-4).
+
+---
+
+## 8. FIX #3 — Terminology mapping (decision, as instructed)
+
+- Owner's **"SMS Support"** = the **SMS Report** page (CDR Stats → SMS Report) in all three panels.
+- Owner's **"Grade"** = **Range** (existing filter, kept as-is; action identical either way).
+- **CLI filtering belongs in SMS Detailed Report.**
+
+## 9. FIX #3 — Backend implementation
+
+- **Removed from SMS Report data path:** the CLI select population for admin/manager/agent (rollback comments left in place: `admin.html:1261`, `manager.html:905`, `agent.html:760`).
+- **SMS Detail is now facet-based**, powered by the existing `/api/stats-summary/:by` endpoint (`backend/server.js:2752`) which was extended with the **`cli` and `provider` dimensions** (admin/manager/agent; per-role allowed dims already existed). The endpoint is **server-side role-scoped** (same scope engine as every other report — no frontend-only hiding), respects **UK timezone date rules**, and combines with **Date / Time window / Range / Number / Manager|Agent / search** filters. Facet results return exactly: **CLI + N SMS + $ payout**.
+- Detail drill uses the existing `/api/sms/paged` with a `cli` param (role+date scoped) — efficient pagination, no global CLI dump into the frontend.
+- `/api/sms/clis` (older endpoint) left intact for the client panel.
+
+## 10. FIX#3 — Panel UI changes
+
+- **admin / manager / agent:** SMS Report filter row now has Date/Time/Range/Number/Manager(+Agent) only — **the CLI dropdown and the "All CLI" box are gone and were NOT replaced by another dropdown**. SMS Detailed Report gained the facet UI: tick **CLI** (or Number/Range/Manager/Provider) → results area lists the values **from the current authorized, dated dataset** (CLI · Total OTPs · Total Payout) → **click a value** → detail rows filter to it (chip shows the active pick, ✕ clears; changing a tick resets the drill). No selection = all rows.
+  - Panel dim sets: admin `cli>number>range>manager>provider` · manager `cli>number>range>agent` · agent `cli>number>range>client` (agent also got the **Time filter wired** into the SMS Detail query — it existed in HTML but was not part of the query args before).
+  - Legacy duplicated (dead) `renderSmsDetail` copies at the top of manager/agent were neutralized in-place (`*_legacy_dead_P19` + early `return`) — the LIVE bottom definitions win; **nothing was deleted**.
+- **client.html: zero changes** — `stCli` behaviour preserved (verified).
+
+## 11. FIX #3 — Tests performed + results (all PASS)
+
+Admin facet = today's dataset only, no global dump (F3-1) · payout math per allocation rate, 333 = 2×0.013 = 0.026 (F3-2) · **agent sees only own CLIs** 333/555/666 (F3-3) · **manager sees subtree only** 333/555/666/888 — not direct-admin A2 CLIs 444/121/131 (F3-4) · client sees only own data (F3-5) · UK boundary SMS (yesterday 23:30Z = UK today) excluded from UK-yesterday, included in UK-today (F3-6/7) · combos: cli+range+provider (F3-8), cli+manager (F3-9), range-facet narrowed by CLI pick (F3-10), provider facet (F3-11), cli+time-window (F3-12) · drill `/sms/paged?cli=333` → only 333 rows (F3-13) · `/sms/clis` role+date scoped (F3-14) · UI: srCli absent + other filters intact in all three panels, facet→pick→chip→unpick flow against live data (UI-A6…A11, UI-M2/M5, UI-G2/G4/G5/G6), client stCli present (UI-C2).
+
+---
+
+## 12. FIX #4 (NEW) — Backend implementation
+
+- **Validation:** `validatedAllocationRate(user, raw)` (`server.js:2051`) — **only admin** rate params are honoured; manager/agent rate params are **silently ignored** (same pattern the codebase already uses for payout → manager gets **no new ability**). Valid = positive decimal ≤ 6 decimal places ≤ 100000, stored as **decimal string** (project convention). Rejects: negative (sign-check added — see item 16), malformed, 7-dp, huge, zero.
+- **Storage:** `handleAllocate` (`server.js:2080–2118`) — admin sends `rate` ⇒ stored on the allocated rows in **`numbers.rate`** (per-number = allocation-level; empty string = "use Rate Management default"). Same for the admin **smart-divide** path (`server.js:2539` rate param + `rate_override` audit field). **Rate Management values are never modified by allocation.**
+- **Coexistence:** because the rate lives per number, two allocations to the same agent with different rates coexist (verified F4-E).
+- **Payment engine — reused, not duplicated:** `payoutRateForPaymentCycle()` (`server.js:1192`) now checks **`number_rate` (the allocation override) first**, for **all four payment cycles**, then falls back to the range cycle rate. The SMS row and the **payment ledger snapshot the rate at SMS time** (existing engine behaviour — no historical recalculation; verified F4-F3: old rows keep 0.013 even after Rate Management changed to 0.025).
+- **Rate ≠ frequency:** `numbers.payterm` (cycle) and `numbers.rate` are independent columns; `users.payment_type` is **never** touched by allocation (P12 rule preserved — before/after verified F4-P12).
+- **Rate-lock on moves:** Admin→Manager and Manager→Agent moves **keep** the admin-set rate (manager cannot change it — has no rate param anyway). Agent→Client keeps rate and sets the client `payout` (existing rule). Unallocate clears the override (`rate=''`).
+
+## 13. FIX #4 — Admin UI
+
+- **Bulk "Allocate" modal** (`allocAllModal`): new **Rate** input `#aaRate` prefilled with the **Rate Management default of the selected numbers' range** for the chosen cycle (`aaRefreshDefaultRate()`), with hint: *"Default rate Rate Management se aata hai. Value change karne par sirf YEH allocation override hota hai — Rate Management / Agent ka global rate change NAHI hota."*
+- **Range Allocation toolbar:** Rate input `#allocRate` + refresh on range/cycle change.
+- **Per-range row:** Rate input `ar<i>` prefilled with that range's cycle rate.
+- Manager/agent panels: **no rate UI at all** (verified UI-M3/G3).
+
+## 14. FIX #4 — Tests performed + results (all PASS)
+
+A: admin→agent default ⇒ `numbers.rate` stays '' (F4-A) · B: override 0.013 lands on both numbers (F4-B) · C/D: admin→manager default + override kept (F4-C/D) · **D2: smart-divide with rate 0.017** (F4-D2) · E: coexisting rates ''+0.013 on same agent (F4-E) · M1/M2: **manager→agent keeps admin 0.013 (rate-lock)**, manager's own rate param silently ignored (F4-M1/M2) · AC: agent→client keeps rate + sets payout (F4-AC) · V1–V6: negative/malformed/7-dp/too-large/zero/smart-divide-bad all 400 (F4-V*) · H: payouts use range 0.020 when no override; **allocation rate 0.013 beats range 0.010**; ledger amount snapshots 0.013 (F4-H1…H4) · F: existing override survives Rate Mgmt change; old SMS keeps 0.013 snapshot; new allocation (no override) uses NEW range rate 0.025 (F4-F0…F4) · G: rate+frequency independent (0.010/daily, 0.013/weekly_7_7, ''/monthly ⇒ 0.020) with matching payouts + payment types (F4-G) · P12 untouched (F4-P12) · numbers list `effective_rate` shows override (F4-DISP) · unallocate clears rate (F4-U) · rates survive restart (P2-2) · **UI E2E: default auto-fill 0.020 from Rate Management, override 0.019 via the real modal flow lands on the number, Rate Management unchanged** (UI-A12…A17).
+
+---
+
+## 15. BONUS FIX — pre-existing CRITICAL allocation bug (found by this task's tests, fixed minimally)
+
+- **Bug:** commit `f31ee62` (2026-09-13, Phase-1 audit guard #21–#25) introduced an `ownGuard` in `handleAllocate` that only allowed **fully-unallocated** numbers. Consequence in production: **Manager→Agent and Agent→Client allocations from the panel were silently SKIPPED** (`allocated:0, skipped:N`) — and the panels alerted "✅ N numbers allocated" using the *selected* count, so users never saw the failure. Verified failing on **pristine HEAD** (worktree test, no P19 changes).
+- **Why in scope:** FIX #4's specified tests (manager→agent rate-lock, agent→client rate+payout) exercise exactly these flows; they cannot pass with the bug.
+- **Fix** (`server.js:2155`): for **manager/agent callers** the scope filter already restricts to their own pool, so the guard now requires only *"target slot free or already the target's"* — **silent X→Y steal between two agents remains impossible** (unallocate or explicit force still required). **Admin keeps the strict fully-unallocated rule** (force for deliberate reassignment, audit-logged). Previous line preserved in comment for rollback.
+- **Verified:** pristine-HEAD repro (fail) → fixed code (pass); manager→agent and agent→client now allocate via the exact panel payload (no `force`); role subtree scoping re-verified end-to-end (F3-3/F3-4/F3-14).
+
+## 16. BONUS FIX — two validation hardenings found by the suite
+
+1. `alloc_max='2.5'` was silently truncated to 2 by `parseInt` → now rejected 400 (strict digit-string check, `assistant.js:326`).
+2. Rate `'-0.5'` had its **sign silently dropped** by `normalizeDecimalString` (`BigInt('-0')`) and was stored as `0.5` → raw negative inputs now rejected 400 before normalization (`server.js:2051`).
+
+---
+
+## 17. Full test inventory (how to re-run everything)
+
+| Suite | Checks | Result | Command (from repo root) |
+|---|---|---|---|
+| Backend/API verification (self-contained: fresh DB, real server, real webhook ingests, restart persistence) | 112 | **112 PASS / 0 FAIL** | `node tests/p19-verify.js` |
+| UI verification (jsdom DOM-level: all 4 panels boot + FIX#1/3/4 flows against live server; mobile = static analysis) | 36 | **36 PASS / 0 FAIL** | `node tests/p19-ui-verify.js` (needs `npm i jsdom` in a scratch dir; run the backend suite first — it creates the fixture DB) |
+| Inline-script syntax check, all 4 panels | 8 blocks | 0 FAIL | `node scripts/check-html-scripts.js admin.html` (repeat per panel) |
+
+Honest limits of testing: the sandbox has **no real browser and no root** — desktop UI was verified at DOM level via jsdom with the live backend (real API data, real click handlers), and **mobile was verified by static analysis only** (viewport meta, media queries, no over-wide fixed inputs). A quick eyeball on a real phone after deploy is recommended.
+
+## 18. Unrelated systems — unchanged confirmation + remaining notes
+
+- **Unchanged (verified):** `api.js` (0 diff → no `?v=` bump needed), `client.html`, payment ledger engine & immutability, permissions/role matrix, webhook/ingest pipeline, imports, backups, SMPP, sharing panel, existing Date/Time/Range/Number/Manager filters and UK-date behaviour everywhere else.
+- **Known leftovers (intentional, harmless):** `gxOptList()` helper + `sdListArgs` in manager/agent are now unused but still defined (never called — renders nothing); the dead legacy `renderSmsDetail_*_legacy_dead_P19` copies were neutralized, not deleted; `admin smsClis` API reference remains only inside the dead path. Clean-up can be a separate task.
+- **Pre-existing quirk (documented, NOT changed):** the admin smart-divide **picker** selects numbers with `manager_id IS NULL` — it can therefore take numbers that are currently assigned to agents (admin-only action, audit-logged, same as before P19). Flagged for a future task if unwanted.
+- **UI text style:** all new user-facing one-liners are short professional Roman-Urdu (existing style).
+
+## 19. Deployment (copy-paste) + rollback
+
+**Deliverable:** `galaxy-sms-p19-fixes.tar.gz` — contains only changed/new files; extracts over the repo root.
+
+**On your PC:**
+```bash
+cd path/to/Galaxy-Sms
+tar -xzf /path/to/galaxy-sms-p19-fixes.tar.gz
+git add -A
+git commit -m "P19: AI alloc limit, delete+SMS cleanup, SMS Report CLI removal + SMS Detail CLI facet, admin allocation rate override"
+git push origin main
+```
+
+**On the VPS:**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev
+pm2 restart galaxy
+```
+> PM2 process name: the current VPS runs the app as **`galaxy`** (per handover). If that errors, run `pm2 list` and use the name shown in the first column. Repo's `ecosystem.config.js` names it `powerx` — only relevant if you ever start fresh via `pm2 start ecosystem.config.js`. **Never start a second copy** — the app must stay a single process (one SQLite writer).
+
+**Smoke test after deploy (2 minutes):** Admin → AI Settings → limit shows 100, set 50, Save, restart pm2, still 50 · SMS Report page has no CLI box · SMS Detail: tick CLI → CLIs listed → click one → filtered · Numbers → select → Allocate → Rate field pre-filled from Rate Management; change it → only that allocation's rate changes · Manager: allocate own-pool numbers to an agent → succeeds (this was the silently-broken flow).
+
+**Rollback:** every changed block carries a rollback comment (`P19`/`P18` style) documenting the previous line; `git revert <commit>` restores previous behaviour. The ownGuard rollback line is in `server.js:2155`'s comment.
+
+---
+---
+
+# P19b ADDENDUM — 2 follow-up fixes reported after first deploy (map + delete leftovers)
+
+**Reported:** "1) Globe map Russia/Afghanistan par bina kisi real message ke counts dikha raha hai. 2) Numbers + unka OTP data delete karne ke baad bhi dashboard par data dikh raha hai — payouts aur OTPs sab sath delete hone chahiye."
+
+## 20. Root cause — map (issue 1): three bugs found in `sms_by_country` (dashboard world map)
+
+1. **TEST/DEMO rows counted as real traffic.** The map queries read `sms_records` **without** the `is_test=0` filter that every other real-stat view uses. The admin Test Panel / demo generator inserts `is_test=1` rows with fake numbers — those fake numbers' prefixes painted **Russia (7…) / Afghanistan (93…) etc. on the map with no real message ever received**. (Dashboard cards excluded them, which is exactly why the map disagreed with everything else.)
+2. **Naive country attribution.** Old logic: take first 2 digits, look up; else first 1 digit if it's 1 or 7. UK numbers stored in **national format (7xxx…)** therefore showed as **Russia**; 3-digit country codes (353 Ireland etc.) never showed at all.
+3. **Wrong "today" window.** The map used `received_at >= today 00:00 UTC` while the cards use the **UK day** — the two disagreed around DST/midnight.
+
+## 21. Map fix — exact behaviour now
+
+- **Test/demo rows are excluded** (`COALESCE(s.is_test,0)=0`) — map shows REAL traffic only, consistent with cards/reports.
+- **"Today" = the same UK-day window the cards use** (`ukDayOffsetSql`).
+- **Attribution is authoritative first:** the number's **Range country** (what you set in Range Management; alias map UK/United Kingdom/England→gb, USA→us, UAE→ae, plus all E.164 names) → **fallback: proper E.164 longest-prefix (3→2→1 digits)**. National-format UK numbers now show under **United Kingdom**, not Russia. Ireland/Portugal etc. (3-digit codes) now work.
+- **Junk guard:** numbers shorter than 7 digits (shortcodes, junk) are attributed to **no country**.
+- Numbers with no range and an unresolvable prefix simply don't appear.
+- Role scoping (admin/manager/agent/client see only their own tree) retained — re-verified.
+
+## 22. Root cause + fix — delete leftovers (issue 2)
+
+Two real gaps found (beyond the P19 fixes, which re-verified green):
+
+1. **Range-delete orphan SMS:** when a range was deleted with "delete SMS", numbers' linked SMS were decremented from stats, but **orphan rows** (SMS of numbers deleted earlier *without* SMS) were raw-deleted **without decrementing stats** → dashboard kept showing them. **Fixed:** the range-delete path now decrements stats for those rows first (shared helper).
+2. **Phantom-row hazard:** the stats decrement used `INSERT … ON CONFLICT DO UPDATE` with **positive** values — if a stats row was ever missing/mismatched, the delete would **insert a positive phantom row** (dashboard *gains* deleted data). **Fixed:** the shared `decrementSmsDailyStats()` now inserts **negative** values with `+` upsert — a missing key nets to zero and is cleaned up; stats can never inflate from a delete.
+3. **Repair tool for already-stale counters:** deletes performed under the OLD code (before the P19 deploy) left stale rows in `sms_daily_stats`. New admin button **"Rebuild Stats"** (Numbers page → DB tools row, 🔄 icon) calls the existing `POST /admin/backfill-stats {reset:true}` — rebuilds all dashboard counters from `sms_records` (test rows excluded automatically). **Click it ONCE after deploying this fix** to repair history.
+
+## 23. Files changed in P19b
+
+| File | Change |
+|---|---|
+| `backend/server.js` | `sms_by_country` block rewritten (is_test filter, UK-day window, range-country + longest-prefix attribution, junk guard); new shared `decrementSmsDailyStats()` (phantom-safe) used by number-delete AND range-delete orphan path; rollback comments inline |
+| `assets/galaxy.js` | `GX.countryOf` (numbers-table Country column): same longest-prefix + min-7-digits rule |
+| `admin.html` | "Rebuild Stats" button + `rebuildDashboardStats()` (confirm-gated, Roman-Urdu messages) |
+| `manager.html`, `agent.html`, `client.html` | `galaxy.js?v=gal-8` → `?v=gal-9` (cache-bust, required) |
+| `tests/p19b-verify.js` | NEW suite (below) |
+
+## 24. P19b tests + results, deploy & verify steps
+
+**Suite:** `node tests/p19b-verify.js` — **35/35 PASS**:
+- Map: E.164 UK → gb ✓ · **no Russia from test rows or national-format numbers** ✓ · national-format 74… → gb via range country ✓ · 3-digit code 353 → Ireland ✓ · shortcodes → no country ✓ · UK-day boundary SMS (yesterday 23:30Z = UK today) counted ✓ · manager/agent scoping ✓ · delete number+SMS → map AND cards drop immediately ✓
+- Delete: range-delete orphans decremented (old code: stuck) ✓ · delete-without-SMS still preserves history ✓ · **no positive phantom row when a stats row is missing** ✓ · payment ledger untouched ✓
+
+**Regression:** full P19 suite re-run after the refactor — **112/112 PASS**; UI suite — **36/36 PASS** (plus 4-panel inline-script checks + `?v=gal-9` present in all four).
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev
+pm2 restart galaxy     # (or the name from: pm2 list)
+```
+
+**After deploy (one time):** Admin panel → **Numbers** page → **Rebuild Stats** (🔄 button next to "Delete by Range") → confirm. This repairs any dashboard counters that went stale from deletes made under the old code. Then hard-refresh the browser (Ctrl+Shift+R) so the new `galaxy.js?v=gal-9` loads.
+
+**Verify (1 minute):** Dashboard map now shows only real countries (no Russia/Afghanistan unless you truly have such numbers — range country wins) · delete a number with OTP data → cards, payouts AND map all drop immediately and stay dropped on refresh.
+
+---
+
+# P19c — 3 FINAL FIXES (Client Week Payout · Exact Client Payout · Deleted-Data Dashboards)
+
+**Files changed (P19c only):**
+| File | Change |
+|---|---|
+| `client.html` | FIX#1 dashboard card + binding; FIX#2 Payout column + `cliPay()` formatter (both loaders + both renderers) |
+| `tests/p19c-verify.js` | NEW — 57 checks covering all 3 fixes incl. owner's TEST A–D and jsdom UI verification |
+
+**APIs changed:** NONE. No backend file touched in P19c — verified by inspection that `/api/dashboard` already returns `payout_week` (Monday-start UK week) and `/api/numbers` already returns `payout` for clients; only the client UI bound/ignored them.
+**DB changes:** NONE.
+**`api.js` unchanged** → no `?v=` cache-bust needed in the four panels.
+
+## FIX#1 — Client dashboard "This Month Payout" → REAL "This Week Payout"
+
+- **Implementation:** card label changed (client.html ~370) and the 4th card now binds `'$ '+pay3(d.payout_week)` (client.html ~573). `payout_week` is computed by the SAME existing engine the admin panel uses: UK (`Europe/London`) stat-dates, week window = **Monday → today**. No new calculation was written (no duplicate system).
+- **Week-payout implementation (existing, reused):** `sms_daily_stats.payout_sum` summed over `stat_date BETWEEN monday AND today`, scoped to the logged-in client's numbers only.
+- **Test proof (week ≠ month):** inserted a client stats row dated previous Monday (payout_sum 5.00) → `payout_month` included it (5.02), `payout_week` did NOT (0.02) — proves the card is genuinely weekly, not a label rename. Admin/manager/agent dashboards untouched.
+
+## FIX#2 — Client panel shows EXACT agent-assigned allocation payout
+
+- **Payout source (full trace):** agent allocates → `POST /api/numbers/allocate` stores the entered value **verbatim** into `numbers.payout` ('0', '1', '2', '0.013') → `/api/numbers` returns `SELECT n.*` (field `payout`, all roles incl. client) → client panel renders it. **No fallback** to range rate / manager rate / agent default / global rate — the value displayed is exactly the agent's allocation.
+- **Zero / 1 / 2 / custom preservation:** new `cliPay(v)` formatter — empty → `$0.00`; ≤2 decimals → `$X.XX` (`$0.00`, `$1.00`, `$2.00`); >2 decimals → **exact raw string** (`$0.013`). Values stored as exact decimal strings in DB (verified `"0","1","2","0.013"`).
+- **UI:** new **Payout** column after Status (header + LIVE renderer + legacy renderer + empty-state colspan 6→7; `data-label="Payout"` for mobile card view). Range Management rate stayed `0.010` — no leakage.
+- **Test cases:** same client, 4 numbers with payouts 0/1/2/0.013 → each correct + coexisting + stable after refresh (UI-C6…UI-C10).
+
+## FIX#3 — Deleted numbers/OTP no longer counted in Admin dashboard (root cause)
+
+**Owner's 6 questions — direct answers:**
+
+1. **Why CDR/SMS stats were correct while Admin Dashboard still counted:** they read different tables. CDR / SMS Detail read `sms_records` — the delete removed those rows, so CDR went clean immediately. Dashboard cards ("This Year OTPs", "This Month Payout", all others) read pre-aggregated `sms_daily_stats` — the old delete path **never decremented** that table, so dashboard numbers stayed stale forever.
+2. **Which API/query/table/cache was responsible:** `/api/dashboard` → `statSum()`/`statPay()` queries on table `sms_daily_stats`. There is also a 15-second dashboard cache in memory — but it is version-keyed (`verKey`) and invalidated by deletes, so cache was NOT the culprit; the missing decrement was.
+3. **What changed (in P19/P19b, re-verified for P19c):** `POST /api/numbers/delete` now decrements `sms_daily_stats` for selected numbers, "select all" (filtered), range-delete, and orphaned SMS — phantom-safe upsert (no row is created for deleted data; no negatives).
+4. **Why the new implementation keeps consistency:** deletes and dashboard both go through `sms_daily_stats`; CDR goes through `sms_records`; both are updated in the same delete transaction, so they can never disagree again.
+5. **How unrelated-data preservation was verified:** TEST D — a second number's SMS/CDR/stats survived the delete intact; payment ledger untouched (immutable business rule — it never feeds dashboard totals, so no change needed there); client payouts and range rates unchanged.
+6. **Important for your live VPS:** any staleness created by deletes made **before** P19 is historical residue in `sms_daily_stats`. After deploying this bundle, run **Rebuild Stats once** (Numbers page → 🔄) — it recomputes the stats table from `sms_records` and permanently removes the old residue. New deletes need no rebuild.
+
+**TEST A–D results (dedicated numbers `447200000001/2`, controlled SMS, real delete API):**
+- **A (before):** today 6, month 11, year 13 (incl. 2 backdated March rows), payout_month 5.06, CDR showed TN1 CLIs 9101:2 / 9102:1.
+- **B (delete + delete_sms):** number gone, 5 sms_records gone, CDR clean (9101/9102 no longer listed), **This Year OTPs 13 → 8** (−5: 3 today + 2 March), **This Month 11 → 8** (−3), **This Month Payout 5.06 → 5.03** (−0.030 = exactly this-month rows; March payout only affects year-level stats), today 6→3, total 13→8. No negative/orphan rows.
+- **C (cache/reload):** immediate re-read, re-login, and `_nocache=1` all show the same post-delete values — no resurrection.
+- **D (unrelated data):** TN2's number, SMS, CDR CLI 9201:1 and dashboard counts all intact; payment ledger rows preserved.
+
+## Tests (all run in this sandbox)
+
+| Suite | Result |
+|---|---|
+| `tests/p19c-verify.js` (NEW — FIX#1/#2/#3 + TEST A–D + jsdom client panel) | **57 / 57 PASS** |
+| `tests/p19-verify.js` (regression) | 112 / 112 PASS |
+| `tests/p19b-verify.js` (regression) | 35 / 35 PASS |
+| `tests/p19-ui-verify.js` (regression, incl. client.html mobile/viewport checks) | 36 / 36 PASS |
+| `scripts/check-html-scripts.js` × 4 panels | 0 FAIL |
+
+UI verified via jsdom on a live server (desktop DOM) + static mobile checks (viewport, 7 media queries, `data-label` card layout). True visual browser rendering isn't possible in this sandbox — a quick look on your phone after deploy is the final confirmation.
+
+## Unrelated functionality — unchanged
+
+Admin/manager/agent dashboards, payment frequency, Rate Management, allocation rules (`handleAllocate` untouched — FIX#2 only *reads* what it stores), auth/permissions, SMS provider/webhook logic, payment ledger (immutable), CDR behaviour, filters/date behaviour, single-process architecture.
+
+## Remaining issues / notes
+
+- **Rebuild Stats (one time)** is still required on the VPS to clear pre-P19 stale residue — included in deploy steps below.
+- Client "This Week Payout" reflects SMS-payout engine values (range-rate based), the same engine used for every other payout figure; the per-number allocation payout is a display field (FIX#2 column) by existing design — unchanged, per scope.
+- No other open issues from these 3 fixes.
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev
+pm2 restart galaxy     # (or the name from: pm2 list)
+```
+
+**After deploy (one time, if not already done for P19b):** Admin → Numbers → **Rebuild Stats** (🔄) → confirm. Then hard-refresh browsers (Ctrl+Shift+R).
+
+**Verify (1 minute):** log in as a client → dashboard 4th card reads **This Week Payout** and shows only this week's amount → Numbers tab shows a **Payout** column with the agent's exact values ($0.00 / $1.00 / $2.00 / $0.013) → refresh page → values stable. As admin: delete a test number with OTP data → This Year OTPs and This Month Payout drop immediately and stay dropped after re-login/refresh.
+
+---
+
+# P19d — FIX AGAIN + FULL END-TO-END PROOF (Client Payout · Dashboard-After-Delete)
+
+**This round the bugs were REPRODUCED FIRST, then fixed, then re-tested end-to-end through the real panels (jsdom UI + live API + direct DB). Reproduction script: `tests/p19d-repro.js` (kept as evidence). Full E2E suite: `tests/p19d-verify.js` — 63/63 PASS.**
+
+**Files changed (P19d):**
+| File | Change |
+|---|---|
+| `backend/server.js` | (1) `handleAllocate`: agent→client payout now ALWAYS written — empty/omitted ⇒ `'0'`. (2) smart-divide client allocation: explicit `payout='0'`. (3) `backfillSmsStats` (Rebuild Stats): stat_date keying now per-row `ukStatDate` (DST-safe) instead of one fixed SQL offset. |
+| `tests/p19d-repro.js` | NEW — reproduces all 3 defects on the old code, passes after the fix |
+| `tests/p19d-verify.js` | NEW — 63 E2E checks (real agent modal, real client panel, real admin panel, TEST A–D, phantom+rebuild, DST chain) |
+
+**APIs changed:** behaviour of `POST /api/numbers/allocate` (agent payout-empty case) and `POST /api/admin/backfill-stats` (correct keying) — no new endpoints, no API contracts broken. **DB changes:** none (no schema change; `sms_daily_stats` content repaired by Rebuild Stats). `api.js` **unchanged** → no `?v=` bump needed. No frontend file changed in P19d.
+
+## FIX#1 — Client allocation payout: exact value (owner's 6 cases)
+
+1. **What was wrong:** the payout shown to a client could be a value from a PREVIOUS allocation (not the one actually applied to this allocation) when the Agent left the payout field empty.
+2. **Exact root cause:** `handleAllocate` only wrote `numbers.payout` when the payout param was non-empty (`payout !== undefined && payout !== ''`). On empty it left the old value — so re-allocating a number (e.g. force move from client A to client B) kept client A's payout for client B. Reproduced: A gets `"2"`, force re-alloc to B with payout empty → B saw `"2"`.
+3. **What changed:** agent→client allocation now always writes payout: empty/omitted ⇒ `'0'`, otherwise the exact entered string (`'0'`, `'1'`, `'2'`, `'0.013'` stored verbatim). Smart-divide/Range-Allocation (no payout input by design) explicitly sets `'0'`. No fallback to range/manager/agent/global rate anywhere — verified Range Management rate stayed `0.010` throughout. Rollback comments are in the code.
+4. **Exact test performed (through the REAL agent panel UI — "Allocate Selected Numbers" modal, not just API):** for each case the suite checks the modal checkbox → opens the modal → types the payout → Allocate; then verifies **DB string → client API string → client panel rendered cell → full page reload**. Cases: field cleared (empty), `0`, `1`, `2`, `0.013`, plus two numbers with different payouts (`1` and `2`) on the same client, plus Range-Allocation (smart-divide) from its real page, plus force re-allocation with empty payout.
+5. **Before (reproduced):** empty payout on re-allocation → new client inherited the OLD client's `"2"`; DB kept stale `"2"`. (The always-explicit cases 0/1/2/0.013 already stored exactly — P19c had verified that.)
+6. **After (all PASS):** empty ⇒ `"0"`; `0` ⇒ `"0"`; `1` ⇒ `"1"`; `2` ⇒ `"2"`; `0.013` ⇒ `"0.013"`; NB1 `$1.00` and NB2 `$2.00` side-by-side, each its own; re-allocation with empty ⇒ new client sees `$0.00` (not `$2.00`); client panel shows `$0.00 / $0.00 / $1.00 / $2.00 / $0.013` exactly; Range-Allocation number ⇒ `$0.00`.
+7. **After reload:** YES — a fresh client panel session (full re-login DOM) showed identical values (C-UI9).
+8. **Remaining issue:** none for these cases. Note: `numbers.payout` values written by allocations made BEFORE this deploy keep whatever the old code stored — an agent can correct any number by unallocate → re-allocate with the intended payout (or force re-allocate).
+
+## FIX#2 — Dashboard still showing old statistics after delete
+
+1. **What was wrong:** after deleting a number + its OTP/SMS, CDR/SMS pages went clean but Admin Dashboard totals (This Year OTPs, This Month Payout, others) stayed stale — and **the same happened after running Rebuild Stats** for SMS received in the other DST half of the year.
+2. **Exact root cause (two independent causes, both real):**
+   - **(a) Historical residue (your live VPS):** dashboard cards read the pre-aggregated `sms_daily_stats` table; CDR reads `sms_records`. Deletes made under the PRE-P19 code removed `sms_records` but never decremented `sms_daily_stats` — those orphan "phantom" rows stay counted forever. New deletes decrement correctly, but they cannot remove residue for SMS that no longer exists — **only Rebuild Stats can** (it recomputes the whole table from live `sms_records`). This is why your dashboard can show 125,000 OTPs / $183 while CDR shows less.
+   - **(b) Rebuild Stats DST bug (found this round, reproduced):** the rebuild keyed every historical row's `stat_date` using **today's** UK offset (`date(received_at, '+60 minutes')` in summer). A winter SMS at 23:30 GMT (correct UK date 15 Jan) was rebuilt onto 16 Jan. Ingest and delete use the per-row DST-correct `ukStatDate` — so after a rebuild, deleting that number decremented the CORRECT key while the stats row sat on the WRONG key: the row survived, and the dashboard kept counting deleted SMS. Reproduced end-to-end: rebuild put the row on `2026-01-16`; delete left it there; dashboard year stayed the same.
+3. **What changed:** `backfillSmsStats` now groups rows with the SAME per-row `ukStatDate` function used by ingest (`recordSmsStats`) and by delete (`decrementSmsDailyStats`) — all three key sources can no longer disagree. Nothing was subtracted, hidden, or hardcoded; the dashboard still computes from `sms_daily_stats`, which is now guaranteed to equal a recomputation from live `sms_records` after Rebuild Stats. Payment ledger untouched (immutable history — it does not feed dashboard totals).
+4. **Exact test performed:** owner's TEST A–D exactly — dedicated numbers `447500000001/2/3`, controlled SMS (3 today via the real webhook + 2 winter rows at the Jan 15 23:30 GMT boundary + 1 surviving winter row), before-values recorded (dashboard API, CDR per CLI, ledger row count, DB counts, and the ADMIN PANEL's rendered "This Year" card and "Payout — This Month" chip); then delete with `delete_sms:true` **through the panel's own API transport**; then cached reload / re-login / `_nocache` direct API / panel re-render; then unrelated-data checks; then a phantom-residue simulation (42,000 SMS + $99 inserted as pre-P19 residue) repaired via the panel's Rebuild Stats button path; then delete of a winter-row number AFTER rebuild to prove the rebuilt keys decrement correctly.
+5. **Before (reproduced):** rebuild keyed the winter row `2026-01-15 23:30 UTC` as `2026-01-16`; after delete the row survived and the dashboard still counted it (year stayed unchanged). Phantom residue inflated year by 42,000 / payout by $99 with no way for deletes to remove it.
+6. **After (all PASS):** TEST B — This Year OTPs 7→2 (−5: 3 today + 2 winter), This Month 4→1 (−3), This Month Payout 0.04→0.01 (−0.030 exactly the deleted this-month rows), today 4→1, total 7→2, winter stats row fully gone, no negative/leftover rows, ledger unchanged. TEST C — reload / re-login / `_nocache` / admin panel cards all identical post-delete values (no resurrection). TEST D — the other number's SMS/CDR/winter row intact, payouts intact, ledger intact. Phantom — after Rebuild Stats: year 42,002→2 == live `sms_records` count, payout 99.01→0.01 == live sum, winter row re-keyed to the correct `2026-01-15`. Delete-after-rebuild — year 2→1, winter row gone, **final dashboard == live sms_records exactly (dash=1, db=1)**.
+7. **After reload:** YES — TEST C and the final panel assertions are post-reload/re-login reads.
+8. **Remaining issue / ACTION REQUIRED ON VPS (one time):** the residue created by pre-P19 deletes on your live DB cannot be decremented by any delete (those SMS rows no longer exist). After deploying this bundle, run **Admin → Numbers → Rebuild Stats (🔄)** once. With the P19d fix the rebuild is now DST-correct, so it fully replaces `sms_daily_stats` with an exact recomputation from live data. If you already ran Rebuild Stats on the previous bundle, run it once more after this deploy (the old rebuild may have left winter-edge rows on shifted dates). Note: the panels also have a tiny 3-second client-side GET cache for `/dashboard` (cleared instantly on any panel action) — if you delete from one browser and stare at an already-open dashboard in another, it can lag ≤3 seconds; a page reload always shows fresh values.
+
+## Tests (all run in this sandbox, single Node process + single SQLite file — architecture unchanged)
+
+| Suite | Result |
+|---|---|
+| `tests/p19d-verify.js` (NEW — full E2E: real agent modal → DB → client panel → reload; TEST A–D; phantom+rebuild; DST chain) | **63 / 63 PASS** |
+| `tests/p19d-repro.js` (NEW — bug reproduction; FAIL on old code, clean after fix) | documented evidence |
+| `tests/p19-verify.js` | 112 / 112 PASS |
+| `tests/p19b-verify.js` | 35 / 35 PASS |
+| `tests/p19c-verify.js` | 57 / 57 PASS |
+| `tests/p19-ui-verify.js` (incl. client.html mobile/viewport checks) | 36 / 36 PASS |
+| `scripts/check-html-scripts.js` × 4 panels | 0 FAIL |
+
+## Unrelated functionality — unchanged
+
+Rate Management, payment frequency/eligibility engine, payment ledger (immutable), allocation rules (only the payout-write condition changed), auth/permissions, SMS provider/webhook logic, CDR behaviour, filters/date behaviour, admin/manager/agent dashboards' calculation source, single-process architecture. No frontend file was modified in P19d.
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev
+pm2 restart galaxy     # (or the name from: pm2 list)
+```
+
+**After deploy (REQUIRED, one time):** Admin → Numbers → **Rebuild Stats** (🔄) → confirm. Then hard-refresh browsers (Ctrl+Shift+R).
+
+**Verify on your live data (2 minutes):** after Rebuild Stats finishes, check Dashboard: This Year OTPs and This Month Payout should now match reality (CDR counts). Then delete one test number with OTP data (choose "delete associated SMS") → This Year OTPs and This Month Payout must drop immediately and stay dropped after re-login/refresh. As a client: Numbers tab shows each number's exact allocated payout, stable on refresh.
+
+---
+
+# P19f — INTERNAL CHAT + COMPLAINTS SYSTEM (new feature, fully E2E tested)
+
+**New suite `tests/p19e-chat-verify.js`: 94/94 PASS — all 39 mandatory test groups (functional 1–12, security 13–20, persistence 21–25, UI 26–34, performance 35–39). Full regression: 112 + 35 + 57 + 63 + 36 all PASS, 4 panels 0 FAIL.**
+
+## Existing architecture discovered (before any code)
+
+- **Auth:** JWT (`{id, username, role}` only — no parent_id in token) via `backend/auth.js` (`authRequired`, `requireRole`); 12h expiry; per-user 1200 req/min global limiter.
+- **Hierarchy:** `users.parent_id` (admin > manager > agent > client); `descendantIds()` helper exists; roles: admin/manager/agent/client; `users.name` display field.
+- **Server:** single Express process + single SQLite (better-sqlite3); no compression middleware; `express.static(project root)`; panels served via `sendFrontendPage`; per-panel page routers + nav; admin pages whitelisted in `ADMIN_ALLOWED_PAGES`.
+- **Client layer:** shared `/api.js` (window.API; tiny client GET cache — chat paths NOT in its cacheable list, so chat reads are always fresh); shared `/assets/galaxy.js`.
+
+## Database changes (additive only — `backend/schema.js`, auto-created on boot, no migration)
+
+| Table | Purpose | Indexes |
+|---|---|---|
+| `chat_conversations` | 1:1 pair (user_a < user_b, UNIQUE) + last-message cache | pair-unique, (user_a,last_at), (user_b,last_at), (last_at) |
+| `chat_messages` | conversation_id, sender_id, body, created_at, read_at | (conversation_id,id), (sender_id,read_at), (read_at) |
+| `complaints` | sender_id, subject, body, status, created/updated, status_updated_by | (sender_id,created_at), (status,created_at) |
+| `complaint_replies` | complaint_id, sender_id, body, created_at | (complaint_id,id) |
+
+Messages store **references only** (sender_id) — identity JOINed from `users`; no duplication.
+
+## New APIs (`backend/chat.js` — isolated module, mounted with ONE line in server.js; remove that line to fully revert)
+
+- `GET /api/chat/contacts?q=` — permitted partners only (role-scoped, from parent_id)
+- `GET /api/chat/conversations` (+`?scope=all` admin-only, `?q=` search) — list w/ identity, last message, unread
+- `POST /api/chat/conversations {user_id}` — start/get (permission matrix enforced)
+- `GET /api/chat/messages/:id?limit=30&before_id=&after_id=` — paginated history (recent window + older on demand)
+- `POST /api/chat/messages/:id {body}` — send (≤2000 chars, 60 msg/min per user)
+- `POST /api/chat/messages/:id/read` — read receipts
+- `GET /api/chat/unread-count` — nav badges (chat + complaints)
+- `POST /api/chat/ticket` + `GET /api/chat/stream?ticket=` — SSE stream (one-time 60s ticket so the JWT never goes in a URL)
+- `POST/GET /api/complaints`, `GET /api/complaints/:id`, `POST /api/complaints/:id/replies`, `POST /api/complaints/:id/status` (admin-only status; Open/In Progress/Resolved)
+
+No existing endpoint, query, or behaviour was modified. SMS/numbers/payment code paths untouched.
+
+## Permission rules (backend-enforced — users.parent_id, no second hierarchy)
+
+| Role | Can chat with | Cannot |
+|---|---|---|
+| Client | own agent (parent) only | other clients, other agents, manager, admin chat (complaint flow to admin) |
+| Agent | own clients (children) + own manager (parent) | other agents, other managers, admin chat (complaint flow to admin) |
+| Manager | own agents (children) + admin | other managers, clients (even own agents' clients) |
+| Admin | any active user; **can open/read/reply in ANY conversation**; `All Chats` view (`scope=all`, 403 for non-admin) | — |
+
+Conversation access = participant OR admin (server-side, on every read/send). Complaints: sender OR admin; status changes admin-only; complaint creation blocked for admin.
+
+## UI changes
+
+- New **Chat** + **Complaints** nav items & pages in all 4 panels (badges included); `ADMIN_ALLOWED_PAGES` updated with `chat`,`complaints`; admin gets **My Chats / All Chats** tabs.
+- New shared `assets/chat.js?v=gxchat1` (loaded after api.js in all panels): Galaxy-themed (existing CSS vars) WhatsApp-style two-pane desktop UI; mobile = single pane, full-screen conversation, back button, sticky bottom input with safe-area padding + `visualViewport` scroll guard, no horizontal overflow. Emoji picker (107 emojis, no external assets), timestamps + day dividers, unread badges, ✓/✓✓ read status, conversation search, New Chat (contacts search), 30-message window + "Load older".
+- Every message shows **display name + role + timestamp**; sender identity always labelled on incoming messages (incl. Admin replies inside others' conversations).
+
+## Complaint system
+
+Separate section (not chat): ID, sender name+role, subject, message, created/updated, status (Open / In Progress / Resolved), reply thread, admin status control, status-change attribution + audit-log entries. Complaint creation is available to manager/agent/client (all non-admin roles — matches "Client cannot access Admin conversations unless an explicit Complaint flow is used"). A hint in the form states range/number/rate requests do NOT belong here — those stay in their existing panel functions (untouched).
+
+## Real-time approach
+
+**SSE** on the same Node process — zero new infrastructure/dependencies. One-time 60-second tickets keep the JWT out of URLs; heartbeat every 25s (no DB work); caps: 300 total / 5 per user connections; broadcasts go to participants + connected admins. Automatic **9-second polling fallback** (visibility-guarded) where EventSource is unavailable — so old browsers still work without heavy polling. `X-Accel-Buffering: no` is sent (respected by nginx; if the panel runs behind a proxy that buffers SSE, add `proxy_buffering off;` for `/api/chat/stream`).
+
+## Performance results (measured)
+
+- 60 concurrent messages (6 users × 10): **all 200 in 128 ms**; all persisted.
+- `/api/dashboard` 4 ms → 20 ms avg and `/api/numbers` 3 ms → 21 ms avg **during** concurrent chat load — no blocking of SMS/number APIs.
+- `EXPLAIN QUERY PLAN` confirms index usage: messages → `idx_chat_msg_conv`; conversations → multi-index OR on pair indexes; unread-count → `idx_chat_msg_read`; complaints → `idx_complaints_sender`.
+- History is paginated (30-message window, cursor-based "Load older"); conversation list capped at 60.
+- Server RSS ≈ 248 MB under full suite load.
+
+## Security tests (all FAIL as required)
+
+Agent A → Agent B's chat 403 · Agent A → other agent's client conversation 403 (read AND write) · Manager A → Manager B's chat 403 · Manager → agent's private client conversation 403 · Client A → Client B's chat 403 · Client → other agent's chat 403 · normal user → admin's private conversation 403 · starting disallowed conversations 403 (agent→admin, client→admin, agent→agent, manager→manager, manager→client, client→client, client→other-agent) · `scope=all` non-admin 403 · complaint cross-access + non-admin status change 403 · empty message 400 · bad/reused SSE ticket 401. **Admin accesses everything: 200.** Contacts endpoint returns exactly the permitted set per role (verified content).
+
+## Functional results (owner's 1–12)
+
+Client→Agent ✓, Agent→Client ✓, Agent→Manager ✓, Manager→Agent ✓, Manager→Admin ✓, Admin→Manager ✓, Admin→Agent ✓, Admin→Client ✓, Agent complaint→Admin ✓, Admin opens ✓, Admin replies ✓, Admin status change Open→In Progress→Resolved ✓. Persistence: messages + scoping survive **server restart** and re-login. UI (jsdom, real panels): desktop build ✓, mobile CSS rules ✓ (media query, full-screen conversation, back button, safe-area, no-overflow, sticky keyboard-safe input), emoji send ✓, 1500-char message ✓, empty rejection (UI + API) ✓, unread badge shows/clears ✓, ✓✓ read status ✓, multiple conversations ✓, 30+15 pagination with no duplicates ✓, admin All Chats + reply inside any conversation with Admin identity ✓, complaint create/reply/status via UI ✓, fresh-session history ✓.
+
+## Remaining limitations (honest)
+
+- No typing indicator / online status / message edit-delete / voice features (not requested).
+- If the admin re-parents a user later, **existing** conversations stay accessible to their participants; new conversations follow the new hierarchy.
+- Badge updates only while a panel tab is open (no push/email notifications).
+- Chat history has no retention policy (grows slowly; SMS retention settings untouched).
+- jsdom cannot do true visual rendering — after deploy, please open Chat once on desktop and a phone to confirm visuals; everything else is API/UI-logic verified.
+
+## Files changed / added (P19f)
+
+| File | Change |
+|---|---|
+| `backend/chat.js` | **NEW** — isolated chat + complaints module |
+| `backend/schema.js` | 4 new tables + indexes (additive) |
+| `backend/server.js` | 1 mount line (+comment) — nothing else |
+| `assets/chat.js` | **NEW** — shared chat/complaints UI module |
+| `admin.html manager.html agent.html client.html` | nav items (with badges), 2 page sections, router branches, script tag; admin: `ADMIN_ALLOWED_PAGES` + `chat`,`complaints` |
+| `tests/p19e-chat-verify.js` | **NEW** — 94 E2E checks |
+
+`api.js` unchanged → no `?v=` bump needed (new `chat.js` has its own `?v=gxchat1`). **No new npm dependencies.** Architecture unchanged: single Node process + single SQLite file.
+
+**Deploy (VPS):**
+```bash
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev        # (no new deps — usually a no-op)
+pm2 restart galaxy            # (or the name from: pm2 list)
+```
+Tables auto-create on first boot — no migration, no Rebuild Stats needed for this feature. Then hard-refresh browsers (Ctrl+Shift+R).
+
+**Verify (1 minute):** as Agent → Chat tab → your clients + your manager listed, admin NOT listed; send a message to a client → client sees it live with your name+role; Complaints → submit one → Admin sees it in Complaints, replies, sets status → agent sees the reply + status. As Client → Chat shows ONLY your agent.
+
+---
+
+## P19g — FIX #1: Chat VPS par nahi dikh raha (deployment gap) + FIX #2: Range selectors role-scoping
+
+**Date:** 2026-09-17 · **Files changed:** `backend/server.js` (sirf `/api/ranges` handler), **new:** `scripts/verify-chat-deploy.sh`, `tests/p19f-verify.js` · **Chat code me KOI change NAHI hua** — chat 100% theek tha.
+
+### A) FIX #1 — Chat not showing on VPS: ROOT CAUSE
+
+**Diagnosis chain (owner ke VPS output se):**
+- `ls: cannot access '/opt/galaxy/assets/chat.js': No such file or directory` — chat UI file VPS par hai hi nahi.
+- PM2 `galaxy` online (326MB, ↺24) — lekin PM2 "online" sirf process zinda hai ka matlab hai; wo ABHI PURANE code ko memory me chala raha hai (deploy ke baad restart nahi hua tha is feature ke liye... jab restart hoga aur mount hai lekin file missing hai to crash — neeche dekho).
+- Workspace/GitHub comparison: panels (admin/manager/agent/client.html) VPS par deploy ho gaye (wo MODIFIED tracked files thi) — unme `/assets/chat.js?v=gxchat1` script tag + Chat nav item hai. Lekin teen NAYI files (`backend/chat.js`, `assets/chat.js`, `tests/p19e-chat-verify.js`) UNTRACKED thi — `git add -u` type commit me nayi files kabhi include nahi hoti, is liye wo GitHub par push hi nahi huin.
+
+**Root cause (ek line me):** Pichhli deployment me sirf MODIFIED files push huin; teen NAYI (untracked) chat files commit/push nahi huin. Browser panel load karta hai, `assets/chat.js` 404 deta hai, `GXChat` undefined → Chat nav click par blank page. Logs me "chat.js" isi 404 ki wajah se aata tha.
+
+**Kaun sa file/component/route responsible:** koi code bug NAHI. Sirf deployment chain toota: GitHub → VPS me nayi files transfer nahi huiin.
+
+**Kya change hua (code):** kuch nahi — chat implementation workspace me 100% complete verified (module 22487B, UI 34797B, mount server.js:433, 4 panels tags, 11 routes, schema tables). Sirf ek VPS self-check script `scripts/verify-chat-deploy.sh` add ki hai jo file-level gap deploy ke pehle pakar legi.
+
+**Repair (owner PC se, copy-paste):**
+```bash
+# 1) PC par: tarball extract karo repo root me (sirf 3 nayi files zaroori hain):
+tar xzf galaxy-sms-p19-fixes.tar.gz backend/chat.js assets/chat.js tests/p19e-chat-verify.js
+# (FIX #2 bhi lene ke liye backend/server.js + scripts/verify-chat-deploy.sh + tests/p19f-verify.js bhi extract kar lo — recommended)
+
+# 2) NAYI files ko git me daalo — yehi step pichhli baar miss hua tha:
+git add -A
+git commit -m "P19e chat files + P19f range scoping"
+git push
+
+# 3) VPS par:
+cd /opt/galaxy && git fetch && git reset --hard origin/main && npm install --omit=dev
+bash scripts/verify-chat-deploy.sh     # sab OK hone par hi aage barho
+pm2 restart galaxy
+```
+
+**⚠️ CRITICAL ORDER WARNING:** VPS par `backend/server.js` ka naya version (jo `require('./chat')` karta hai) deploy ho chuka hai lekin `backend/chat.js` missing hai. Agar aap files push kiye baghair `pm2 restart galaxy` chala dein to server **CRASH** hoga (`MODULE_NOT_FOUND: backend/chat.js`). Files pehle, restart baad me — is liye `verify-chat-deploy.sh` restart se PEHLE chalao.
+
+**Verify:** restart ke baad browser me Ctrl+Shift+R (hard refresh) → har panel me Chat nav + page. Agar phir bhi nahi: `grep -n "require('./chat')" backend/server.js` aur `ls -la backend/chat.js assets/chat.js` ka output bhejo.
+
+### B) FIX #2 — SMS Numbers Range filter role-scoped (backend-enforced)
+
+**Problem:** `/api/ranges` HAR authenticated user ko SAB ranges de raha tha (admin theek tha, lekin Manager/Agent/Client ko bhi 10 me se 10 dikhte the — chahe unka ek bhi number us range me na ho).
+
+**Mojooda (existing) scope logic jo use kiya — koi naya ownership model NAHI:** `numberScope(user)` wahi function jo `/api/numbers` me se pehle hi ownership lagu karta hai: manager → `numbers.manager_id = me`, agent → `numbers.agent_id = me`, client → `numbers.client_id = me`. FIX isi existing model ko ranges tak extend karta hai.
+
+**Change (sirf `backend/server.js` → `/api/ranges` handler, ~line 1314):**
+```js
+// P19f FIX (owner: Range selectors role-scoped) — pehle: non-admin ko bhi SAB
+// ranges milti thi. Ab non-admin ko sirf wahi ranges milte hain jin me uske
+// accessible numbers hain (numberScope — wahi model jo /api/numbers use karta hai).
+// Admin behaviour unchanged (sab ranges). Rollback: neeche ka scoped block hata do.
+let scopeIds = null;
+if (req.user.role !== 'admin') {
+  const scoped = db.prepare(`SELECT DISTINCT n.range_id FROM numbers n WHERE n.range_id IS NOT NULL AND ${numberScope(req.user)}`).all();
+  scopeIds = new Set(scoped.map(r => r.range_id));
+  if (!scopeIds.size) return res.json([]); // koi accessible number nahi -> koi range nahi
+}
+// dono includeTests branches me: .filter(r => !scopeIds || scopeIds.has(r.id))
+```
+
+**Affected API:** sirf `GET /api/ranges` (include_tests variant samet). Isi se JITNE bhi Range dropdowns hain wo sab cover: number search/filter (`numRange`), number allocation, bulk allocation, smart-divide modal, test-range selectors, Manager Rate Card, Agent smart-divide — sab isi ek endpoint se aate hain. **Frontend filtering par security ka bharosa NAHI** — backend khud filter karta hai.
+
+**Backend enforcement pehle se maujood thi (verified, dobara add NAHI kiya):** `buildNumberQuery` owner-scope PEHLE lagata hai phir range filter → unauthorized range query ko 0 rows milte hain; `allocate` + `smart-divide` `numberScope`/ownerCond se guard hain → unauthorized range se allocation `allocated:0` deta hai, client allocation 403. Pehle sirf ranges ke NAAM leak ho rahe the (data nahi) — ab naam bhi nahi.
+
+**Kya NAHI hua (regression safety):** admin sab ranges dekhta hai (unchanged); number ownership, allocation logic, payments, SMS processing, reports, dashboard, SMPP, auth, role hierarchy, manager Rate Card ka `cli-search` data — sab untouched.
+
+### C) Test results — `tests/p19f-verify.js` (fresh DB, port 8100) — 35/35 PASS
+
+Fixture: 10 ranges (R01–R10); Manager A ke 4 ranges, Manager B ke 2, Agent ke 3, Client C1 → 1, Client C2 → 1, ek manager jinke 0 numbers.
+
+| # | Test | Result |
+|---|---|---|
+| A1–A5 | Chat code integrity (files, mount, 4 panel tags, schema) — wahi gap jo VPS pe missing tha | PASS |
+| B1–B8 | mA=4 ranges, mB=2, agent=3, C1=1, C2=1, admin=10; include_tests=1 scoped; zero-number manager=0 ranges | PASS |
+| C1–C3 | mA/mB/C1 unauthorized range query (name + range_id dono se) → 0 rows | PASS |
+| C4 | Authorized range → rows milte (scope intact) | PASS |
+| C5 | mA tries allocating mB's numbers → allocated:0, skipped:3 | PASS |
+| C6–C7 | Unauthorized smart-divide (mA→R03, agent→R08) → total 0 | PASS |
+| C8 | Client allocation attempt → 403 | PASS |
+| C9 | ADMIN allocates R04→mA — admin power unchanged | PASS |
+| C10 | Allocation ke BAAD mA ko R04 bhi dikhne laga (dynamic) | PASS |
+| D1–D4 | Real panels (jsdom): manager/agent/client numRange dropdowns exactly scoped, 0 JS errors; admin sab 10 | PASS |
+| E1–E3 | Chat send 200; /api/numbers/summary scoped as before; dashboard unaffected | PASS |
+
+### D) Owner ki mandatory verification list — jawabat
+
+1. Chat frontend kahan render hota hai → `assets/chat.js` (GXChat, sab 4 panels me `/assets/chat.js?v=gxchat1` tag) — VPS par yehi file missing thi.
+2. Kaun sa file render karta hai → same; page container `#gx-chat-page` har panel me inline.
+3. Backend routes → `backend/chat.js` (11 routes, `/api/chat/*` + `/api/complaints/*`), mounted `backend/server.js:433`.
+4. Route/nav registration → panels ke nav me `data-page="chat"` — deployed (tracked modified files thi).
+5. Role permissions chat chhupa rahe the? → NAHI — permissions theek; file missing thi.
+6. Galat JS path? → Path theek (`/assets/chat.js`); file hi disk par nahi thi → 404.
+7. Stale assets? → Nahi; fresh push + Ctrl+Shift+R se theek ho jayega.
+8. VPS par latest files? → NAHI — yehi root cause (3 nayi files uncommitted).
+9. PM2 updated code chala raha tha? → Nahi — old code memory me (↺24 ka purana boot).
+10. Case-sensitivity (Linux)? → Nahi, issue nahi tha (files thi hi nahi).
+11. API errors? → Nahi — chat API mount hi nahi tha purane process me.
+12. DB tables/migrations? → Theek — schema.js additive, first boot par ban jati hain.
+13. Frontend conditional? → Nahi.
+14. Chain kahan tooti → GitHub→VPS transfer: untracked new files push nahi huin.
+15. Server/PM2 logs — chat.js ka zikr 404 (browser) ki wajah se; server crash nahi hua kyunki restart nahi hua.
+16. Browser console → `GET /assets/chat.js?v=gxchat1 404` + `GXChat is not defined` (owner ne click par blank dekha).
+17. Range fix ke baad Admin/Manager/Agent/Client sab test → p19f B/C/D columns upar; admin regression C9 + D4.
+18. Unrelated functionality unchanged → FULL regression green: p19 112/0, p19b 35/0, p19c 57/0, p19d 63/0, p19e 94/0, p19-ui 36/0, check-html-scripts ×4 (0 FAIL); payments/SMS/reports/dashboard/SMPP/auth suites sab PASS.
+
+### E) Deliverables
+
+- `galaxy-sms-p19-fixes.tar.gz` — updated (chat files + FIXED server.js + p19f suite + verify-chat-deploy.sh).
+- `scripts/verify-chat-deploy.sh` — VPS par deploy ke baad, restart se PEHLE chalao (no secrets inside).
+
+**Deploy order reminder:** files push → `git reset --hard origin/main` → `verify-chat-deploy.sh` (sab OK) → `pm2 restart galaxy` → hard refresh.
+
+---
+
+## P19h — CHAT UX FIXES: open conversation me live update + subtle notification sound
+
+**Date:** 2026-09-17 · **Files changed:** `assets/chat.js` (realtime block + sound), `backend/chat.js` (1 line: heartbeat named event), `admin/manager/agent/client.html` (`?v=gxchat1` → `gxchat2`), **new:** `tests/p19g-verify.js`. Chat permissions/hierarchy/schema/complaints/SMS/numbers/payments/reports/dashboard/auth — **ZERO changes**.
+
+### Root cause (FIX #1 — open conversation me naya message live nahi dikhta tha)
+
+Inspection (pura realtime pipeline trace kiya — SSE backend broadcast → frontend `onLiveMsg` → `appendMsg`, aur 9s polling fallback):
+
+1. **Frontend ka SSE error-handling fragile tha:** `es.onerror` stream ko **permanently close** kar deta tha — EventSource ka native auto-reconnect khud bandh ho jata tha aur client **hamesha ke liye** 9s polling par chala jata tha (kabhi wapas SSE nahi). Ek transient network blip / proxy hiccup / SSE slot limit (per-user 5) ka 503 — bas, poora session slow-poll mode me.
+2. **Silently buffered/dead stream detect hota hi nahi tha:** reverse proxy agar SSE buffer kare to connection "connected" dikhti hai, koi error nahi aata — fallback poll **start hi nahi hota**. Server ka 25s heartbeat sirf comment (`: hb`) tha jo JS me kabhi dikhta hi nahi.
+3. **Fallback poll me open conversation sirf 9s update hoti thi** — "immediately appear" kabhi nahi ho sakta tha; owner ko baar-baar reopen karna padta tha. (Chat list theek lagti thi kyunki wo 9s me update ho jati thi — is liye symptom sirf open conv ka tha.)
+
+Sandbox me **real two-account live reproduction** banaya (jsdom = real panel + real server + real SSE stream via EventSource polyfill — p19e ke jsdom tests me EventSource tha hi nahi, is liye ye path pehle kabhi UI-level par test nahi hua tha): SSE healthy hone par open conv me message **151ms** me aa jata tha — matlab code ka append path theek tha; **tootna wala hissa SSE ka degradation/lifecycle tha** (upar ke 3 points).
+
+### Kya badla (existing architecture ke andar — koi naya system nahi)
+
+**`assets/chat.js` — realtime block:**
+- SSE transient errors (readyState CONNECTING) par interference NAHI — browser khud reconnect karta hai.
+- **Heartbeat watchdog:** server ab `event: hb` bhejta hai (25s) — 40s+ koi event nahi = zombie/buffered stream → close → poll fallback → 60s baad SSE retry (**self-heal**).
+- **SSE liveness prove hone par poll bandh** (`touchSse` → `stopPolling`) — healthy SSE = **bilkul zero polling** (pehle jaisa hi).
+- **Reconnect (`ready`) par instant catch-up** (`after_id` — gap ke messages miss nahi hote) + **tab visible hone par instant catch-up** (hidden phase ke messages).
+- **Fallback poll adaptive:** open conversation + chat page active = **3s** (pehle 9s), warna 9s; conversation open hote hi turant re-schedule + ek instant catch-up tick. **Same existing `after_id` mechanism — doosra system nahi.**
+- **Request load:** SSE healthy = zero poll. Degraded = 9s idle / 3s open-conv (tiny after_id responses). Sab extra fetches event-driven hain (reconnect/focus) — koi naya periodic request nahi.
+
+**`backend/chat.js` (1 line):** heartbeat ab `sseSend(res,'hb',{t})` — purane cached clients isay ignore karte hain (SSE spec), naya chat.js watchdog ise use karta hai.
+
+**FIX #2 — sound (naya, lightweight):** WebAudio se 2 soft sine notes (B5 987.77Hz + E6 1318.51Hz, ~0.28s total, peak gain 0.06 — subtle), **koi audio file NAHI, koi library NAHI** (~25 lines JS). Autoplay policy: pehla pointerdown/keydown (chat interface ka koi bhi interaction) AudioContext unlock karta hai. **Sirf genuinely new incoming messages** par: apne bheje messages par nahi (sender_id check), history-load par nahi (renderMsgs path), duplicate deliveries par nahi (message-id dedupe `S.sounded`), burst me machine-gun nahi (**max 1 ding per 2s throttle**). Poll/degraded mode me badge-delta + conv-list snapshot (jo waise bhi fetch hoti hai — zero extra request) se detection.
+
+### Tests — `tests/p19g-verify.js` (fresh DB, live two-account) — 35/35 PASS
+
+| # | Owner verification point | Result |
+|---|---|---|
+| B4 | A open conv me, B ne bheja → **bina click/reload 151ms me** conversation ke andar dikha | PASS |
+| B5/B8/C3 | No duplicates; multiple rapid messages sab real-time (SSE) | PASS |
+| B6 | Open conv = actively read — list me phantom unread badge nahi (read ke baad list refresh) | PASS |
+| B3 | SSE healthy → polling **OFF** (no unnecessary requests) | PASS |
+| C2 | Poll fallback me bhi open conv bina click ke — 1.5–1.8s (3s adaptive interval) | PASS |
+| B10/C5 | Doosri conv ka message → chat list preview + unread update live | PASS |
+| B11 | Doosri conv ka message open conv me leak nahi hota | PASS |
+| B7/C4/B12/C6 | Notification sound: incoming par **1 subtle ding** (2 oscillators), khud bheje par nahi, doosri conv par bhi, poll mode me bhi | PASS |
+| B13 | History load/reopen par sound NAHI | PASS |
+| B9 | Apna message render hota hai, sound nahi | PASS |
+| B14 | Hidden tab → visible hote hi instant catch-up, exactly once (no dup) | PASS |
+| D1 | Refresh/login par correct full history | PASS |
+| B15/C7 | Browser console errors: **0** | PASS |
+| D6 | Server stderr: clean (koi naya error nahi) | PASS |
+| D2–D4 | Chat send/unread/complaints APIs unchanged | PASS |
+| D5 | SSE stream: `ready` + 25s `hb` dono events | PASS |
+
+### Full regression (sab green)
+
+p19 **112/0** · p19b **35/0** · p19c **57/0** · p19d **63/0** · p19e **94/0** (38e assertion naye adaptive-poll contract par update) · p19f **35/0** · p19g **35/0** · p19-ui **36/0** · check-html-scripts ×4 **0 FAIL**. SMS/numbers/allocation/payments/reports/dashboard/SMPP/auth sab apne suites me PASS — unrelated functionality unchanged.
+
+### Deploy
+
+Tarball extract → `git add -A` → push → VPS: `cd /opt/galaxy && git fetch && git reset --hard origin/main && npm install --omit=dev && bash scripts/verify-chat-deploy.sh && pm2 restart galaxy` → browser **Ctrl+Shift+R** (panels `?v=gxchat2` fetch karenge — purana cached chat.js automatically bust ho jayega). Pehle naye messages ke liye panel me **ek click/keypress** zaroor hoga (autoplay unlock) — uske baad sound har naye incoming par.
+
+---
+
+## P19i — ZERO-COST PANEL REQUEST + EMAIL VERIFICATION SYSTEM (public signup + Gmail OTP)
+
+**Date:** 2026-09-17 · **Naya:** `backend/pubreq.js`, `public-request.html`, `set-password.html`, `.env.example`, `tests/p19i-verify.js` · **Modified:** `backend/server.js` (sirf: shared `insertUserAccount` helper extract + 1 mount line), `backend/schema.js` (3 additive tables), `admin.html` (Panel Requests page), `package.json` (nodemailer). **Auth/user management REBUILD NAHI hua** — existing users table + bcrypt + JWT + hierarchy exactly wahi hai.
+
+### A) Official Google documentation jo check ki (live fetch — 2026-09-17)
+
+| Doc | Kya confirm hua |
+|---|---|
+| support.google.com/mail/answer/7104828 | **smtp.gmail.com**, port **587 STARTTLS** (465 SSL bhi), SSL/TLS required, **authentication required** |
+| support.google.com/accounts/answer/185833 | **App Password = 16-digit passcode**, sirf **2-Step Verification ON** hone par available; account ka main password change hone par app passwords **revoke** ho jate hain; kabhi bhi revoke kar sakte ho |
+| support.google.com/mail/answer/22839 | Free Gmail: **~500 recipients/day** (ek email me 500 recipients YA 500 emails/day) — limit cross hone par **1–24 ghante** tak sending band; Workspace accounts ka limit zyada hai (Google Workspace sending limits) |
+| support.google.com/mail/answer/7126229 | Google "Sign in with Google" recommend karta hai; lekin SMTP-only apps ke liye App Password hi supported lightweight method hai |
+
+### B) Selected method + kyun zero-cost hai
+
+**Gmail SMTP + App Password (nodemailer se, existing VPS par).** Koi paid service nahi: Gmail account free (owner ke paas hai), App Password free, nodemailer free open-source (ek hi naya npm dep), sending existing Node process se (PM2 same single process). OAuth2/Gmail API bhi free hai lekin uske liye GCP project + credentials + refresh-token rotation chahiye — is low-volume request form ke liye unnecessary complexity. App Password Google ka supported method hai.
+
+### C) Current Gmail limitations (relevant)
+
+- Free Gmail ≈ **500 emails/day** — is system ke liye kaafi (har request ≈ 2 emails: OTP + welcome).
+- Limit cross → 1–24h block. **Handling:** sendMail ka error catch hota hai, `mail_status='failed'` + sanitized error request par record hota hai (sirf admin dikhta hai), **koi auto-retry loop nahi**; admin "Resend Mail" se manually dobara bhej sakta hai (D-part test).
+- Deliverability: naye Gmail accounts ki emails kabhi spam me ja sakti hain (IP reputation ke bina) — customer se kahna ho ki Spam check karein.
+- App Password tab tak valid jab tak account ka main password change na ho (change par naya generate karke `.env` update karna hoga).
+
+### D) Owner ko manually kya karna hai (ek baar, 10 minute)
+
+1. Galaxy Gmail account me login: **myaccount.google.com/security** → **2-Step Verification ON** karo.
+2. **myaccount.google.com/apppasswords** → naya App Password banao (16 characters, spaces hata kar copy karo).
+3. VPS par file banao: `nano /opt/galaxy/.env` aur ye bharo (asli values se):
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=aapka.galaxy.account@gmail.com
+   SMTP_PASSWORD=16charapppassword
+   MAIL_FROM="Galaxy SMS" <aapka.galaxy.account@gmail.com>
+   PUBLIC_BASE_URL=http://AAPKA.VPS.IP
+   ```
+4. `cd /opt/galaxy && npm install --omit=dev && pm2 restart galaxy`
+   (`.env` file `.gitignore` me already hai — kabhi GitHub par nahi jayegi; sample: `.env.example` placeholders ke saath repo me hai.)
+
+**Env vars:** `SMTP_HOST, SMTP_PORT (587 ya 465), SMTP_USER, SMTP_PASSWORD, MAIL_FROM` + optional: `OTP_TTL_MINUTES (10), OTP_RESEND_GAP_MS (60000), OTP_MAX_PER_HOUR (3), PASSWORD_SETUP_TTL_MINUTES (1440), PUBREQ_ENABLED (1), PUBLIC_BASE_URL`. `.env` configure na ho to system "dry-run" me chalta hai — email nahi jata, `mail_status='not_configured'`, koi crash nahi.
+
+### E) Database changes (additive — existing tables untouched)
+
+- `panel_requests` (id, name, email, username, panel_type, contact, email_verified, status pending/approved/rejected, ip, otp_mail_status, welcome_mail_status, mail_error, reject_reason, decided_by, decided_at, created_user_id, timestamps) + 3 indexes (status, email, username)
+- `panel_request_otp` (request_id, **otp_hash** — peppered HMAC-SHA256, plaintext OTP kabhi DB me nahi; attempts, used, expires_at) + index
+- `password_setup_tokens` (user_id, **token_hash**, expires_at, used) + index
+- Users table me ZERO changes — approve par wahi `users` table use hoti hai.
+
+### F) API routes + pages
+
+- **Public:** `GET /panel-request` (form page), `POST /api/pubreq/submit`, `POST /api/pubreq/otp/resend`, `POST /api/pubreq/otp/verify`, `POST /api/pubreq/set-password`, `GET /set-password?token=…`, `GET /api/pubreq/config`
+- **Admin-only (backend `requireRole('admin')`):** `GET /api/panel-requests?status=`, `GET /api/panel-requests/:id`, `POST /api/panel-requests/:id/approve` `{parent_id?}`, `POST /api/panel-requests/:id/reject` `{reason?}`, `POST /api/panel-requests/:id/resend-welcome`
+- **Admin Panel location:** User Management › **Panel Requests** (status filter + View/Approve/Reject/Resend Mail).
+- **Account creation:** `/api/users` POST ka insert logic ab shared `insertUserAccount()` helper hai (same bcrypt, same NOCASE uniqueness, same payment_type rules) — approve route wahi use karta hai. Koi doosra user system nahi.
+
+### G) Security measures
+
+OTP: 6-digit crypto-random, **hashed (HMAC-SHA256 + server pepper)**, TTL 10 min (configurable), **single-use**, max **5 wrong attempts** (phir OTP invalidate), resend **60s gap + 3/hour/email** (ms-precise in-memory + DB fallback), IP rate limits (30/min public, alag buckets). Public form: server-side validation (name/email/username format, panel_type whitelist), duplicate username (users NOCASE + pending requests), duplicate email (pending/approved — rejected ke baad dobara apply allowed), SQLi → 100% parametrized, XSS → admin page par `pesc()` escaping (jsdom-verified). Password **form par collect hi nahi hota** — approve par random temp password + **one-time setup link** (hashed token, 24h, single-use); customer khud password set karta hai. SMTP creds: sirf `.env` (gitignored), responses/logs me kabhi nahi (error sanitizer password ko `***` karta hai — E1/D3 tested). Admin routes backend-enforced 403 (manager/agent/unauth tested). Request ID: integer validation + 404. CSRF: token-in-header scheme (no cookies) — existing architecture jaisa hi.
+
+### H) Tests — `tests/p19i-verify.js` — 95/95 PASS (2 stable runs)
+
+Poora flow **real nodemailer → fake SMTP server** se E2E (Gmail credentials ke bina poora SMTP path prove hota hai):
+B: public page (200 branded) → submit → OTP email (subject/branding/expiry/"did not request" note) → OTP hashed in DB → wrong OTP countdown → verify OK → **reuse rejected** → **expired rejected** → **5-attempt brute-force lock** → resend works after lock → gap limit → hourly cap → duplicates (username/email/pending) → validation + SQLi/XSS payloads.
+C: manager/agent/no-token admin access **403** → id manipulation 400/404 → admin list/detail → **approve manager** (account EXISTING users table me, parent=admin, NOCASE preserved, welcome email: subject + username + setup link + panel URL, **no plaintext password**) → **set-password** (weak 400, wrong token 400, OK, **reuse 400**, expired 400) → **customer naye password se LOGIN + /api/me role manager** → agent approve bina parent 400 / under-agent 400 / under-manager OK (hierarchy enforced) → client default admin neeche → reject + reason + no account + re-approve 400.
+D: **Gmail quota simulation (421)** → account banta hai, `mail_status='failed'` + sanitized error (admin-only), koi retry loop nahi → recover par Resend Mail OK.
+E: SMTP creds kisi response/log me nahi; existing `/api/users` POST unchanged (NOCASE 409, agent→agent 403); 4 tables coexist; indexes; server stderr clean.
+F (jsdom): admin panel me Panel Requests page render, requests list, **XSS naam escaped (execute nahi hota)**, View modal, 0 console errors.
+**Full regression:** p19 112/0 · p19b 35/0 · p19c 57/0 · p19d 63/0 · p19e 94/0 · p19f 35/0 · p19g 35/0 · p19-ui 36/0 · check-html-scripts ×4 0 FAIL — SMS/numbers/allocation/payments/reports/dashboard/chat sab untouched.
+
+### I) No-domain (IP-only) limitations — SACH much
+
+Aaj bhi poora panel plain HTTP par chalta hai (existing /panel-login bhi). Is system me:
+- Public form sirf name/email/username bhejta hai — **password form par hota hi nahi** (setup-link method isi wajah se chuna).
+- OTP email se aata hai (out-of-band) — network sniffing se safe.
+- **Genuinely insecure point:** `/set-password` page naya password plain HTTP par bhejta hai, aur existing panel login bhi yahi karta hai — koi network-level attacker (same WiFi/ISP path) password dekh sakta hai. YE FIX KARNE KE LIYE HTTPS genuinely required hai.
+- **Zero-cost HTTPS path (jab chaho):** free subdomain (DuckDNS / No-IP — $0) + **Let's Encrypt certificate ($0)** + reverse proxy (Caddy/Nginx). Domain kharidna zaroori NAHI. Jab tak HTTPS na ho, sensitive credentials HTTP par jayenge — yeh limitation silently chhupayi nahi gayi, yahan clearly likhi hai.
+- Email links me `PUBLIC_BASE_URL` use hota hai — VPS IP set karo to links `http://IP/...` banenge.
+
+### J) Future (agar volume badhe)
+
+500/day cross hone lage → options (usi order me): Google Workspace (~2,000/day, paid) YA free transactional tier wale providers (Brevo/SendGrid free tiers) — code me sirf `.env` ke SMTP settings badalne hain (mailer transport standard SMTP hai), ya phir apni VPS par self-hosted relay. Abhi ke customer-request volume ke liye Gmail kaafi hai.
+
+### K) Deploy order (VPS)
+
+```bash
+# PC: tarball extract → git add -A → push
+# VPS:
+cd /opt/galaxy
+nano .env                      # Section D wali values (sirf pehli baar)
+git fetch && git reset --hard origin/main
+npm install --omit=dev         # nodemailer naya dep
+pm2 restart galaxy
+```
+Verify: `http://VPS-IP/panel-request` khulna chahiye (branded form). Test request bhejo → Gmail inbox me "Galaxy SMS — Email Verification Code" aana chahiye (Spam check karein) → OTP verify → Admin Panel › User Management › Panel Requests me request dikhegi → Approve → customer ko welcome email → link se password set → `/panel-login` se login.
+
+---
+
+## P19j — TEEN CHANGES: (1) Full English UI (2) Binance UID payments (3) Floating Chat button
+
+**Date:** 2026-09-17 · **Tarball:** `galaxy-sms-p19-fixes.tar.gz` (32 files) · **Test suite:** `tests/p19j-verify.js` — **69/69 PASS ×2 consecutive stable runs**
+
+---
+
+### A) Change #1 — POORA user-visible text professional English me
+
+**Kya badla (har jagah):**
+| File | Kya |
+|---|---|
+| `admin.html` | 40+ strings: hints, alerts, confirms, empty states, rebuild-stats confirm, delete-warning, panel-request hints, AI-knowledge hints, payMgmt schedule text, rate hints, tooltips |
+| `manager.html` / `agent.html` / `client.html` | allocation counters, drill-down hint, date-filter hint, ownership-tracking hint |
+| `public-request.html` | hero text, 4 feature bullets, step subtitles, OTP/resent/duplicate messages, success text |
+| `set-password.html` | page subtitle, success/error messages |
+| `assets/chat.js` (chat UI) | empty states ("No chats found.", "No messages yet — send the first message."), complaint modal placeholder/hint, validation alerts |
+| `api.js` (AI assistant widget) | placeholder "Type your message...", greeting |
+| `backend/assistant.js` | SAARI assistant replies English (greeting, rates, availability, allocation flow, cancel, guard, fallback, 403/429 errors) |
+| `backend/pubreq.js` | OTP email body, welcome email body, footer note, dry-run log, 2 validation errors |
+| `backend/schema.js` | 6 seeded AI knowledge-base answers (fresh DBs ke liye English seed) |
+
+**Existing DB ke liye migration:** `schema.js` me idempotent `UPDATE` — sirf wo rows jinka answer EXACT purane Urdu seed text se match karta hai unhe English se replace karta hai. Admin ne jo answers khud edit/customize kiye hain wo BILKUL untouched.
+
+**Jo NAHI badla (owner rule ke mutabiq):** code identifiers, API routes, DB field names, env vars, internal developer comments, aur **Urdu INPUT understanding** — assistant ab bhi Urdu input samajhta hai ('haan', 'nahi', 'kitne numbers', 'rate' waghera) lekin jawab hamesha English me deta hai. Ye feature hai, visible text nahi.
+
+**Verification:** p19j test G1 — automated audit jo 13 files me comments strip kar ke string-literals + HTML text-nodes scan karta hai (95+ Roman-Urdu indicator words) → **0 visible Urdu hits**. Input-parsing lines (assistant ke YES/CANCEL/intent regexes) explicitly allowlisted hain.
+
+---
+
+### B) Change #2 — Payment: Wallet Address → **Binance UID**
+
+**Agent panel (Payment page):**
+- Card title: "Binance UID" · sub: "Save your Binance UID to receive payments through Binance Pay."
+- Label: **Binance UID** · Placeholder: **"Enter your Binance UID"** · numeric inputmode
+- Save button: "Save Binance UID"
+- **Help modal: "How to find your Binance UID"** — Step 1 (open Binance app) → Step 2 (profile icon) → Step 3 (UID under your name, 8–12 digits) → Step 4 (copy + paste here) + **Binance website method** (binance.com → profile icon → UID in dropdown)
+- **Warning text (card + modal):** "Warning: Payments are sent to the Binance UID you save here. Please double-check your UID before saving — entering an incorrect UID can result in funds being sent to the wrong account. You are responsible for the accuracy of your Binance UID." *(Ye text maine professional English me draft kiya hai — agar aap ka paas exact wording thi to bhejein, main verbatim swap kar dunga.)*
+- Payment History table: column "Binance UID"; naye requests me UID dikhta hai; **purane wallet requests me purana address + "legacy wallet" tag** dikhta hai (history intact)
+
+**Server-side validation (naya `binanceUidValid`):** required + trim, empty/whitespace → 400, sirf numeric **8–12 digits** (Binance UID ka real format — overly restrictive nahi), invalid → 400 with clear English error. Backend enforce karta hai, frontend par trust nahi.
+
+**DB (additive, non-destructive):**
+```sql
+ensureColumn('agent_wallets', 'binance_uid', "TEXT DEFAULT ''");
+ensureColumn('payment_requests_v2', 'binance_uid', "TEXT DEFAULT ''");
+```
+- `wallet_address` columns/data **kabhi delete/overwrite nahi hote** — purane records 100% safe
+- `agent_wallets.network` = 'BINANCE_UID' (naye saves par); purane rows 'USDT_TRC20' rehte hain
+- Payment request INSERT me naye rows: `binance_uid` = UID, `wallet_address` = '' (column NOT NULL hai isliye empty string)
+- `payment_audit_logs` me UID `details` JSON me record hota hai (`wallet_address` column as-is)
+
+**Admin review (naya — pehle sirf API thi, koi UI nahi thi):** Admin → Payment Mgmt me ab **"Payment Requests"** card hai (existing hi endpoints use karta hai — koi naya API nahi):
+- Status filter (Pending/Paid/Rejected/All) + count
+- Table: ID, Agent, Manager, Type, Amount, **Binance UID** (ya purana wallet + "legacy wallet" tag), Status, Requested
+- View modal: poori details; Pending requests par **Mark as Paid** (TXID + optional notes + optional screenshot — multipart existing `/pay` endpoint) aur **Reject** (reason — existing `/reject` endpoint)
+
+**Kya UNCHANGED hai:** saari calculations (ledger sum), eligibility (eligible_at), minimums, pending-duplicate 409 rule, reject→ledger-reopen flow, notifications, per-type checks. Test D1–D5/D10 in sab ko verify karta hai.
+
+**Old wallet records ka behaviour:** legacy agent (sirf TRC20 wallet, koi UID nahi) request submit kare → 400 "Save your Binance UID first (Payment page)." Uska wallet_address data DB me intact rehta hai (test C1–C5).
+
+---
+
+### C) Change #3 — Floating Chat shortcut button
+
+- **`#gxChatFab`** — 52px circular button, bottom-right (`right:18px; bottom:82px` — AI assistant button ke UPAR stacked; client panel par assistant nahi hota to button khud `bottom:18px` par aa jata hai — `gx-fab-solo` class)
+- Click → panel ka **apna existing router** trigger hota hai (`[data-page="chat"]` nav click → `showPage('chat')` → `GXChat.open('chat')`) — koi naya/duplicate chat system NAHI
+- **Unread badge** existing tracking se: wahi `/chat/unread-count` + wahi SSE engine (`refreshBadges` ab sidebar badge AUR floating badge dono update karta hai — ek hi source of truth, koi doosra counter system nahi)
+- `chat.js` load hote hi `startRealtime()` (existing engine, `S.started` guard) + ek `refreshBadges()` — isliye badge ab HAR page par live hai (pehle sirf chat page visit ke baad hota tha)
+- Responsive: `@media(max-width:480px)` par `right:12px` adjust; z-index 9998 (assistant window 9999 — overlap nahi)
+- Sidebar chat, conversations, permissions (server-enforced role rules), sounds — sab unchanged
+- AI assistant button ke sath visual overlap nahi (stacked + auto-reposition check 1.5s/4s par, kyunki assistant button async banta hai)
+
+---
+
+### D) Tests (sirf woh jo ACTUALLY run hue)
+
+| Suite | Result |
+|---|---|
+| **`tests/p19j-verify.js` (NAYA — 69 assertions)** | **69 PASS / 0 FAIL ×2 consecutive runs** |
+| `tests/p19-verify.js` | 112 PASS / 0 FAIL (final state par re-run) |
+| `tests/p19b-verify.js` | 35 PASS / 0 FAIL |
+| `tests/p19c-verify.js` | 57 PASS / 0 FAIL |
+| `tests/p19d-verify.js` | 63 PASS / 0 FAIL |
+| `tests/p19e-chat-verify.js` | 94 PASS / 0 FAIL (final state par re-run) |
+| `tests/p19f-verify.js` | 35 PASS / 0 FAIL |
+| `tests/p19g-verify.js` | 35 PASS / 0 FAIL (final state par re-run) |
+| `tests/p19i-verify.js` | 95 PASS / 0 FAIL |
+| `tests/p12-regression.js` | 67 PASS / 0 FAIL |
+| `tests/p19-ui-verify.js` | 36 PASS / 0 FAIL |
+| `scripts/check-html-scripts.js` ×6 HTML | 0 FAIL |
+| `node --check` ×7 JS files | OK |
+
+**Total: 796 assertions, 0 failures.**
+
+p19j ke sections: A (15 code markers) · B (9 validation/save tests) · C (5 legacy-record tests) · D (15 request+admin flow tests, real HTTP + real SQLite) · E (8 jsdom agent-panel UI tests, real server) · F (12 floating-button tests — agent + client panels, live SSE, real unread badge) · G (3 language audit tests) · H (server health).
+
+**Test-harness fixes (product nahi, tests):** p12 (fresh-DB setup + `ASSISTANT_USER_RPM=25` env documented — default 10 RPM flow ke 11th message par 429 karta tha; assertion `/kitne numbers/i` → `/how many numbers/i`), p19 (`/ho gaya/i` → `/Done:/i`), p19g (`?v=gxchat2` → `gxchat3`), p19-ui (2 assertions nayi English strings par).
+
+---
+
+### E) Files changed (is round me)
+
+**Panels/UI:** `admin.html`, `manager.html`, `agent.html`, `client.html`, `public-request.html`, `set-password.html`, `api.js`, `assets/chat.js`
+**Backend:** `backend/server.js`, `backend/schema.js`, `backend/pubreq.js`, `backend/assistant.js`
+**Tests:** `tests/p19j-verify.js` (NAYA), `tests/p12-regression.js`, `tests/p19-verify.js`, `tests/p19g-verify.js`, `tests/p19-ui-verify.js`
+**Version bumps:** `api.js?v=20260917-english-binance-chatfab` + `chat.js?v=gxchat3` — charo role panels me.
+
+---
+
+### F) Deploy (VPS — same as before)
+
+```bash
+# PC: tarball extract → git add -A → push
+# VPS:
+cd /opt/galaxy
+git fetch && git reset --hard origin/main
+npm install --omit=dev        # koi NAYA dependency NAHI hai is baar
+pm2 restart galaxy
+```
+**Deploy ke baad pehli boot par:** schema migration khud chal jayegi (2 ensureColumn + KB-answer UPDATEs — additive, existing data safe). Admin/agent panels me `Ctrl+Shift+R` (cache bust) — `?v=` bumps isi liye hain.
+
+---
+
+### G) Owner manual test checklist (desktop + mobile dono par)
+
+**Change #2 — Payment:**
+1. Agent login → Payment page → "Binance UID" card dikhe (wallet address kahin nahi) → Help button → 4 steps + web method
+2. Khali/invalid UID save karne par error; valid 8–12 digit UID save ho + refresh par yaad rahe
+3. Request Payment → Admin login → Payment Mgmt → "Payment Requests" me request + Binance UID dikhe → View → Mark as Paid (TXID) → Agent panel me status Paid
+4. Purani (wallet wali) requests me purana address + "legacy wallet" tag dikhe
+
+**Change #3 — Chat button:**
+5. Agent panel: bottom-right par AI button ke upar Chat button → click → chat page khule → koi conversation khol kar message bhejo
+6. Manager se message bhejo → Agent doosre page par rahe → floating button par red unread count dikhe (sidebar badge ke barabar) → click karne par chat khule
+7. Client panel: Chat button dikhe (AI button nahi hota wahan) → click → chat khule
+8. Mobile (phone browser): button bottom-right me thumb ke paas, AI button se upar, koi overlap nahi
+
+**Change #1 — Language:**
+9. Charo panels + /panel-request + /set-password + emails — kahin bhi Urdu/Roman-Urdu nazar na aaye (buttons, labels, errors, empty states, tooltips, AI assistant replies, OTP/welcome emails)
+
+---
+
+### H) Rollback notes
+
+- **Binance UID:** `server.js` PUT-wallet handler me comment me purana handler (TRC20) documented hai; `binance_uid` columns additive hain — rollback par bas purana handler wapas + panels me `?v=` bump.
+- **Chat FAB:** `chat.js` ke aakhri `fabInit()` block + `ensureChatFab/positionChatFab` functions hatane se poora feature off — baaki chat system untouched.
+- **Language:** string-level changes hain — koi logic change nahi; p19j G1 audit in sabko verify karta hai.

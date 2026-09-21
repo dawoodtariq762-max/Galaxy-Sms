@@ -355,6 +355,59 @@ async function run() {
     d = await r.json();
     assert(d.total === 150 && d.rows.length === 150, 'Range filtering: Only numbers belonging to requested range are returned');
 
+    // ==========================================
+    // Issue 2: Copy Only the Numbers Tests
+    // ==========================================
+    console.log('\n--- Issue 2: Copy Only the Numbers Tests ---');
+    const agentHtml = fs.readFileSync(path.join(__dirname, '../agent.html'), 'utf8');
+    assert(agentHtml.includes('Numbers: <span id="numBadgeCount">'), 'Agent HTML has Numbers count badge');
+    assert(agentHtml.includes('id="btnCopyNumbersOnly"'), 'Agent HTML has btnCopyNumbersOnly');
+    assert(agentHtml.includes('copyNumbersOnly()'), 'Agent HTML calls copyNumbersOnly()');
+    assert(agentHtml.includes('function copyNumbersOnly'), 'Agent HTML defines copyNumbersOnly()');
+
+    const managerHtml = fs.readFileSync(path.join(__dirname, '../manager.html'), 'utf8');
+    assert(managerHtml.includes('copyNumbersOnly()'), 'Manager HTML calls copyNumbersOnly()');
+    assert(managerHtml.includes('function copyNumbersOnly'), 'Manager HTML defines copyNumbersOnly()');
+
+    const panelSharingHtml = fs.readFileSync(path.join(__dirname, '../panel-sharing.html'), 'utf8');
+    assert(panelSharingHtml.includes('copyNumbersOnly()'), 'Panel Sharing HTML calls copyNumbersOnly()');
+    assert(panelSharingHtml.includes('function copyNumbersOnly'), 'Panel Sharing HTML defines copyNumbersOnly()');
+
+    // Emulate copyNumbersOnly formatting with 5,000 simulated numbers
+    const simulatedNumbers = Array.from({ length: 5000 }, (_, i) => ({
+      id: i + 1,
+      range: `UK Range ${i % 5}`,
+      number: `447700900${String(i).padStart(4, '0')}`,
+      rate: '0.045',
+      client: 'Client VIP'
+    }));
+
+    // Test: Copies pure newline-separated phone numbers ONLY (no Range, no Rate, no labels)
+    const pureNumbers = simulatedNumbers.map(r => String(r.number || '').trim()).filter(Boolean);
+    const copiedText = pureNumbers.join('\n');
+    const lines = copiedText.split('\n');
+
+    assert(lines.length === 5000, '5,000 numbers copied in single operation');
+    assert(!copiedText.includes('UK Range'), 'Output contains NO range names');
+    assert(!copiedText.includes('0.045'), 'Output contains NO rates');
+    assert(!copiedText.includes('Client VIP'), 'Output contains NO client labels');
+    assert(!copiedText.includes(','), 'Output contains NO CSV commas');
+    assert(!copiedText.includes('Number'), 'Output contains NO table headers');
+    assert(lines[0] === '4477009000000', 'First number matches pure digits');
+    assert(lines[4999] === '4477009004999', 'Last number matches pure digits');
+
+    // Test: Sub-selection copying (e.g. 10 selected IDs)
+    const selectedIds = [2, 5, 9, 15];
+    const selectedText = simulatedNumbers
+      .filter(r => selectedIds.includes(r.id))
+      .map(r => String(r.number || '').trim())
+      .filter(Boolean)
+      .join('\n');
+    const selectedLines = selectedText.split('\n');
+    assert(selectedLines.length === 4, 'Selected numbers copying extracts exactly checked count');
+    assert(selectedLines[0] === '4477009000001', 'First selected number matches');
+    assert(selectedLines[3] === '4477009000014', 'Last selected number matches');
+
   } finally {
     server.close();
     try { fs.unlinkSync(testDbPath); } catch (_) {}

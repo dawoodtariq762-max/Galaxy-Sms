@@ -292,11 +292,13 @@ module.exports = function mountChat(app, deps) {
     }
 
     const cred = db.get('SELECT chat_enabled, chat_password_hash FROM chat_credentials WHERE user_id=?', [user.id]);
-    const isSecurityActive = !!(cred && cred.chat_enabled === 1 && cred.chat_password_hash);
+    if (cred && (cred.chat_enabled === 0 || cred.chat_enabled === false)) {
+      return res.json({ chat_security_enabled: false, locked: false, unlocked: true });
+    }
 
     const unlockHeader = req.headers['x-chat-unlock-token'];
-    let unlocked = !isSecurityActive;
-    if (isSecurityActive && unlockHeader) {
+    let unlocked = false;
+    if (unlockHeader) {
       try {
         const decoded = jwt.verify(unlockHeader, SECRET);
         if (decoded && decoded.type === 'chat_unlocked' && decoded.id === user.id) {
@@ -306,8 +308,8 @@ module.exports = function mountChat(app, deps) {
     }
 
     return res.json({
-      chat_security_enabled: isSecurityActive,
-      locked: isSecurityActive && !unlocked,
+      chat_security_enabled: true,
+      locked: !unlocked,
       unlocked: unlocked
     });
   });
@@ -329,25 +331,27 @@ module.exports = function mountChat(app, deps) {
       return res.json({ ok: true, message: 'Unlocked successfully', unlock_token: unlockToken });
     }
 
-    const cred = db.get('SELECT chat_enabled, chat_password_hash, failed_attempts, locked_until FROM chat_credentials WHERE user_id=?', [user.id]);
-    if (!cred || !cred.chat_password_hash) {
-      return res.status(400).json({ ok: false, error: 'Chat PIN has not been set for your account. Please contact administrator.' });
+    let cred = db.get('SELECT chat_enabled, chat_password_hash, failed_attempts, locked_until FROM chat_credentials WHERE user_id=?', [user.id]);
+    if (!cred) {
+      db.run('INSERT OR IGNORE INTO chat_credentials (user_id, chat_password_hash, chat_enabled, password_set_at) VALUES (?,?,1,datetime("now"))', [user.id, user.password]);
+      cred = db.get('SELECT chat_enabled, chat_password_hash, failed_attempts, locked_until FROM chat_credentials WHERE user_id=?', [user.id]);
     }
 
-    if (cred.chat_enabled === 0) {
-      return res.status(400).json({ ok: false, error: 'Chat Security is currently disabled for your account.' });
-    }
-
-    if (cred.locked_until && new Date(cred.locked_until) > new Date()) {
+    if (cred && cred.locked_until && new Date(cred.locked_until) > new Date()) {
       return res.status(429).json({ ok: false, error: 'Account temporarily locked due to multiple failed attempts. Please try again later.' });
     }
 
-    const match = bcrypt.compareSync(password, cred.chat_password_hash);
+    let match = cred && cred.chat_password_hash ? bcrypt.compareSync(password, cred.chat_password_hash) : false;
+    // Fallback: if separate PIN not yet set, match against user account password
+    if (!match && user.password && (!cred || user.password !== cred.chat_password_hash)) {
+      match = bcrypt.compareSync(password, user.password);
+    }
+
     if (!match) {
-      const attempts = (cred.failed_attempts || 0) + 1;
+      const attempts = ((cred && cred.failed_attempts) || 0) + 1;
       const lockUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60000).toISOString().slice(0, 19).replace('T', ' ') : null;
       db.run('UPDATE chat_credentials SET failed_attempts=?, locked_until=? WHERE user_id=?', [attempts, lockUntil, user.id]);
-      return res.status(400).json({ ok: false, error: 'Incorrect Chat App password / PIN' });
+      return res.status(400).json({ ok: false, error: 'Incorrect Chat Security PIN or Password' });
     }
 
     db.run(`UPDATE chat_credentials SET failed_attempts=0, locked_until=NULL, updated_at=datetime('now') WHERE user_id=?`, [user.id]);
@@ -828,6 +832,31 @@ module.exports = function mountChat(app, deps) {
     const body = cleanText(req.body && (req.body.body || req.body.message), MSG_MAX);
     if (!body) return res.status(400).json({ error: 'Message is empty' });
     if (!sendRateOk(req.user.id)) return res.status(429).json({ error: 'Too many messages — slow down' });
+
+    // Safeguard against rapid duplicate submission (e.g. accidental double-click within 2s)
+    const recent = db.get(
+      `SELECT * FROM chat_messages 
+       WHERE conversation_id = ? AND sender_id = ? AND body = ? 
+       AND datetime(created_at) >= datetime('now', '-2 seconds')
+       ORDER BY id DESC LIMIT 1`,
+      [conv.id, req.user.id, body]
+    );
+    if (recent) {
+      const sender = getUser(req.user.id) || req.user;
+      const msg = {
+        id: recent.id,
+        conversation_id: recent.conversation_id,
+        sender_id: recent.sender_id,
+        sender_name: (sender.name && String(sender.name).trim()) || sender.username,
+        sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+        body: recent.body,
+        created_at: recent.created_at,
+        read_at: recent.read_at,
+        is_deleted: false
+      };
+      return res.json({ ok: true, message: msg, deduplicated: true });
+    }
+
     const info = db.run('INSERT INTO chat_messages (conversation_id, sender_id, body) VALUES (?,?,?)', [conv.id, req.user.id, body]);
     const preview = body.length > 80 ? body.slice(0, 80) + '…' : body;
     db.run(`UPDATE chat_conversations SET last_message_at=datetime('now'), last_message_text=? WHERE id=?`, [preview, conv.id]);
@@ -843,6 +872,73 @@ module.exports = function mountChat(app, deps) {
       read_at: null,
       is_deleted: false
     };
+    broadcast(conv, 'msg', { c: conv.id, m: msg });
+    dispatchPushNotification(conv, req.user.id, msg);
+    res.json({ ok: true, message: msg });
+  });
+
+  /* ---------- upload attachment alias (:id = convId) ---------- */
+  app.post('/api/chat/messages/:id/upload', chatAuth, handleChatUpload, (req, res) => {
+    const conv = getConv(intId(req.params.id));
+    if (!conv) {
+      if (req.file) try { fs.unlinkSync(req.file.path); } catch(_) {}
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (!convAccess(req.user, conv)) {
+      if (req.file) try { fs.unlinkSync(req.file.path); } catch(_) {}
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'File is required' });
+    }
+
+    try {
+      const fd = fs.openSync(req.file.path, 'r');
+      const buf = Buffer.alloc(512);
+      const bytesRead = fs.readSync(fd, buf, 0, 512, 0);
+      fs.closeSync(fd);
+      const head = buf.subarray(0, bytesRead).toString('latin1');
+      if (head.startsWith('\x7fELF') || head.startsWith('MZ') || /<script|<\?php/i.test(head)) {
+        try { fs.unlinkSync(req.file.path); } catch(_) {}
+        return res.status(400).json({ error: 'File rejected by security validation.' });
+      }
+    } catch (err) {
+      try { fs.unlinkSync(req.file.path); } catch(_) {}
+      return res.status(500).json({ error: 'File validation failed.' });
+    }
+
+    const safeOriginalName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ext = path.extname(safeOriginalName).toLowerCase();
+    const fileType = (ext === '.csv') ? 'csv' : 'txt';
+    const fileSize = req.file.size;
+    const relPath = path.basename(req.file.path);
+    const bodyText = String(req.body.body || '').trim() || safeOriginalName;
+
+    const info = db.run(`
+      INSERT INTO chat_messages (conversation_id, sender_id, body, attachment_path, attachment_type, attachment_name, attachment_size)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [conv.id, req.user.id, bodyText, relPath, fileType, safeOriginalName, fileSize]);
+
+    db.run(`UPDATE chat_conversations SET last_message_at=datetime('now'), last_message_text=? WHERE id=?`,
+      [`📎 ${safeOriginalName}`, conv.id]);
+
+    const sender = getUser(req.user.id) || req.user;
+    const msg = {
+      id: Number(info.lastInsertRowid),
+      conversation_id: conv.id,
+      sender_id: req.user.id,
+      sender_name: (sender.name && String(sender.name).trim()) || sender.username,
+      sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+      body: bodyText,
+      attachment_path: relPath,
+      attachment_type: fileType,
+      attachment_name: safeOriginalName,
+      attachment_size: fileSize,
+      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      read_at: null,
+      is_deleted: false
+    };
+
     broadcast(conv, 'msg', { c: conv.id, m: msg });
     dispatchPushNotification(conv, req.user.id, msg);
     res.json({ ok: true, message: msg });

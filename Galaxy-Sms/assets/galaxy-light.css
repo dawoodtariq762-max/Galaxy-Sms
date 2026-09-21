@@ -1,0 +1,180 @@
+/* ============================================================================
+   GALAXY SMS — LIGHT THEME (galaxy-light.css v1)
+   body.gx-light par apply hota hai. Dark theme untouched — ye sirf UPAR
+   override karta hai (galaxy.css ke baad load hota hai). Pure invert nahi —
+   coherent professional light palette (Galaxy brand compatible).
+   ========================================================================== */
+/* P15: light theme me html bhi light — warna short pages me neeche dark navy html dikhta tha (blue-area bug ka root cause) */
+html.gx-light{
+  --bg:#eef2f9;
+  background:#eef2f9!important;
+}
+html.gx-light body{min-height:100vh}
+body.gx-light{
+  --bg:#eef2f9; --bg2:#f6f8fd; --panel:#ffffff; --panel2:#f2f6ff; --row:#ffffff;
+  --border:#dfe6f2; --border2:#cdd8ea;
+  --text:#16264f; --muted:#4d5b7d; --ice:#16264f;
+  --sidebar:#ffffff; --topbar:rgba(255,255,255,.92);
+  --shadow:0 10px 28px rgba(22,38,79,.08);
+  --glow:0 0 0 1px rgba(48,171,237,.35),0 0 14px rgba(146,82,220,.18);
+}
+body.gx-light{
+  background:
+    radial-gradient(900px 500px at 90% -10%, rgba(146,82,220,.07), transparent 55%),
+    radial-gradient(800px 460px at -10% 110%, rgba(48,171,237,.07), transparent 55%),
+    var(--bg)!important;
+  color:var(--text)!important;
+}
+body.gx-light ::-webkit-scrollbar-thumb{background:#c3cee4;border-color:var(--bg)}
+body.gx-light .sidebar,body.gx-light .rail,body.gx-light .navshell{background:#ffffff!important;border-color:var(--border)!important;box-shadow:1px 0 0 var(--border)!important}
+body.gx-light .nav-item,body.gx-light .side-item,body.gx-light .sub-item,body.gx-light .navtab,body.gx-light .item{color:#41507a!important}
+body.gx-light .nav-item:hover,body.gx-light .side-item:hover,body.gx-light .sub-item:hover{background:#f0f6ff!important;color:var(--text)!important}
+body.gx-light .nav-item.active,body.gx-light .side-item.active,body.gx-light .sub-item.active{
+  background:linear-gradient(90deg,rgba(48,171,237,.12),rgba(146,82,220,.10))!important;color:#0f2454!important;
+  box-shadow:inset 0 0 0 1px rgba(48,171,237,.25)!important;
+}
+body.gx-light .topbar,body.gx-light .tb1,body.gx-light .navshell{background:var(--topbar)!important;border-color:var(--border)!important}
+body.gx-light .page-head h2{color:#0f2454!important}
+body.gx-light .breadcrumb,body.gx-light .sub,body.gx-light .muted,body.gx-light .hint,body.gx-light .ps,body.gx-light .clock,body.gx-light .tb-date,body.gx-light .bar-label{color:#5c6a8a!important}
+
+body.gx-light .card-head h3,body.gx-light .stat-info h3,body.gx-light .t1,body.gx-light .pt,body.gx-light .nm{color:#16264f!important}
+body.gx-light .stat-info p,body.gx-light .stat-info span{color:#5c6a8a!important}
+
+/* dashboard cards: distinct professional pastels (light) */
+
+
+
+
+
+
+
+
+/* tables */
+body.gx-light thead th,body.gx-light table th{background:#f2f6ff!important;color:#3a4a6b!important;border-bottom-color:var(--border2)!important}
+body.gx-light tbody tr:nth-child(even){background:#f8fbff}
+body.gx-light tbody tr:hover,body.gx-light table tr:hover{background:#eef6ff!important}
+body.gx-light td,body.gx-light th{color:var(--text)}
+/* forms */
+body.gx-light input,body.gx-light select,body.gx-light textarea{background:#ffffff!important;color:#16264f!important;border-color:#cdd8ea!important}
+body.gx-light input::placeholder,body.gx-light textarea::placeholder{color:#8b97b5!important}
+/* tags/chips keep readable on light */
+body.gx-light .tag-gray{background:#eef2f9!important;color:#41507a!important}
+body.gx-light .tag-mgr{background:#e7f5fe!important;color:#136a9e!important}
+body.gx-light .tag-agt{background:#f3ecfe!important;color:#6b31b8!important}
+body.gx-light .chip{background:#e7f5fe!important;color:#136a9e!important}
+/* gx action buttons */
+body.gx-light .gx-btn{background:#f2f6ff!important;color:#41507a!important;border-color:#d5dff0!important}
+body.gx-light .gx-btn:hover{color:#0f2454!important}
+/* pager */
+body.gx-light .pager button,body.gx-light .page-btn,body.gx-light .pg-btn,body.gx-light .pagination button{background:#fff!important;color:#41507a!important;border-color:var(--border)!important}
+body.gx-light select option{background:#ffffff!important;color:#16264f!important}
+/* charts */
+body.gx-light .chart .bar-track{background:#eef2fa!important}
+body.gx-light .chart .bar .val{color:#41507a!important}
+/* map */
+body.gx-light .gx-map-wrap{background:linear-gradient(180deg,#f4f8ff 0%,#e9f1fc 100%)!important;border:1px solid #d7e3f5!important}
+body.gx-light .gx-map-wrap path{fill:#c2d2e8;stroke:#f5f9ff;stroke-width:.5}
+body.gx-light .gx-map-wrap path.gx-on{fill:#1e8fd6}
+body.gx-light .gx-map-wrap path:hover{fill:#9252dc!important}
+body.gx-light .gx-map-info{background:#ffffff!important;color:#16264f!important;border-color:var(--border2)!important}
+/* skeleton */
+body.gx-light .skeleton{background:linear-gradient(90deg,#eef2fa 25%,#f8fbff 50%,#eef2fa 75%)}
+/* gx theme toggle */
+.gx-theme-btn{
+  width:32px;height:32px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  background:var(--panel2)!important;border:1px solid var(--border2)!important;color:var(--muted)!important;flex:0 0 auto;
+}
+.gx-theme-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.gx-theme-btn:hover{color:var(--text)!important;border-color:rgba(48,171,237,.55)!important}
+
+/* ---------- legacy/fallback components (galaxy-dark-theme block) — light overrides ---------- */
+
+
+
+
+body.gx-light .clock,body.gx-light .tb-date{background:#f2f6ff!important;color:#41507a!important;border-color:var(--border)!important}
+body.gx-light .drill .dchip{background:#ffffff!important;color:#41507a!important;border-color:var(--border)!important}
+body.gx-light .ms-notif-panel,body.gx-light .ms-profile-menu,body.gx-light .ms-toast{background:#ffffff!important;color:#16264f!important;border-color:var(--border)!important;box-shadow:var(--shadow)!important}
+body.gx-light .ms-notif-item,body.gx-light .ms-profile-item{color:#41507a!important;border-color:var(--border)!important}
+body.gx-light .ms-notif-head,body.gx-light .ms-notif-foot{background:#f6f9ff!important;color:#41507a!important}
+body.gx-light .ms-progress{background:linear-gradient(90deg,#30abed,#9252dc)!important}
+body.gx-light .upload-box{background:#f8fbff!important;color:#5c6a8a!important;border-color:#cdd8ea!important}
+body.gx-light .avatar,body.gx-light .av{color:#ffffff!important}
+body.gx-light .modal-overlay{background:rgba(15,23,60,.45)!important}
+body.gx-light .overlay{background:rgba(15,23,60,.35)!important}
+body.gx-light ::-webkit-scrollbar-track{background:#eef2f9!important}
+body.gx-light ::-webkit-scrollbar-thumb{background:#c3cee4!important;border-color:#eef2f9!important}
+body.gx-light [data-tip]::after{background:#ffffff;color:#16264f;border-color:var(--border2);box-shadow:var(--shadow)}
+body.gx-light .sidebar::after,body.gx-light .rail::after{background:var(--border)!important}
+body.gx-light .gx-map-info{background:#ffffff!important;color:#16264f!important}
+
+/* ---------- icon action colors (light): darker tones for contrast, subtle glow ---------- */
+body.gx-light .gx-btn:hover{color:#16264f!important;border-color:rgba(48,171,237,.55)!important;box-shadow:0 2px 10px rgba(48,171,237,.22)}
+body.gx-light .gx-btn.gx-green{color:#0e9f6e!important;background:rgba(16,185,129,.1)!important;border-color:rgba(16,185,129,.35)!important;box-shadow:0 1px 6px rgba(16,185,129,.14)}
+body.gx-light .gx-btn.gx-green:hover{background:rgba(16,185,129,.18)!important;color:#0b7c56!important}
+body.gx-light .gx-btn.gx-amber{color:#b97a10!important;background:rgba(217,119,6,.1)!important;border-color:rgba(217,119,6,.35)!important;box-shadow:0 1px 6px rgba(217,119,6,.14)}
+body.gx-light .gx-btn.gx-amber:hover{background:rgba(217,119,6,.18)!important;color:#8f5f0a!important}
+body.gx-light .gx-btn.gx-blue{color:#1265c4!important;background:rgba(37,99,235,.1)!important;border-color:rgba(37,99,235,.35)!important;box-shadow:0 1px 6px rgba(37,99,235,.14)}
+body.gx-light .gx-btn.gx-blue:hover{background:rgba(37,99,235,.18)!important;color:#0d4ea0!important}
+body.gx-light .gx-btn.gx-cyan{color:#0e97a5!important;background:rgba(14,151,165,.1)!important;border-color:rgba(14,151,165,.35)!important;box-shadow:0 1px 6px rgba(14,151,165,.14)}
+body.gx-light .gx-btn.gx-cyan:hover{background:rgba(14,151,165,.18)!important;color:#0b707c!important}
+body.gx-light .gx-btn.gx-violet{color:#7c3aed!important;background:rgba(124,58,237,.1)!important;border-color:rgba(124,58,237,.35)!important;box-shadow:0 1px 6px rgba(124,58,237,.14)}
+body.gx-light .gx-btn.gx-violet:hover{background:rgba(124,58,237,.18)!important;color:#5b21b6!important}
+body.gx-light .gx-btn.danger{color:#d64545!important;background:rgba(220,38,38,.08)!important;border-color:rgba(220,38,38,.32)!important;box-shadow:0 1px 6px rgba(220,38,38,.12)}
+body.gx-light .gx-btn.danger:hover{background:rgba(220,38,38,.15)!important;color:#a82f2f!important}
+
+
+body.gx-light tbody tr td,body.gx-light tbody td{color:#16264f!important}
+body.gx-light tbody tr td b{color:#0f2454!important}
+body.gx-light .page-head h2,body.gx-light .breadcrumb,body.gx-light .sub{color:#16264f!important}
+body.gx-light .breadcrumb,body.gx-light .sub,body.gx-light .hint,body.gx-light .muted{color:#5c6a8a!important}
+
+
+/* ============ P8: LIGHT SIDEBAR — soft Galaxy gradient (na pure-white, na navy) ============ */
+body.gx-light .sidebar,body.gx-light .rail,body.gx-light .navshell,body.gx-light .appbar{
+  background:linear-gradient(180deg,#f7f9ff 0%,#eff4fd 55%,#e9f0fb 100%)!important;
+  border-color:#d9e3f4!important;box-shadow:1px 0 0 #d9e3f4!important;
+}
+body.gx-light .sb-brand,body.gx-light .rail-brand,body.gx-light .brand-text,body.gx-light .brand{border-bottom:1px solid #dfe7f5!important}
+body.gx-light .sb-brand h1,body.gx-light .brand h1,body.gx-light .brand-text h1,body.gx-light .brand-logo h1,body.gx-light .sidebar h1,body.gx-light .brand b{color:#10234e!important;font-weight:760!important}
+body.gx-light .sb-brand h1 span,body.gx-light .brand-text h1 span{background:linear-gradient(96deg,#1e8fd6,#7f18b3)!important;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important}
+body.gx-light .sb-brand small,body.gx-light .brand small,body.gx-light .brand-text small,body.gx-light .sidebar small{color:#5e6c92!important}
+body.gx-light .sb-logo,body.gx-light .brand .logo,body.gx-light .rail .logo,body.gx-light .sb-brand .logo,body.gx-light .brand-logo .logo,body.gx-light .logo{background:#ffffff!important;border:1px solid #d9e3f4!important;box-shadow:0 6px 16px rgba(22,38,79,.10)!important}
+body.gx-light .sb-section,body.gx-light .sb-sec,body.gx-light .sec{color:#8291b6!important}
+body.gx-light .nav-item,body.gx-light .sub-item,body.gx-light .ritem,body.gx-light .rsubitem,body.gx-light .navtab,body.gx-light .item{color:#42527c!important}
+body.gx-light .nav-item:hover,body.gx-light .sub-item:hover,body.gx-light .ritem:hover,body.gx-light .item:hover{background:rgba(48,171,237,.10)!important;color:#10234e!important}
+body.gx-light .nav-item.active,body.gx-light .tab.active,body.gx-light .ritem.active,body.gx-light .navtab.active,body.gx-light .item.active{
+  background:linear-gradient(96deg,#30abed,#9252dc)!important;color:#ffffff!important;
+  box-shadow:0 8px 22px rgba(48,111,237,.30)!important;
+}
+body.gx-light .nav-item.active svg,body.gx-light .ritem.active svg,body.gx-light .item.active svg{stroke:#ffffff!important;color:#ffffff!important;opacity:1!important}
+body.gx-light .sub-item.active,body.gx-light .rsubitem.active{background:rgba(48,171,237,.16)!important;color:#10234e!important;box-shadow:inset 2px 0 0 #30abed!important}
+body.gx-light .topbar,body.gx-light .tb1,body.gx-light .mgr-topbar{background:#ffffff!important;border-bottom:1px solid #e2e9f6!important}
+
+/* ============ P9: LIGHT DASHBOARD — full-surface premium gradients (blank-white nahi) ============ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* payout chips: full-surface light */
+
+
+
+/* chart light: grid + labels */
+body.gx-light .chart{--gxgrid:rgba(90,110,170,.16)}
+body.gx-light .chart .bar .val{color:#41507a!important}
+body.gx-light .chart .bar{box-shadow:0 6px 16px rgba(22,54,120,.16)!important}
+
+
+
+/* ============ P10: vivid stat cards galaxy.css se dono themes par apply hote hain (light me strip bypass) ============ */
+body.gx-light{background:linear-gradient(180deg,#F6F8FE 0%,#EAF0F9 55%,#E6EDF8 100%)!important}

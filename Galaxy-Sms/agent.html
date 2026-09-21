@@ -466,7 +466,7 @@
 
       <!-- SMS NUMBERS -->
       <section class="page" id="page-numbers">
-        <div class="page-head"><div><h2>SMS Numbers</h2><div class="breadcrumb"><b>SMS Numbers</b> › My Numbers</div></div>
+        <div class="page-head"><div><h2>SMS Numbers <span class="gx-num-page-badge" style="font-size:14px;font-weight:600;color:var(--text,#e6ecfb);background:rgba(255,255,255,.08);padding:3px 9px;border-radius:6px;margin-left:10px;vertical-align:middle;display:inline-flex;align-items:center;gap:6px">Numbers: <span id="numPageCount">0</span> <button type="button" class="gx-copy-num-btn" id="btnCopyPageNumbers" onclick="copyCurrentPageNumbers(this)" title="Copy numbers" aria-label="Copy numbers" style="background:none;border:none;cursor:pointer;font-size:15px;padding:0;line-height:1;display:inline-flex;align-items:center;color:#38bdf8">📋</button></span></h2><div class="breadcrumb"><b>SMS Numbers</b> › My Numbers</div></div>
           <div class="head-actions">
             <button type="button" class="gx-btn gx-green"  onclick="openAllocAll()" data-tip="Allocate Selected" title="Allocate Selected" aria-label="Allocate Selected"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
             <button type="button" class="gx-btn danger" data-tip="Unallocate Selected" aria-label="Unallocate Selected" onclick="unallocSel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg></button>
@@ -479,17 +479,21 @@
             <select class="sel-lg" id="numClient"><option value="">Select Client</option></select>
             <button type="button" class="gx-btn gx-blue"  onclick="renderNumbers()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
             <button type="button" class="gx-btn"  onclick="resetNum()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+            <div class="gx-numbers-count-badge" style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;color:var(--text,#e6ecfb);background:rgba(255,255,255,.06);padding:6px 12px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,.1))">
+              <span>Numbers: <span id="numBadgeCount">0</span></span>
+              <button type="button" id="btnCopyNumbersOnly" class="gx-copy-num-btn" title="Copy Numbers Only" onclick="copyNumbersOnly()" style="background:none;border:none;cursor:pointer;font-size:15px;padding:2px 4px;line-height:1;display:inline-flex;align-items:center;color:#38bdf8" aria-label="Copy Numbers">📋</button>
+            </div>
           </div>
           <div class="table-controls">
-            <div class="tc-left"><label>Show Records:</label><select id="numLen" onchange="renderNumbers()"><option>10</option><option selected>25</option><option value="All">All</option></select>
-            <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
+            <div class="tc-left"><label>Show Records:</label><select id="numLen" onchange="renderNumbers()"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option><option>1000</option><option>5000</option><option value="All">All</option></select>
+            <div class="exp-btns"><button type="button" class="gx-btn gx-blue" onclick="copyCurrentPageNumbers(this)" data-tip="Copy numbers" title="Copy numbers" aria-label="Copy numbers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
             <div class="tc-right"><label>Search:</label><input type="text" id="numSearch" oninput="renderNumbers()" placeholder="Search..."/></div></div>
           <div class="bulk-bar"><span class="info" id="selInfo">0 selected</span></div>
         </div>
         <div class="table-wrap"><div class="tscroll"><table>
           <thead><tr><th><input type="checkbox" onclick="toggleAll(this)"/></th>
             <th class="sortable" onclick="sortNum('range')">Range <span class="sort">⇅</span></th>
-            <th class="sortable" onclick="sortNum('number')">Number <span class="sort" id="nSortHint">⇅</span></th>
+            <th class="sortable" onclick="sortNum('number')">Number <span class="sort" id="nSortHint">⇅</span> <button type="button" class="gx-copy-num-btn" onclick="event.stopPropagation();copyNumbersOnly()" title="Copy Numbers Only" style="background:none;border:none;cursor:pointer;font-size:12px;color:#38bdf8" aria-label="Copy Numbers">📋</button></th>
             <th class="sortable" onclick="sortNum('rate')">Rate <span class="sort">⇅</span></th>
             <th class="sortable" onclick="cycleClientFilter()">Client <span class="sort" id="cSortHint">⇅</span></th>
             <th>Limits</th></tr></thead>
@@ -520,7 +524,7 @@
       <!-- P19e: INTERNAL CHAT + COMPLAINTS (GXChat builds UI at runtime) -->
       <section class="page" id="page-chat">
         <!-- IN-PAGE CHAT SECURITY LOCK -->
-        <div id="chatLockView" style="display:none;padding:50px 16px;text-align:center">
+        <div id="chatLockView" style="display:block;padding:50px 16px;text-align:center">
           <div class="card" style="max-width:440px;margin:20px auto;padding:40px 32px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.55);border:1px solid rgba(48,171,237,.3);border-radius:22px;background:linear-gradient(180deg,rgba(20,24,48,.96),rgba(12,16,36,.98))">
             <div style="width:68px;height:68px;border-radius:34px;background:rgba(48,171,237,.14);border:1px solid rgba(48,171,237,.35);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#30ABED">
               <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
@@ -548,9 +552,9 @@
       <section class="page" id="page-numberStats"></section>
 
       <!-- PAYMENT SECTION -->
-            <section class="page" id="page-payment">
+      <section class="page" id="page-payment">
         <!-- IN-PAGE PAYMENT SECURITY LOCK -->
-        <div id="paymentLockView" style="display:none;padding:50px 16px;text-align:center">
+        <div id="paymentLockView" style="display:block;padding:50px 16px;text-align:center">
           <div class="card" style="max-width:440px;margin:20px auto;padding:40px 32px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.55);border:1px solid rgba(48,171,237,.3);border-radius:22px;background:linear-gradient(180deg,rgba(20,24,48,.96),rgba(12,16,36,.98))">
             <div style="width:68px;height:68px;border-radius:34px;background:rgba(48,171,237,.14);border:1px solid rgba(48,171,237,.35);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#30ABED">
               <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
@@ -667,38 +671,30 @@
 <script>
 if(window.API){ API.guard('agent'); }
 /* P21: Security Lock for Chat and Payment */
-let chatSecurityEnabled = true;
-
 function isChatPaymentUnlocked(){
   const token = sessionStorage.getItem('gx_chat_unlock_token');
-  if(token) return true;
-  if(chatSecurityEnabled === false) return true;
-  return false;
+  return !!token;
 }
 
 function updateNavLockIndicators(){
   const isUnlocked = isChatPaymentUnlocked();
   const chatLockEl = document.getElementById('chatNavLock');
   const payLockEl = document.getElementById('payNavLock');
-  const showLock = (!isUnlocked && chatSecurityEnabled !== false);
-  if(chatLockEl) chatLockEl.style.display = showLock ? 'inline-block' : 'none';
-  if(payLockEl) payLockEl.style.display = showLock ? 'inline-block' : 'none';
+  if(chatLockEl) chatLockEl.style.display = isUnlocked ? 'none' : 'inline-block';
+  if(payLockEl) payLockEl.style.display = isUnlocked ? 'none' : 'inline-block';
 }
 
 async function checkChatSecurityEnabled(){
   try {
     const res = await API.get('/chat/auth/lock-status');
-    chatSecurityEnabled = !!(res && res.chat_security_enabled);
-    if(res && res.unlocked){
-      sessionStorage.setItem('gx_agent_sec_unlocked', '1');
-      updateNavLockIndicators();
-      return false;
+    if(res && res.unlocked && res.unlock_token){
+      sessionStorage.setItem('gx_chat_unlock_token', res.unlock_token);
     }
     updateNavLockIndicators();
-    return chatSecurityEnabled;
+    return true;
   } catch (e) {
     updateNavLockIndicators();
-    return chatSecurityEnabled;
+    return true;
   }
 }
 
@@ -739,8 +735,6 @@ async function unlockSectionWithPin(section){
       if(data.unlock_token){
         sessionStorage.setItem('gx_chat_unlock_token', data.unlock_token);
       }
-      sessionStorage.setItem('gx_agent_sec_unlocked', '1');
-      window.__chatUnlocked = true;
       updateNavLockIndicators();
       if(inp) inp.value = '';
       if(err){ err.style.display = 'none'; err.textContent = ''; }
@@ -766,17 +760,19 @@ async function unlockSectionWithPin(section){
 }
 
 function revealUnlockedSection(section){
+  updateNavLockIndicators();
+  const paymentLockView = document.getElementById('paymentLockView');
+  const paymentContentView = document.getElementById('paymentContentView');
+  const chatLockView = document.getElementById('chatLockView');
+  const chatContentView = document.getElementById('chatContentView');
+
   if(section === 'payment'){
-    const lockView = document.getElementById('paymentLockView');
-    const contentView = document.getElementById('paymentContentView');
-    if(lockView) lockView.style.display = 'none';
-    if(contentView) contentView.style.display = 'block';
+    if(paymentLockView) paymentLockView.style.display = 'none';
+    if(paymentContentView) paymentContentView.style.display = 'block';
     loadAgentPayment();
   } else if(section === 'chat'){
-    const lockView = document.getElementById('chatLockView');
-    const contentView = document.getElementById('chatContentView');
-    if(lockView) lockView.style.display = 'none';
-    if(contentView) contentView.style.display = 'block';
+    if(chatLockView) chatLockView.style.display = 'none';
+    if(chatContentView) chatContentView.style.display = 'block';
     if(window.GXChat) GXChat.open('chat');
   }
 }
@@ -784,7 +780,6 @@ function revealUnlockedSection(section){
 function relockChatPayment(){
   sessionStorage.removeItem('gx_chat_unlock_token');
   sessionStorage.removeItem('gx_agent_sec_unlocked');
-  window.__chatUnlocked = false;
   updateNavLockIndicators();
 
   const paymentLockView = document.getElementById('paymentLockView');
@@ -809,6 +804,11 @@ function relockChatPayment(){
 // Initial check on load
 checkChatSecurityEnabled().catch(()=>{});
 
+window.showPageByName = function(id){
+  const el = document.querySelector(`.ritem[data-page="${id}"], .rsubitem[data-page="${id}"]`);
+  showPage(id, el);
+};
+
 /* NAV */
 async function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -821,7 +821,6 @@ async function showPage(id,el){
   window.scrollTo({top:0,behavior:'smooth'});
 
   if(id === 'payment'){
-    await checkChatSecurityEnabled();
     const isUnlocked = isChatPaymentUnlocked();
     const lockView = document.getElementById('paymentLockView');
     const contentView = document.getElementById('paymentContentView');
@@ -842,7 +841,6 @@ async function showPage(id,el){
   }
 
   if(id === 'chat'){
-    await checkChatSecurityEnabled();
     const isUnlocked = isChatPaymentUnlocked();
     const lockView = document.getElementById('chatLockView');
     const contentView = document.getElementById('chatContentView');
@@ -1331,6 +1329,13 @@ function doBulk(){const r=document.getElementById('baRange').value,c=document.ge
 function openWalletHelp(){document.getElementById('walletHelpModal').classList.add('show')}
 function payBal(b,type){return (b||[]).find(x=>x.payment_type===type)||{available_balance:'0',minimum:'0',can_request:false,label:type}}
 async function loadAgentPayment(){
+  if(!isChatPaymentUnlocked()){
+    const lockView = document.getElementById('paymentLockView');
+    const contentView = document.getElementById('paymentContentView');
+    if(lockView) lockView.style.display = 'block';
+    if(contentView) contentView.style.display = 'none';
+    return;
+  }
   const data=await API.get('/payment-v2/agent/summary');
   const uid = data.wallet?.binance_uid || '';
   if(document.getElementById('agtWallet')) {
@@ -1505,9 +1510,48 @@ async function renderNumbers(){
   state.page=data.page||1;state.totalPages=data.totalPages||1;
   numData=(data.rows||[]).map(r=>({id:r.id,range_id:r.range_id,range:r.range_name||'',number:r.number,rate:r.effective_rate||r.rate||'',client:r.client_name||'',client_id:r.client_id,sd:r.sd_limit||0,sw:r.sw_limit||0}));
   body.innerHTML=numData.map(r=>`<tr><td><input type="checkbox" class="rc" data-id="${r.id}" onchange="updSel()"/></td><td>${r.range}</td><td><b>${r.number}</b></td><td class="cell-money">${r.rate}</td><td>${r.client?`<span class="tag tag-cli">${r.client}</span>`:'<span class="tag tag-gray">Unallocated</span>'}</td><td class="muted">SD : ${r.sd} | SW : ${r.sw}</td></tr>`).join('')||`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No numbers found</td></tr>`;
-  numInfo.textContent=`Showing ${agtShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers`;
+  const currentNumbers = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
+  const countEl = document.getElementById('numPageCount');
+  if(countEl) countEl.textContent = currentNumbers.length.toLocaleString();
+  const badgeCount = document.getElementById('numBadgeCount');
+  if(badgeCount) badgeCount.textContent = currentNumbers.length.toLocaleString();
+  numInfo.innerHTML=`Showing ${agtShown(data.page,data.limit,numData.length,data.total)} of ${data.total||0} numbers <button type="button" class="gx-copy-num-btn" onclick="copyCurrentPageNumbers(this)" title="Copy numbers" style="margin-left:6px;background:none;border:none;cursor:pointer;font-size:14px;color:#38bdf8" aria-label="Copy numbers">📋</button>`;
   const pag=numInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,state,renderNumbers);updSel();
 }
+async function copyCurrentPageNumbers(btn){
+  const list = (numData || []).map(r => String(r.number || '').trim()).filter(Boolean);
+  if (!list.length) {
+    alert('No numbers on current page to copy.');
+    return;
+  }
+  const text = list.join('\n');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    const target = btn || document.getElementById('btnCopyPageNumbers') || document.getElementById('btnCopyNumbersOnly');
+    if (target) {
+      const origHtml = target.innerHTML;
+      target.innerHTML = '<span style="font-size:12px;color:#10b981;font-weight:600">Copied ✓</span>';
+      setTimeout(() => { target.innerHTML = origHtml; }, 1500);
+    }
+  } catch (err) {
+    alert('Failed to copy numbers: ' + err.message);
+  }
+}
+window.copyCurrentPageNumbers = copyCurrentPageNumbers;
+function copyNumbersOnly(btn){ return copyCurrentPageNumbers(btn); }
+window.copyNumbersOnly = copyNumbersOnly;
 async function loadNumbers(){return renderNumbers();}
 async function loadNumberSummaryForBulk(){
   try{

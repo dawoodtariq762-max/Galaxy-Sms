@@ -308,8 +308,8 @@
       <div class="gxc-msgs" id="gxcMsgs"></div>
       <div class="gxc-inputbar">
         <button class="gxc-emojibtn" id="gxcEmojibtn" type="button" title="Emoji">🙂</button>
-        <button class="gxc-emojibtn" id="gxcAttachBtn" type="button" title="Attach file (.txt, .csv)">📎</button>
-        <input type="file" id="gxcFileInput" accept=".txt,.csv" style="display:none">
+        <label class="gxc-emojibtn" id="gxcAttachBtn" for="gxcFileInput" title="Attach file (.txt, .csv)" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center">📎</label>
+        <input type="file" id="gxcFileInput" accept=".txt,.csv,text/plain,text/csv,text/comma-separated-values,application/vnd.ms-excel" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0">
         <div style="flex:1;min-width:0;display:flex;flex-direction:column">
           <div id="gxcAttachPreview" class="gxc-attach-preview" style="display:none"></div>
           <textarea class="gxc-input" id="gxcInput" rows="1" maxlength="2000" placeholder="Type a message..."></textarea>
@@ -347,7 +347,7 @@
       sendBtn.disabled = false;
     }
 
-    attachBtn.addEventListener('click', () => fileInp.click());
+    attachBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInp.click(); });
     fileInp.addEventListener('change', () => {
       if (fileInp.files && fileInp.files[0]) {
         const f = fileInp.files[0];
@@ -593,7 +593,7 @@
   }
 
   function appendMsg(m) {
-    const el = $('gxcMsgs'); if (!el || !S.convId || m.conversation_id !== S.convId) return;
+    const el = $('gxcMsgs'); if (!el || !S.convId || Number(m.conversation_id) !== Number(S.convId)) return;
     if (el.querySelector(`[data-mid="${m.id}"]`)) return; /* SSE + optimistic dedupe */
     const empty = el.querySelector('.gxc-empty'); if (empty) empty.remove();
     el.appendChild(renderMsg(m));
@@ -1002,8 +1002,13 @@
   window.GXChat = {
     open(page) {
       if (page === 'chat') {
-        const lockView = document.getElementById('chatLockView');
-        if (lockView && lockView.style.display !== 'none') {
+        const isAgent = (ME.role === 'agent');
+        const isUnlocked = !!(sessionStorage.getItem('gx_chat_unlock_token'));
+        if (isAgent && !isUnlocked) {
+          const lockView = document.getElementById('chatLockView');
+          const contentView = document.getElementById('chatContentView');
+          if (lockView) lockView.style.display = 'block';
+          if (contentView) contentView.style.display = 'none';
           return;
         }
         buildChatPage(); startRealtime(); refreshBadges(); loadConvs();
@@ -1022,7 +1027,11 @@
   function fabInit() {
     if (!ME.id) return; /* not logged in — api.js guard handles redirect */
     ensureChatFab();
-    startRealtime();
+    const isAgent = (ME.role === 'agent');
+    const isUnlocked = !!(sessionStorage.getItem('gx_chat_unlock_token'));
+    if (!isAgent || isUnlocked) {
+      startRealtime();
+    }
     refreshBadges();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fabInit);

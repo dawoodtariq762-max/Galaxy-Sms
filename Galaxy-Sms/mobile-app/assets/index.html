@@ -542,8 +542,10 @@
 
   <div class="attach-preview-bar" id="attachPreview" style="display:none"></div>
   <div class="chat-input-bar">
-    <button type="button" class="action-icon-btn" id="btnAttach" onclick="openFilePicker()" title="Attach file (.txt, .csv)">📎</button>
-    <input type="file" id="filePicker" accept=".txt,.csv" style="display:none" onchange="onFileSelected(this)">
+    <label class="action-icon-btn" id="btnAttach" for="filePicker" title="Attach file (.txt, .csv)" style="cursor:pointer">
+      📎
+      <input type="file" id="filePicker" accept=".txt,.csv,text/plain,text/csv,text/comma-separated-values,application/vnd.ms-excel" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0" onchange="onFileSelected(this)">
+    </label>
     <textarea class="chat-input" id="mInput" rows="1" placeholder="Type a message..." oninput="autoExpand(this)"></textarea>
     <button class="send-btn" id="mSend" onclick="sendMessage()">➤</button>
   </div>
@@ -697,6 +699,15 @@
 
     const savedToken = Native.getPref('galaxy_chat_token');
     const savedUserStr = Native.getPref('galaxy_chat_user');
+    const mInput = $('mInput');
+    if (mInput) {
+      mInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+    }
     if (savedToken && savedUserStr) {
       try {
         S.token = savedToken;
@@ -1067,10 +1078,25 @@
   async function loadMessages(convId) {
     try {
       const res = await api(`/api/chat/messages/${convId}?limit=50`);
-      S.messages = res.messages || [];
+      S.messages = [];
+      (res.messages || []).forEach(m => appendOrUpdateMessage(m));
       renderMessages();
       scrollToBottom();
     } catch (e) {}
+  }
+
+  function appendOrUpdateMessage(m) {
+    if (!m || !m.id) return false;
+    const mid = Number(m.id);
+    if (!Array.isArray(S.messages)) S.messages = [];
+    const idx = S.messages.findIndex(existing => Number(existing.id) === mid);
+    if (idx !== -1) {
+      S.messages[idx] = Object.assign({}, S.messages[idx], m);
+      return false;
+    }
+    S.messages.push(m);
+    S.messages.sort((a, b) => Number(a.id) - Number(b.id));
+    return true;
   }
 
   function formatBytes(bytes) {
@@ -1082,7 +1108,25 @@
 
   function renderMessages() {
     const box = $('msgBox');
+    if (!box) return;
     const isSpectator = S.user.role === 'admin' && S.activeConv && !S.activeConv.is_direct_admin;
+
+    if (!Array.isArray(S.messages) || S.messages.length === 0) {
+      box.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-muted);font-size:13px"><div style="font-size:32px;margin-bottom:8px">💬</div>No messages yet — start the conversation!</div>';
+      return;
+    }
+
+    // Strict deduplication guard
+    const seen = new Set();
+    const unique = [];
+    for (const m of S.messages) {
+      const mid = Number(m.id);
+      if (!seen.has(mid)) {
+        seen.add(mid);
+        unique.push(m);
+      }
+    }
+    S.messages = unique;
 
     box.innerHTML = S.messages.map(m => {
       const mine = !isSpectator && (m.sender_id === S.user.id);
@@ -1161,8 +1205,10 @@
   /* P21: File attachments */
   let selectedChatFile = null;
 
-  window.openFilePicker = function() {
-    $('filePicker').click();
+  window.openFilePicker = function(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const fp = $('filePicker');
+    if (fp) fp.click();
   };
 
   window.onFileSelected = function(inp) {
@@ -1210,6 +1256,11 @@
     const text = input.value.trim();
     if (!text && !selectedChatFile) return;
     if (!S.activeConv) return;
+    if (S.isSending) return; // Prevent concurrent send actions
+
+    S.isSending = true;
+    const sendBtn = $('mSend');
+    if (sendBtn) sendBtn.disabled = true;
 
     input.value = '';
     autoExpand(input);
@@ -1232,20 +1283,24 @@
         if (!r.ok) throw new Error(res.error || 'Upload failed');
         clearAttachFile();
         if (res && res.message) {
-          S.messages.push(res.message);
+          appendOrUpdateMessage(res.message);
           renderMessages();
           scrollToBottom();
         }
       } else {
         const res = await api(`/api/chat/messages/${S.activeConv.id}`, 'POST', { body: text });
         if (res && res.message) {
-          S.messages.push(res.message);
+          appendOrUpdateMessage(res.message);
           renderMessages();
           scrollToBottom();
         }
       }
     } catch (e) {
       alert('Failed to send: ' + e.message);
+    } finally {
+      S.isSending = false;
+      if (sendBtn) sendBtn.disabled = false;
+      input.focus();
     }
   };
 
@@ -1401,12 +1456,10 @@
         const m = data.m;
 
         // Message rendering in active conversation
-        if (S.activeConv && S.activeConv.id === data.c) {
-          if (!S.messages.some(existing => existing.id === m.id)) {
-            S.messages.push(m);
-            renderMessages();
-            scrollToBottom();
-          }
+        if (S.activeConv && Number(S.activeConv.id) === Number(data.c)) {
+          appendOrUpdateMessage(m);
+          renderMessages();
+          scrollToBottom();
           api(`/api/chat/messages/${data.c}/read`, 'POST').catch(() => {});
         } else {
           loadConversations();
@@ -1415,7 +1468,7 @@
         // Notification Generation Logic
         // Triggers for EVERY genuinely new incoming message when backgrounded or viewing another chat
         const isAppBackgrounded = (document.visibilityState === 'hidden') || (!document.hasFocus());
-        const isDifferentChat = (!S.activeConv || S.activeConv.id !== data.c);
+        const isDifferentChat = (!S.activeConv || Number(S.activeConv.id) !== Number(data.c));
 
         if (m.sender_id !== S.user.id && !S.seenNotifIds.has(m.id)) {
           S.seenNotifIds.add(m.id);
@@ -1431,7 +1484,7 @@
       // Read receipt
       S.es.addEventListener('read', (e) => {
         const data = JSON.parse(e.data);
-        if (S.activeConv && S.activeConv.id === data.c) {
+        if (S.activeConv && Number(S.activeConv.id) === Number(data.c)) {
           S.messages.forEach(m => { if (m.sender_id === S.user.id) m.read_at = new Date().toISOString(); });
           renderMessages();
         }
@@ -1440,8 +1493,8 @@
       // Message deleted for everyone
       S.es.addEventListener('msg_deleted', (e) => {
         const data = JSON.parse(e.data);
-        if (S.activeConv && S.activeConv.id === data.c) {
-          const target = S.messages.find(m => m.id === data.message_id);
+        if (S.activeConv && Number(S.activeConv.id) === Number(data.c)) {
+          const target = S.messages.find(m => Number(m.id) === Number(data.message_id));
           if (target) {
             target.is_deleted = true;
             target.body = 'This message was deleted';
@@ -1449,6 +1502,7 @@
             renderMessages();
           }
         }
+        loadConversations();
       });
 
       // Access revoked
