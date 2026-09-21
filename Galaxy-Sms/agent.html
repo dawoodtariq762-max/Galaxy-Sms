@@ -632,9 +632,26 @@ if(window.API){ API.guard('agent'); }
 /* P21: Security Lock for Chat and Payment */
 let pendingLockedPage = null;
 let pendingLockedEl = null;
+let chatSecurityEnabled = true;
 
-function isChatPaymentUnlocked(){
-  return sessionStorage.getItem('gx_agent_sec_unlocked') === '1' || window.__chatUnlocked === true;
+async function checkChatSecurityEnabled(){
+  try {
+    const res = await API.get('/chat/auth/lock-status');
+    chatSecurityEnabled = !!(res && res.chat_security_enabled);
+    return chatSecurityEnabled;
+  } catch (e) {
+    return chatSecurityEnabled;
+  }
+}
+
+async function shouldRequireLock(id){
+  if(id !== 'chat' && id !== 'payment') return false;
+  // If already unlocked in this session
+  const unlock = sessionStorage.getItem('gx_chat_unlock_token');
+  if(unlock) return false;
+  // Check if admin has enabled chat security for this user
+  const active = await checkChatSecurityEnabled();
+  return active;
 }
 
 function openChatLock(pageId, el){
@@ -663,6 +680,7 @@ function cancelChatLock(){
 }
 
 function relockChatPayment(){
+  sessionStorage.removeItem('gx_chat_unlock_token');
   sessionStorage.removeItem('gx_agent_sec_unlocked');
   window.__chatUnlocked = false;
   const cur = document.querySelector('.page.active');
@@ -701,6 +719,9 @@ async function submitChatLock(){
     });
     const data = await res.json().catch(() => ({}));
     if(res.ok && data.ok){
+      if(data.unlock_token){
+        sessionStorage.setItem('gx_chat_unlock_token', data.unlock_token);
+      }
       sessionStorage.setItem('gx_agent_sec_unlocked', '1');
       window.__chatUnlocked = true;
       document.getElementById('chatLockModal').classList.remove('show');
@@ -727,7 +748,24 @@ async function submitChatLock(){
 }
 
 /* NAV */
-function showPage(id,el){
+async function showPage(id,el){
+  if(id === 'chat' || id === 'payment'){
+    const needLock = await shouldRequireLock(id);
+    if(needLock){
+      openChatLock(id, el);
+      return;
+    }
+  }
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const pg=document.getElementById('page-'+id);
+  if(pg)pg.classList.add('active');
+  document.querySelectorAll('.ritem').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.rsubitem').forEach(n=>n.classList.remove('active'));
+  if(el)el.classList.add('active');
+  document.getElementById('pageTitle').textContent=(el?el.querySelector('.lbl').textContent:'Dashboard');
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(typeof loadAgentPageData==='function')loadAgentPageData(id);
+}
   if((id === 'chat' || id === 'payment') && !isChatPaymentUnlocked()){
     openChatLock(id, el);
     return;

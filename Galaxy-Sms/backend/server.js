@@ -3773,9 +3773,29 @@ app.put('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res
   rows.forEach(r=>{ const t=normalizePaymentType(r.payment_type); db.run('UPDATE payment_v2_settings SET min_withdrawal=?, updated_at=datetime(\'now\') WHERE payment_type=?',[normalizeDecimalString(r.min_withdrawal)||'0',t]); paymentAudit(req,'update_minimum',{payment_type:t,amount:r.min_withdrawal,status:'settings'}); });
   res.json({ok:true,settings:paymentTypesSettings()});
 });
-app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}}));
-app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), (req,res)=>res.json(db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}));
-app.put('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), (req,res)=>{
+/* P21: Enforce Chat Security Unlock on Agent Payment endpoints */
+function requireAgentChatUnlock(req, res, next) {
+  if (!req.user || req.user.role !== 'agent') return next();
+  const cred = db.get('SELECT chat_enabled, chat_password_hash FROM chat_credentials WHERE user_id=?', [req.user.id]);
+  if (!cred || cred.chat_enabled !== 1 || !cred.chat_password_hash) {
+    return next();
+  }
+  const token = req.headers['x-chat-unlock-token'];
+  if (!token) {
+    return res.status(403).json({ error: 'Chat security PIN verification required to access payment section', locked: true });
+  }
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    if (decoded && decoded.type === 'chat_unlocked' && decoded.id === req.user.id) {
+      return next();
+    }
+  } catch (_) {}
+  return res.status(403).json({ error: 'Chat security PIN verification required or session expired', locked: true });
+}
+
+app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}}));
+app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json(db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}));
+app.put('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>{
   /* P19j: Binance UID replaces the USDT TRC20 wallet address. Once set, it is locked
      for security so funds cannot be redirected if an agent session is compromised.
      Only Admin can update an existing locked Binance UID. */
@@ -3802,7 +3822,7 @@ app.put('/api/payment-v2/admin/agents/:id/wallet', authRequired, requireRole('ad
   paymentAudit(req,'admin_update_wallet',{agent_id:agentId,status:'saved',details:{binance_uid:uid}});
   res.json({ok:true,agent_id:agentId,binance_uid:uid});
 });
-app.post('/api/payment-v2/agent/request', authRequired, requireRole('agent'), (req,res)=>{
+app.post('/api/payment-v2/agent/request', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>{
   /* P19j: request now requires a saved Binance UID (was: valid TRC20 wallet). Calculations, eligibility,
      pending-duplicate and approval flow are UNCHANGED. PREVIOUS: walletValid(wallet.wallet_address) gate + wallet_address in INSERT. */
   const type=normalizePaymentType(req.body?.payment_type); const wallet=db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id]);
@@ -3816,9 +3836,9 @@ app.post('/api/payment-v2/agent/request', authRequired, requireRole('agent'), (r
     db.execNoSave('COMMIT'); db.save(); paymentNotify(req.user.id,ins.lastInsertRowid,'submitted',`${paymentTypeLabel(type)} payment request submitted: $${amount}`); paymentAudit(req,'request_submitted',{request_id:ins.lastInsertRowid,agent_id:req.user.id,manager_id:agentManagerId(req.user.id),payment_type:type,amount,wallet_address:'',status:'Pending',details:{binance_uid:wallet.binance_uid}}); res.json({ok:true,id:ins.lastInsertRowid,amount,status:'Pending'});
   }catch(e){ try{db.execNoSave('ROLLBACK')}catch(_){} res.status(500).json({error:e.message}); }
 });
-app.get('/api/payment-v2/agent/requests', authRequired, requireRole('agent'), (req,res)=>res.json(db.all('SELECT * FROM payment_requests_v2 WHERE agent_id=? ORDER BY id DESC LIMIT 300',[req.user.id])));
-app.get('/api/payment-v2/agent/notifications', authRequired, requireRole('agent'), (req,res)=>res.json(db.all('SELECT * FROM payment_notifications_v2 WHERE agent_id=? ORDER BY id DESC LIMIT 100',[req.user.id])));
-app.post('/api/payment-v2/agent/notifications/read-all', authRequired, requireRole('agent'), (req,res)=>{db.run("UPDATE payment_notifications_v2 SET read_at=datetime('now') WHERE agent_id=? AND read_at IS NULL",[req.user.id]);res.json({ok:true});});
+app.get('/api/payment-v2/agent/requests', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json(db.all('SELECT * FROM payment_requests_v2 WHERE agent_id=? ORDER BY id DESC LIMIT 300',[req.user.id])));
+app.get('/api/payment-v2/agent/notifications', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json(db.all('SELECT * FROM payment_notifications_v2 WHERE agent_id=? ORDER BY id DESC LIMIT 100',[req.user.id])));
+app.post('/api/payment-v2/agent/notifications/read-all', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>{db.run("UPDATE payment_notifications_v2 SET read_at=datetime('now') WHERE agent_id=? AND read_at IS NULL",[req.user.id]);res.json({ok:true});});
 app.get('/api/payment-v2/manager/agents', authRequired, requireRole('manager'), (req,res)=>{
   const agents=db.all("SELECT id,username,name FROM users WHERE role='agent' AND parent_id=? ORDER BY username COLLATE NOCASE",[req.user.id]);
   res.json(agents.map(a=>({agent_id:a.id,agent_name:a.username,name:a.name||'',balances:agentPaymentSummary(a.id),payment_status:db.get("SELECT status FROM payment_requests_v2 WHERE agent_id=? ORDER BY id DESC LIMIT 1",[a.id])?.status||'No Request'})));
