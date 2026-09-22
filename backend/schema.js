@@ -60,6 +60,9 @@ function createTables() {
     rate       TEXT DEFAULT '',
     payterm    TEXT DEFAULT 'Weekly',
     payout     TEXT DEFAULT '0',
+    manager_rate TEXT DEFAULT '',
+    agent_rate   TEXT DEFAULT '',
+    client_rate  TEXT DEFAULT '',
     -- ownership chain (kisi bhi level par assigned ho sakta hai)
     manager_id INTEGER,
     agent_id   INTEGER,
@@ -445,6 +448,16 @@ function createTables() {
   ensureColumn('ranges', 'provider_rate_7_1', "TEXT DEFAULT 'NA'");
   ensureColumn('ranges', 'provider_rate_7_7', "TEXT DEFAULT 'NA'");
   ensureColumn('ranges', 'provider_rate_30_45', "TEXT DEFAULT 'NA'");
+
+  /* Hierarchy Tier Allocation Rates: Admin -> Manager -> Agent -> Client */
+  ensureColumn('numbers', 'manager_rate', "TEXT DEFAULT ''");
+  ensureColumn('numbers', 'agent_rate', "TEXT DEFAULT ''");
+  ensureColumn('numbers', 'client_rate', "TEXT DEFAULT ''");
+  try {
+    db.run(`UPDATE numbers SET manager_rate = rate WHERE manager_id IS NOT NULL AND (manager_rate IS NULL OR manager_rate = '') AND rate != '' AND rate IS NOT NULL`);
+    db.run(`UPDATE numbers SET agent_rate = rate WHERE agent_id IS NOT NULL AND manager_id IS NULL AND (agent_rate IS NULL OR agent_rate = '') AND rate != '' AND rate IS NOT NULL`);
+    db.run(`UPDATE numbers SET client_rate = payout WHERE client_id IS NOT NULL AND (client_rate IS NULL OR client_rate = '') AND payout != '' AND payout != '0' AND payout IS NOT NULL`);
+  } catch (_) {}
 
   const cs = db.get('SELECT COUNT(*) AS c FROM carrier_settings');
   if (!cs || cs.c === 0) {

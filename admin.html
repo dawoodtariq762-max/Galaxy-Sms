@@ -749,7 +749,7 @@
 <div class="modal-overlay" id="allocAllModal"><div class="modal">
   <div class="modal-head"><h3>Allocate Selected Numbers</h3><button class="modal-close" onclick="closeModal('allocAllModal')">×</button></div>
   <div class="modal-body">
-    <div class="form-group"><label>Select Manager / Agent <span class="req">*</span></label><select id="aaClient"><option value="">Please Select</option></select></div>
+    <div class="form-group"><label>Select Manager / Agent / Client <span class="req">*</span></label><select id="aaClient"><option value="">Please Select</option></select></div>
     <div class="form-group"><label>Payterm</label><select id="aaPayterm" onchange="aaRefreshDefaultRate()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
     <div class="form-group"><label>Allocation Rate <span class="req">*</span> <span class="muted" style="font-weight:400;font-size:11.5px">(default: from Rate Management)</span></label>
       <input type="number" id="aaRate" step="0.000001" min="0" placeholder="0.010" oninput="this.dataset.dirty='1'"/>
@@ -1053,17 +1053,19 @@ async function moveSelectedToTestPanel(){
     await loadRates();
   }catch(e){ alert('❌ '+e.message); }
 }
-/* Allocate All modal (Admin -> Manager or direct Agent) */
+/* Allocate All modal (Admin -> Manager, Agent, or Client) */
 async function openAllocAll(){const ids=getSelectedIds();if(!ids.length){alert('Please select numbers first (checkbox).');return;}
   try{ if(!usersData.manager.length) usersData.manager=await API.get('/users/manager'); }catch(e){}
   try{ if(!usersData.agent.length) usersData.agent=await API.get('/users/agent'); }catch(e){}
+  try{ if(!usersData.client?.length) usersData.client=await API.get('/users/client'); }catch(e){}
   const managerOpts=(usersData.manager||[]).map(m=>`<option value="${m.id}">Manager: ${m.username}</option>`).join('');
   const agentOpts=(usersData.agent||[]).map(a=>`<option value="${a.id}">Agent: ${a.username}</option>`).join('');
-  const sel=document.getElementById('aaClient'); sel.innerHTML='<option value="">Please Select</option>'+managerOpts+agentOpts;
+  const clientOpts=(usersData.client||[]).map(c=>`<option value="${c.id}">Client: ${c.username}</option>`).join('');
+  const sel=document.getElementById('aaClient'); sel.innerHTML='<option value="">Please Select</option>'+managerOpts+agentOpts+clientOpts;
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
   const rateInput=document.getElementById('aaRate'); if(rateInput){ rateInput.value=''; rateInput.dataset.dirty=''; }
   aaRefreshDefaultRate();
-  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the Manager or directly to an Agent.`;
+  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the recipient.`;
   document.getElementById('allocAllModal').classList.add('show');}
 /* P19: selected numbers ke (pehle) range ka Rate Management default aaRate me load karo.
    Multiple ranges selected hon to hint bata deta hai. Admin value change kar sakta hai —
@@ -1090,11 +1092,11 @@ function aaRefreshDefaultRate(){
     : 'The default rate comes from Rate Management. Changing the value here only overrides the rate for THIS allocation — it does not change the global Rate Management / Agent rate.'; }
 }
 async function confirmAllocAll(){const ids=getSelectedIds();const target=document.getElementById('aaClient').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;
-  if(!target){alert('Select a manager.');return;}
-  /* P19: rate override — khali chhoro to Rate Management default lagega */
+  if(!target){alert('Select a manager, agent, or client.');return;}
+  /* rate override — khali chhoro to Rate Management default lagega */
   const rv=(document.getElementById('aaRate')?.value||'').trim();
   if(rv && (isNaN(parseFloat(rv))||parseFloat(rv)<=0)){alert('Enter a positive rate (e.g. 0.010) — or leave it blank to use the Rate Management default.');return;}
-  try{ const body={ids,target_id:+target,payterm:pt,payout:po}; if(rv) body.rate=rv;
+  try{ const body={ids,target_id:+target,payterm:pt,payout:rv||po}; if(rv) body.rate=rv;
     await API.post('/numbers/allocate',body); closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers(); }catch(e){ alert('❌ '+e.message); }}
 
 /* ===== SMART DIVIDE (Admin -> Managers, unallocated auto-divide) ===== */
@@ -1152,24 +1154,58 @@ async function pollExportJob(id){
 }
 
 /* =============== IMPORT (file upload) =============== */
+function extractNumbersFromText(text) {
+  if (!text) return [];
+  text = String(text).replace(/^\uFEFF/, '');
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  const seen = new Set();
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s) continue;
+    const cells = s.includes('\t') || s.includes(';') || s.includes(',') ? s.split(/[\t,;]+/) : [s];
+    for (const cell of cells) {
+      const raw = cell.replace(/^["']+|["']+$/g, '').trim();
+      if (!raw) continue;
+      const spaceTokens = raw.split(/\s+/).filter(Boolean);
+      if (spaceTokens.length > 1 && spaceTokens.every(t => t.replace(/\D/g, '').length >= 5)) {
+        for (const t of spaceTokens) {
+          const hasPlus = t.startsWith('+');
+          const d = t.replace(/\D/g, '');
+          if (d.length >= 5) {
+            const num = (hasPlus ? '+' : '') + d;
+            if (!seen.has(num)) { seen.add(num); out.push(num); }
+          }
+        }
+        continue;
+      }
+      const hasPlus = raw.startsWith('+');
+      const d = raw.replace(/\D/g, '');
+      if (d.length >= 5) {
+        const num = (hasPlus ? '+' : '') + d;
+        if (!seen.has(num)) { seen.add(num); out.push(num); }
+      }
+    }
+  }
+  return out;
+}
 function handleFile(inputId,infoId){const f=document.getElementById(inputId).files[0];
   document.getElementById(infoId).innerHTML=f?`Selected: <b>${f.name}</b> (${(f.size/1024).toFixed(1)} KB)`:'';}
 async function doImport(inputId){const f=document.getElementById(inputId).files[0];
   if(!f){alert('Please select a file first.');return;}
   if(inputId==='numFile'){
     const rg=document.getElementById('importRange').value; if(!rg){alert('Enter the range name where numbers should be added.');return;}
+    const isExcel = /\.(xlsx|xls)$/i.test(f.name);
+    if (isExcel || f.size > 400 * 1024) {
+      const fd=new FormData(); fd.append('file',f); fd.append('range_name',rg); fd.append('file_name',f.name);
+      const r=await API.upload('/numbers/import-file',fd);
+      if(r.background&&r.job){showImportJob(r.job);pollImportJob(r.job.job_id);}
+      return;
+    }
     const text=await f.text();
-    const nums=text.split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\+?\d{5,}$/.test(x));
+    const nums=extractNumbersFromText(text);
     if(!nums.length){alert('No valid numbers found in the file.');return;}
     try{
-      // PHASE-2: large files go straight to the server (streaming import) —
-      // the browser no longer parses + ships a giant JSON body.
-      if (f.size > 400 * 1024) {
-        const fd=new FormData(); fd.append('file',f); fd.append('range_name',rg); fd.append('file_name',f.name);
-        const r=await API.upload('/numbers/import-file',fd);
-        if(r.background&&r.job){showImportJob(r.job);pollImportJob(r.job.job_id);}
-        return;
-      }
       const r=await API.post('/numbers/import',{range_name:rg,numbers:nums,file_name:f.name});if(r.background&&r.job){showImportJob(r.job);pollImportJob(r.job.job_id);}else{alert(`✅ ${r.inserted||0} numbers imported. Skipped: ${r.skipped||0}`);await loadRates();await loadNumbers();}
     }catch(e){alert('❌ '+e.message);}
   } else {alert('For range import, use + Add Range for now. Number file import is live and working.');}
@@ -1997,7 +2033,7 @@ async function doImportTestNumbers(){
   if(!f){alert('Please select a test numbers file.');return;}
   if(!rangeName){alert('Please select a range.');return;}
   const text=await f.text();
-  const nums=text.split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\+?\d{5,}$/.test(x));
+  const nums=extractNumbersFromText(text);
   if(!nums.length){alert('No valid test numbers found in the file.');return;}
   try{
     const r=await API.post('/test-numbers/import',{range_name:rangeName,numbers:nums});

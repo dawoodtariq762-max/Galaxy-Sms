@@ -2069,12 +2069,9 @@ function numberFromSql(where, need = {}) {
 function numberSelectSql(where, options = {}) {
   const lastSms = options.lastSms ? `,
             (SELECT MAX(s.received_at) FROM sms_records s WHERE s.number=n.number AND COALESCE(s.is_test,0)=0) AS last_sms_at` : '';
-  // Display query: LIMIT-bounded, so keeping display JOINs here is cheap.
-  // sharing_users becomes a scalar subquery (no row duplication).
-  return `SELECT n.*, r.name AS range_name,
-            COALESCE(
-      NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.rate,''))),'NA'),''),
-      CASE
+  const role = options.role || (options.user && options.user.role) || '';
+
+  const cardRateExpr = `CASE
         WHEN UPPER(TRIM(COALESCE(n.payterm, r.payment_type,'')))  LIKE '%30%'
           OR UPPER(TRIM(COALESCE(n.payterm, r.payment_type,'')))  LIKE '%MONTH%'
           THEN NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.rate_30_45,''))),'NA'),'')
@@ -2089,8 +2086,41 @@ function numberSelectSql(where, options = {}) {
       NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.rate_7_7,''))),'NA'),''),
       NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.rate_1_1,''))),'NA'),''),
       NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.rate_30_45,''))),'NA'),''),
-      '0') AS effective_rate,
-            CASE WHEN n.manager_id IS NOT NULL THEN 'manager' WHEN n.agent_id IS NOT NULL THEN 'agent' WHEN n.client_id IS NOT NULL THEN 'client' ELSE 'unallocated' END AS owner_type,
+      '0'`;
+
+  let effExpr = '';
+  if (role === 'manager') {
+    effExpr = `COALESCE(
+      NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.manager_rate,''))),'NA'),''),
+      NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.rate,''))),'NA'),''),
+      ${cardRateExpr})`;
+  } else if (role === 'agent') {
+    effExpr = `COALESCE(
+      NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.agent_rate,''))),'NA'),''),
+      CASE WHEN n.manager_id IS NULL THEN NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.rate,''))),'NA'),'') ELSE NULL END,
+      ${cardRateExpr})`;
+  } else if (role === 'client') {
+    effExpr = `COALESCE(
+      NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.client_rate,''))),'NA'),''),
+      NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.payout,''))),'NA'),''),
+      '0')`;
+  } else {
+    // Admin or unspecified: displays the rate Admin assigned to the top assigned tier
+    effExpr = `COALESCE(
+      CASE
+        WHEN n.manager_id IS NOT NULL THEN COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.manager_rate,''))),'NA'),''), NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.rate,''))),'NA'),''))
+        WHEN n.agent_id IS NOT NULL THEN COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.agent_rate,''))),'NA'),''), NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.rate,''))),'NA'),''))
+        WHEN n.client_id IS NOT NULL THEN COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.client_rate,''))),'NA'),''), NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.payout,''))),'NA'),''))
+        ELSE NULLIF(NULLIF(UPPER(TRIM(COALESCE(n.rate,''))),'NA'),'')
+      END,
+      ${cardRateExpr})`;
+  }
+
+  // Display query: LIMIT-bounded, so keeping display JOINs here is cheap.
+  // sharing_users becomes a scalar subquery (no row duplication).
+  return `SELECT n.*, r.name AS range_name,
+            ${effExpr} AS effective_rate,
+            CASE WHEN n.client_id IS NOT NULL THEN 'client' WHEN n.agent_id IS NOT NULL THEN 'agent' WHEN n.manager_id IS NOT NULL THEN 'manager' ELSE 'unallocated' END AS owner_type,
             cu.username AS client_name,
             COALESCE((SELECT s1.panel_name FROM sharing_users s1 WHERE s1.agent_user_id=n.agent_id ORDER BY s1.id LIMIT 1), au.username) AS agent_name,
             au.username AS agent_username,
@@ -2187,7 +2217,7 @@ app.get('/api/numbers', authRequired, (req, res, next) => {
     const dir = String(q.dir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
     sendPagedStreaming(res,
       { total, page, limit, totalPages, role_max: roleCap, count_source: 'fast_database_count' },
-      `${numberSelectSql(query.where)} ORDER BY ${sortCol} ${dir}, n.id ASC LIMIT ? OFFSET ?`,
+      `${numberSelectSql(query.where, { role: req.user.role })} ORDER BY ${sortCol} ${dir}, n.id ASC LIMIT ? OFFSET ?`,
       [...query.params, limit, offset], null);
   } catch (e) { console.warn('numbers stream failed', e.message); if (res.headersSent) { try { res.end(); } catch (_) {} } else res.status(500).json({ error: 'Query failed' }); }
 });
@@ -2217,27 +2247,29 @@ app.get('/api/numbers', authRequired, (req, res) => cachedJson(req, res, 60000, 
     const sortCol = sortMap[req.query.sort] || 'n.number';
     const dir = String(req.query.dir||'asc').toLowerCase()==='desc'?'DESC':'ASC';
     const withLastSms = String(req.query.last_sms || req.query.include_last_sms || '') === '1';
-    const rows = db.all(`${numberSelectSql(query.where, { lastSms: withLastSms })} ORDER BY ${sortCol} ${dir}, n.id ASC LIMIT ? OFFSET ?`, [...query.params, limit, offset]);
+    const rows = db.all(`${numberSelectSql(query.where, { role: req.user.role, lastSms: withLastSms })} ORDER BY ${sortCol} ${dir}, n.id ASC LIMIT ? OFFSET ?`, [...query.params, limit, offset]);
     return { rows, total, page, limit, totalPages, role_max: roleCap, count_source: 'fast_database_count', capped: total > limit * totalPages && total > hardCap ? hardCap : undefined };
   }
 
-  let rows = db.all(`${numberSelectSql(query.where)} ORDER BY n.number ASC`, query.params);
+  let rows = db.all(`${numberSelectSql(query.where, { role: req.user.role })} ORDER BY n.number ASC`, query.params);
   /* P11: legacy full-list path capped for non-admin roles (admin keeps legacy full dump for exports) */
   if (req.user.role !== 'admin' && rows.length > roleCap) rows = rows.slice(0, roleCap);
   return rows;
 }, 'numbers_ver'));
 
 // allocate selected numbers to a target user (one level down)
-/* P19 ADMIN ALLOCATION RATE OVERRIDE — shared validator (handleAllocate + smart-divide).
-   Sirf admin ke liye; positive decimal, <=6 dp, <=100000. Detailed comments handleAllocate me. */
-function validatedAllocationRate(user, raw) {
-  if (!user || user.role !== 'admin') return { ok: true, value: '' }; // non-admin rate param silently ignored (payout pattern)
+/* HIERARCHY TIER ALLOCATION RATE OVERRIDE — shared validator (handleAllocate + smart-divide).
+   Supports Admin, Manager, and Agent allocation tiers. Positive decimal, <=6 dp, <=100000. */
+function validatedAllocationRate(user, raw, targetRole = '') {
+  if (!user || !['admin', 'manager', 'agent'].includes(user.role)) return { ok: true, value: '' };
   if (raw === undefined || String(raw).trim() === '') return { ok: true, value: '' };
-  /* P19: negative raw yahin reject — normalizeDecimalString('-0.5') BigInt('-0') ka
-     sign drop kar ke '0.5' bana deta tha (negative input positive ban kar slip ho jata tha). */
-  if (String(raw).trim().startsWith('-'))
+  const str = String(raw).trim();
+  if (str.startsWith('-'))
     return { ok: false, error: 'Invalid rate: positive decimal number required (e.g. 0.013)' };
-  const v = normalizeDecimalString(raw);
+  if (targetRole === 'client' && (str === '0' || /^0+(\.0+)?$/.test(str))) {
+    return { ok: true, value: '0' };
+  }
+  const v = normalizeDecimalString(str);
   if (!isPositiveDecimal(v)) return { ok: false, error: 'Invalid rate: positive decimal number required (e.g. 0.013)' };
   const dp = (v.split('.')[1] || '').length;
   if (dp > 6) return { ok: false, error: 'Invalid rate: max 6 decimal places' };
@@ -2249,17 +2281,6 @@ function handleAllocate(req, res) {
   const { ids, target_id, payterm, payout } = req.body || {};
   if (!Array.isArray(ids) || !ids.length || !target_id)
     return res.status(400).json({ error: 'ids[] and target_id are required' });
-
-  /* P19 ADMIN ALLOCATION RATE OVERRIDE (sirf Admin):
-     - Default rate Rate Management (range ke cycle rate) se aata hai — yani rate NAHI diya
-       gaya to numbers.rate='' rehta hai aur payout range rate se hi calculate hota hai.
-     - Admin rate de to wahi IS allocation ke numbers par numbers.rate snapshot ho jata hai
-       (per-number, allocation-level — koi global Agent/Manager/Range rate change NAHI).
-     - Non-admin (manager/agent) ka rate param silently ignore hota hai (wahi pattern jo
-       pehle se payout ke liye hai) — manager ko naya override ability NAHI milti. */
-  const rateCheck = validatedAllocationRate(req.user, req.body ? req.body.rate : undefined);
-  if (!rateCheck.ok) return res.status(400).json({ error: rateCheck.error });
-  const rateVal = rateCheck.value;
 
   // PHASE-1 (#45.6): idempotent retries — same Idempotency-Key returns the
   // original response instead of double-processing.
@@ -2278,56 +2299,63 @@ function handleAllocate(req, res) {
   const target = db.get('SELECT * FROM users WHERE id=?', [target_id]);
   if (!target) return res.status(404).json({ error: 'Target not found' });
 
-  const allowedTargets = { admin: ['manager','agent'], manager: ['agent'], agent: ['client'] }[req.user.role] || [];
+  const allowedTargets = {
+    admin: ['manager', 'agent', 'client'],
+    manager: ['agent', 'client'],
+    agent: ['client']
+  }[req.user.role] || [];
   if (!allowedTargets.includes(target.role))
     return res.status(403).json({ error: 'You are not allowed to allocate to this role' });
-  // Managers/Agents can allocate only to their direct child. Admin can allocate directly to any Manager or Agent.
-  if (req.user.role !== 'admin' && target.parent_id !== req.user.id)
-    return res.status(403).json({ error: 'You can only allocate to your direct child user' });
+
+  // Hierarchy scope check: caller can only allocate to users in their own hierarchy
+  if (req.user.role !== 'admin') {
+    const allowedUserIds = scopeIds(req.user);
+    if (!allowedUserIds.includes(target.id))
+      return res.status(403).json({ error: 'You can only allocate to users in your own hierarchy' });
+  }
+
+  const rawRate = (req.body && req.body.rate !== undefined) ? req.body.rate : (req.body ? req.body.payout : undefined);
+  const rateCheck = validatedAllocationRate(req.user, rawRate, target.role);
+  if (!rateCheck.ok) return res.status(400).json({ error: rateCheck.error });
+  const rateVal = rateCheck.value;
 
   let sets = '', vals = [];
   if (target.role === 'manager') {
-    // Admin -> Manager: reset downstream ownership so old Agent/Client links do not remain.
-    // (Only admin can allocate to a manager, so the P19 rate override applies here directly.)
-    sets = "manager_id=?, agent_id=NULL, client_id=NULL, payout='0', rate=?";
-    vals = [target.id, rateVal]; // rate='' -> Rate Management default; value -> this-allocation override
+    // Admin -> Manager: sets Manager's rate. Clears downstream links and downstream rates.
+    sets = "manager_id=?, agent_id=NULL, client_id=NULL, manager_rate=?, agent_rate='', client_rate='', payout='0', rate=?";
+    vals = [target.id, rateVal, rateVal];
   } else if (target.role === 'agent') {
-    // Manager -> Agent keeps manager chain. Admin -> Agent direct has no manager owner.
-    const mgrId = req.user.role === 'admin' ? null : target.parent_id;
     if (req.user.role === 'admin') {
-      // P19: admin re-allocation = fresh admin decision -> rate set (override) ya clear (range default).
-      sets = "agent_id=?, manager_id=?, client_id=NULL, payout='0', rate=?";
-      vals = [target.id, mgrId, rateVal];
+      // Admin -> Agent direct: no manager in chain
+      sets = "agent_id=?, manager_id=NULL, client_id=NULL, manager_rate='', agent_rate=?, client_rate='', payout='0', rate=?";
+      vals = [target.id, rateVal, rateVal];
     } else {
-      // P19 rate-lock: manager->agent existing (admin-set) rate KOI change nahi karta —
-      // pehle yahan rate='' tha jo override mita deta tha. Rollback: rate='' wapas lane se
-      // manager re-allocation override clear kar deta (purana behaviour).
-      sets = "agent_id=?, manager_id=?, client_id=NULL, payout='0'";
-      vals = [target.id, mgrId];
+      // Manager -> Agent: manager_rate and numbers.rate PRESERVED!
+      sets = "agent_id=?, manager_id=?, client_id=NULL, agent_rate=?, client_rate='', payout='0'";
+      vals = [target.id, req.user.id, rateVal];
     }
   } else if (target.role === 'client') {
-    // Agent -> Client: snapshot chain for future SMS.
-    const agentId = target.parent_id;
-    const mgrId = agentId ? (db.get('SELECT parent_id FROM users WHERE id=?', [agentId])?.parent_id || null) : null;
-    sets = 'client_id=?, agent_id=?, manager_id=?';
-    vals = [target.id, agentId, mgrId];
+    const clientPay = rateVal !== '' ? rateVal : '0';
+    if (req.user.role === 'admin') {
+      // Admin -> Client direct
+      sets = "client_id=?, agent_id=NULL, manager_id=NULL, manager_rate='', agent_rate='', client_rate=?, payout=?, rate=?";
+      vals = [target.id, clientPay, clientPay, clientPay];
+    } else if (req.user.role === 'manager') {
+      // Manager -> Client direct: manager_rate PRESERVED!
+      sets = "client_id=?, manager_id=?, agent_id=NULL, agent_rate='', client_rate=?, payout=?";
+      vals = [target.id, req.user.id, clientPay, clientPay];
+    } else {
+      // Agent -> Client: manager_rate and agent_rate PRESERVED!
+      const mgrId = agentManagerId(req.user.id);
+      sets = "client_id=?, agent_id=?, manager_id=COALESCE(manager_id, ?), client_rate=?, payout=?";
+      vals = [target.id, req.user.id, mgrId, clientPay, clientPay];
+    }
   }
-  /* P12 PAYMENT FIX: cycle sirf IS allocation par (numbers.payterm). Agent ka global
-     users.payment_type default ab allocation se OVERWRITE NAHI hota — wo sirf Agent
-     settings (PUT /api/users/:id) se badalta hai. Purana line (rollback):
-     try{ db.run('UPDATE users SET payment_type=? WHERE id=? AND role=\'agent\'',[pt,target.id]); }catch(e){} */
-  if (target.role === 'agent' && payterm) { const pt=normalizePaymentCycle(payterm); sets += ', payterm=?'; vals.push(pt); }
-  // Rate lock rule: Admin->Manager and Manager->Agent must keep the existing/Admin rate.
-  // Only Agent->Client can set/change client payout.
-  /* P19d FIX (owner rule: agent payout set na kare to client ko exact 0 dikhna chahiye):
-     agent->client allocation me payout HAMESHA explicitly write hota hai — empty/undefined
-     => '0'. Purana guard (payout!==undefined && payout!=='') empty par numbers.payout ko
-     UNCHANGED chhod deta tha: force re-allocation par NAYA client PURANE client ka payout
-     dekh leta tha (repro: C1 payout "2" -> C2 force alloc, payout empty -> C2 ko "2" milta tha).
-     Rollback: if (req.user.role === 'agent' && payout !== undefined && payout !== '') { sets += ', payout=?'; vals.push(String(payout)); } */
-  if (req.user.role === 'agent') {
-    const pay19d = (payout === undefined || String(payout).trim() === '') ? '0' : String(payout).trim();
-    sets += ', payout=?'; vals.push(pay19d);
+
+  if (payterm) {
+    const pt = normalizePaymentCycle(payterm);
+    sets += ', payterm=?';
+    vals.push(pt);
   }
 
   // PHASE-1 (#21–#25): transactional, guarded, chunk-free allocation.
@@ -2430,15 +2458,15 @@ app.post('/api/numbers/unallocate', authRequired, (req, res) => {
   if (req.user.role === 'admin') {
     where = `n.id IN (SELECT id FROM tmp_unalloc_ids)`;
     params = [];
-    updateSql = `UPDATE numbers SET manager_id=NULL, agent_id=NULL, client_id=NULL, payout='0', rate='' WHERE id IN (SELECT id FROM tmp_unalloc_ids)`;
+    updateSql = `UPDATE numbers SET manager_id=NULL, agent_id=NULL, client_id=NULL, manager_rate='', agent_rate='', client_rate='', payout='0', rate='' WHERE id IN (SELECT id FROM tmp_unalloc_ids)`;
   } else if (req.user.role === 'manager') {
     where = `n.id IN (SELECT id FROM tmp_unalloc_ids) AND n.manager_id=?`;
     params = [req.user.id];
-    updateSql = `UPDATE numbers SET agent_id=NULL, client_id=NULL, payout='0', rate='' WHERE id IN (SELECT id FROM tmp_unalloc_ids) AND manager_id=?`;
+    updateSql = `UPDATE numbers SET agent_id=NULL, client_id=NULL, agent_rate='', client_rate='', payout='0' WHERE id IN (SELECT id FROM tmp_unalloc_ids) AND manager_id=?`;
   } else if (req.user.role === 'agent') {
     where = `n.id IN (SELECT id FROM tmp_unalloc_ids) AND n.agent_id=?`;
     params = [req.user.id];
-    updateSql = `UPDATE numbers SET client_id=NULL, payout='0', rate='' WHERE id IN (SELECT id FROM tmp_unalloc_ids) AND agent_id=?`;
+    updateSql = `UPDATE numbers SET client_id=NULL, client_rate='', payout='0' WHERE id IN (SELECT id FROM tmp_unalloc_ids) AND agent_id=?`;
   } else {
     return res.status(403).json({ error: 'Not allowed' });
   }
@@ -2734,9 +2762,9 @@ app.post('/api/numbers/unallocate-by-range', authRequired, (req, res) => {
   const ids = rows.map(r => r.id);
   const ph = ids.map(() => '?').join(',');
 
-  if (req.user.role === 'admin') db.run(`UPDATE numbers SET manager_id=NULL, agent_id=NULL, client_id=NULL, payout='0', rate='' WHERE id IN (${ph})`, ids);
-  else if (req.user.role === 'manager') db.run(`UPDATE numbers SET agent_id=NULL, client_id=NULL, payout='0', rate='' WHERE id IN (${ph}) AND manager_id=?`, [...ids, req.user.id]);
-  else if (req.user.role === 'agent') db.run(`UPDATE numbers SET client_id=NULL, payout='0', rate='' WHERE id IN (${ph}) AND agent_id=?`, [...ids, req.user.id]);
+  if (req.user.role === 'admin') db.run(`UPDATE numbers SET manager_id=NULL, agent_id=NULL, client_id=NULL, manager_rate='', agent_rate='', client_rate='', payout='0', rate='' WHERE id IN (${ph})`, ids);
+  else if (req.user.role === 'manager') db.run(`UPDATE numbers SET agent_id=NULL, client_id=NULL, agent_rate='', client_rate='', payout='0' WHERE id IN (${ph}) AND manager_id=?`, [...ids, req.user.id]);
+  else if (req.user.role === 'agent') db.run(`UPDATE numbers SET client_id=NULL, client_rate='', payout='0' WHERE id IN (${ph}) AND agent_id=?`, [...ids, req.user.id]);
 
   rows.forEach(nr=>logNumberHistory(req,nr,'unallocated','','','Unallocate range quantity'));
   logAction(req,'unallocate_numbers_by_range','numbers',{rangeId,count:rows.length,role:req.user.role});
@@ -2782,25 +2810,26 @@ async function performSmartDivideJob(job){
           if(!part.length) continue;
           const ph=part.map(()=>'?').join(',');
           if(wantRole==='client'){
-            const agt=db.get('SELECT parent_id FROM users WHERE id=?',[sp.t]);
-            const mgr=agt?db.get('SELECT parent_id FROM users WHERE id=?',[agt.parent_id]):null;
-            /* P19d: smart-divide/Range-Allocation page payout set NAHI karta — client ko
-               explicit '0' mile (agent ke paas is path par payout input hai hi nahi).
-               Rollback: payout='0' hata do. */
-            db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=?, manager_id=?, payout='0' WHERE id IN (${ph})`, [sp.t, agt?agt.parent_id:null, mgr?mgr.parent_id:null, ...part]);
-          } else if(wantRole==='agent'){
-            const mgr=db.get('SELECT parent_id FROM users WHERE id=?',[sp.t]);
-            const mgrId = user.role === 'admin' ? null : (mgr?mgr.parent_id:null);
+            const clientRateVal = job.rate || '0';
             if (user.role === 'admin') {
-              /* P19: admin rate override (job.rate validated at endpoint; '' = Rate Management default) */
-              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, payout='0', rate=?, payterm=? WHERE id IN (${ph})`, [sp.t, mgrId, job.rate || '', smartType, ...part]);
+              db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=NULL, manager_id=NULL, manager_rate='', agent_rate='', client_rate=?, payout=?, rate=? WHERE id IN (${ph})`, [sp.t, clientRateVal, clientRateVal, clientRateVal, ...part]);
+            } else if (user.role === 'manager') {
+              db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=NULL, manager_id=?, agent_rate='', client_rate=?, payout=? WHERE id IN (${ph})`, [sp.t, user.id, clientRateVal, clientRateVal, ...part]);
             } else {
-              /* P19 rate-lock: manager->agent admin-set rate preserve karta hai (pehle rate='' tha) */
-              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, payout='0', payterm=? WHERE id IN (${ph})`, [sp.t, mgrId, smartType, ...part]);
+              const agtMgrId = user.id ? agentManagerId(user.id) : null;
+              db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=?, manager_id=COALESCE(manager_id, ?), client_rate=?, payout=? WHERE id IN (${ph})`, [sp.t, user.id, agtMgrId, clientRateVal, clientRateVal, ...part]);
+            }
+          } else if(wantRole==='agent'){
+            const agentRateVal = job.rate || '';
+            if (user.role === 'admin') {
+              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, manager_rate='', agent_rate=?, client_rate='', payout='0', rate=?, payterm=? WHERE id IN (${ph})`, [sp.t, agentRateVal, agentRateVal, smartType, ...part]);
+            } else {
+              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, agent_rate=?, client_rate='', payout='0', payterm=? WHERE id IN (${ph})`, [sp.t, user.id, agentRateVal, smartType, ...part]);
             }
           } else {
-            /* P19: admin->manager (admin-only path) — rate override support */
-            db.runNoSave(`UPDATE numbers SET manager_id=?, agent_id=NULL, client_id=NULL, payout='0', rate=? WHERE id IN (${ph})`, [sp.t, job.rate || '', ...part]);
+            // Admin -> Manager
+            const mgrRateVal = job.rate || '';
+            db.runNoSave(`UPDATE numbers SET manager_id=?, agent_id=NULL, client_id=NULL, manager_rate=?, agent_rate='', client_rate='', payout='0', rate=? WHERE id IN (${ph})`, [sp.t, mgrRateVal, mgrRateVal, ...part]);
           }
           total += part.length;
           setJob(job,{processed:total,progress:planned?Math.floor(total/planned*100):100});
@@ -2822,9 +2851,11 @@ async function performSmartDivideJob(job){
 function validateSmartDivideTargets(user,wantRole,target_ids){
   for (const tid of target_ids) {
     const t = db.get('SELECT * FROM users WHERE id=?', [tid]);
-    if (!t || t.role !== wantRole || (user.role !== 'admin' && t.parent_id !== user.id)) return false;
-    if (user.role==='admin' && wantRole==='manager') continue;
-    if (user.role==='admin' && wantRole==='agent') continue;
+    if (!t || t.role !== wantRole) return false;
+    if (user.role !== 'admin') {
+      const allowed = scopeIds(user);
+      if (!allowed.includes(tid)) return false;
+    }
   }
   return true;
 }
@@ -2847,13 +2878,16 @@ app.post('/api/numbers/smart-divide', authRequired, async (req, res) => {
   let wantRole = { manager: 'agent', agent: 'client' }[req.user.role];
   if (req.user.role === 'admin') {
     const roles=[...new Set(cleanTargetIds.map(id=>db.get('SELECT role FROM users WHERE id=?',[id])?.role).filter(Boolean))];
-    if(roles.length!==1 || !['manager','agent'].includes(roles[0])) return res.status(403).json({ error: 'Admin target must be all Managers or all Agents' });
+    if(roles.length!==1 || !['manager','agent','client'].includes(roles[0])) return res.status(403).json({ error: 'Admin target must be all Managers, all Agents, or all Clients' });
+    wantRole=roles[0];
+  } else if (req.user.role === 'manager') {
+    const roles=[...new Set(cleanTargetIds.map(id=>db.get('SELECT role FROM users WHERE id=?',[id])?.role).filter(Boolean))];
+    if(roles.length!==1 || !['agent','client'].includes(roles[0])) return res.status(403).json({ error: 'Manager target must be all Agents or all Clients' });
     wantRole=roles[0];
   }
   if(!wantRole) return res.status(403).json({error:'Not allowed'});
   if(!validateSmartDivideTargets(req.user,wantRole,cleanTargetIds)) return res.status(403).json({ error: 'Invalid target(s)' });
-  /* P19: admin rate override (same validator as handleAllocate; non-admin silently ignored) */
-  const sdRateCheck = validatedAllocationRate(req.user, req.body ? req.body.rate : undefined);
+  const sdRateCheck = validatedAllocationRate(req.user, req.body ? req.body.rate : undefined, wantRole);
   if (!sdRateCheck.ok) return res.status(400).json({ error: sdRateCheck.error });
   const estimated=cleanRangeIds.length*cleanQty;
   const shouldBackground = background !== false && estimated >= 1000;
@@ -3568,7 +3602,38 @@ app.get('/api/dashboard', authRequired, (req, res) => cachedJson(req, res, 10000
 
 /* ============ NUMBER IMPORT (Admin only, background/batched) ============ */
 function makeImportJobId(){return 'IMPORT-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2,8).toUpperCase();}
-function normalizeNumberForImport(n){return String(n||'').trim();}
+function normalizeNumberForImport(n){
+  if (!n) return '';
+  let s = String(n || '').trim();
+  s = s.replace(/^\uFEFF/, '').replace(/^["']+|["']+$/g, '').trim();
+  const hasPlus = s.startsWith('+');
+  const digits = s.replace(/\D/g, '');
+  if (digits.length < 5) return '';
+  return (hasPlus ? '+' : '') + digits;
+}
+function parseImportLineTokens(line) {
+  let s = String(line || '').replace(/^\uFEFF/, '').trim();
+  if (!s) return [];
+  const cells = s.includes('\t') || s.includes(';') || s.includes(',')
+    ? s.split(/[\t,;]+/)
+    : [s];
+  const results = [];
+  for (const cell of cells) {
+    const raw = cell.replace(/^["']+|["']+$/g, '').trim();
+    if (!raw) continue;
+    const spaceTokens = raw.split(/\s+/).filter(Boolean);
+    if (spaceTokens.length > 1 && spaceTokens.every(t => t.replace(/\D/g, '').length >= 5)) {
+      for (const t of spaceTokens) {
+        const norm = normalizeNumberForImport(t);
+        if (norm) results.push(norm);
+      }
+      continue;
+    }
+    const norm = normalizeNumberForImport(raw);
+    if (norm) results.push(norm);
+  }
+  return results;
+}
 function getOrCreateRange(range_id, range_name, prefix, firstNumber){
   if(range_id) return +range_id;
   if(!range_name) throw new Error('range_id or range_name is required');
@@ -3597,7 +3662,8 @@ async function processNumberImportJob(jobId, payload, user){
           const number=normalizeNumberForImport(raw);
           processed++;
           if(!number){skipped++; continue;}
-          if(db.get('SELECT id FROM numbers WHERE number=?',[number])){skipped++; continue;}
+          const cleaned = cleanPhone(number);
+          if(db.get(`SELECT id FROM numbers WHERE number=? OR REPLACE(REPLACE(REPLACE(REPLACE(number,'+',''),' ',''),'-',''),'_','')=?`,[number, cleaned])){skipped++; continue;}
           db.runNoSave(`INSERT INTO numbers (range_id,number,prefix,payterm,payout,import_batch_id,import_source,imported_by,imported_at) VALUES (?,?,?,?,?,?,?,?,datetime('now'))`,
             [rid,number,prefix||'',payterm||'Weekly',payout||'0',jobId,'file',user.id]);
           inserted++;
@@ -3616,10 +3682,14 @@ async function processNumberImportJob(jobId, payload, user){
     console.log('[IMPORT] completed', { jobId, inserted, skipped, total: numbers.length });
     db.run(`UPDATE number_import_batches SET inserted=?, skipped=?, status='done', completed_at=datetime('now') WHERE batch_id=?`,[inserted,skipped,jobId]);
     logAction({user},'import_numbers_background','numbers',{jobId,inserted,skipped,range_id:rid});
+    clearApiReadCache();
+    bumpNumbersVer();
   }catch(e){
     job.status='failed'; job.error=e.message;
     console.error('[IMPORT] failed', { jobId, error: e.message });
     db.run(`UPDATE number_import_batches SET status='failed', error=?, completed_at=datetime('now') WHERE batch_id=?`,[e.message,jobId]);
+    clearApiReadCache();
+    bumpNumbersVer();
   }
 }
 // PHASE-2: streaming multipart import — large CSV/number files (up to 200 MB)
@@ -3646,7 +3716,6 @@ app.post('/api/numbers/import-file', authRequired, requireRole('admin'), heavyWr
         db.run(`INSERT INTO number_import_batches (batch_id,range_id,range_name,file_name,total,status,created_by) VALUES (?,?,?,?,?,'processing',?)`,
           [jobId, rid, range_name, b.file_name || req.file.originalname || '', 0, (req.user && req.user.id) || null]);
         job.status = 'processing';
-        const rl = readline.createInterface({ input: fs.createReadStream(req.file.path), crlfDelay: Infinity });
         let batch = [];
         const flush = () => {
           if (!batch.length) return;
@@ -3654,7 +3723,11 @@ app.post('/api/numbers/import-file', authRequired, requireRole('admin'), heavyWr
           try {
             for (const number of batch) {
               processed++;
-              if (db.get('SELECT id FROM numbers WHERE number=?', [number])) { skipped++; continue; }
+              const cleaned = cleanPhone(number);
+              if (db.get(`SELECT id FROM numbers WHERE number=? OR REPLACE(REPLACE(REPLACE(REPLACE(number,'+',''),' ',''),'-',''),'_','')=?`, [number, cleaned])) {
+                skipped++;
+                continue;
+              }
               db.runNoSave(`INSERT INTO numbers (range_id,number,prefix,payterm,payout,import_batch_id,import_source,imported_by,imported_at) VALUES (?,?,?,?,?,?,?,?,datetime('now'))`,
                 [rid, number, b.prefix || '', b.payterm || 'Weekly', b.payout || '0', jobId, 'file', (req.user && req.user.id) || null]);
               inserted++;
@@ -3665,26 +3738,50 @@ app.post('/api/numbers/import-file', authRequired, requireRole('admin'), heavyWr
           job.processed = processed; job.inserted = inserted; job.skipped = skipped;
           job.total = processed; job.progress = 0; // total unknown until stream ends
         };
-        for await (let line of rl) {
-          line = String(line || '').trim();
-          if (!line) continue;
-          let tok = line.split(/[\t,;]/)[0].replace(/^["']+|["']+$/g, '').trim();
-          const number = normalizeNumberForImport(tok);
-          if (!number) { continue; }
-          if (batch.length >= 1000) { flush(); await new Promise(r => setImmediate(r)); }
-          batch.push(number);
+
+        const isExcel = /\.xlsx?$/i.test(b.file_name || req.file.originalname || '');
+        if (isExcel) {
+          const XLSX = require('xlsx');
+          const wb = XLSX.readFile(req.file.path);
+          for (const sheet of wb.SheetNames || []) {
+            const ws = wb.Sheets[sheet];
+            const data = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+            for (const row of data) {
+              if (Array.isArray(row)) {
+                for (const cell of row) {
+                  const norm = normalizeNumberForImport(cell);
+                  if (norm) {
+                    batch.push(norm);
+                    if (batch.length >= 1000) { flush(); await new Promise(r => setImmediate(r)); }
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          const rl = readline.createInterface({ input: fs.createReadStream(req.file.path), crlfDelay: Infinity });
+          for await (let line of rl) {
+            const nums = parseImportLineTokens(line);
+            for (const number of nums) {
+              batch.push(number);
+              if (batch.length >= 1000) { flush(); await new Promise(r => setImmediate(r)); }
+            }
+          }
         }
         flush();
         job.status = 'done'; job.progress = 100; job.completed_at = new Date().toISOString();
         db.run(`UPDATE number_import_batches SET total=?, inserted=?, skipped=?, status='done', completed_at=datetime('now') WHERE batch_id=?`,
           [processed, inserted, skipped, jobId]);
         logAction({ user: req.user }, 'import_numbers_file', 'numbers', { jobId, inserted, skipped, total: processed });
+        clearApiReadCache();
         bumpNumbersVer();
         console.log('[IMPORT-FILE] completed', { jobId, inserted, skipped, total: processed, s: ((Date.now() - t0) / 1000).toFixed(1) });
       } catch (e) {
         job.status = 'failed'; job.error = e.message;
         try { db.run(`UPDATE number_import_batches SET status='failed', error=?, completed_at=datetime('now') WHERE batch_id=?`, [e.message, jobId]); } catch (_) {}
         console.error('[IMPORT-FILE] failed:', e.message);
+        clearApiReadCache();
+        bumpNumbersVer();
       } finally { try { fs.unlinkSync(req.file.path); } catch (_) {} }
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -4350,7 +4447,8 @@ app.post('/api/failed-sms/:id/retry', authRequired, requireRole('admin'), (req,r
   const rangeForRetry=db.get('SELECT * FROM ranges WHERE id=?',[n.range_id])||{};
   const retryPaymentCycle=assignedPaymentCycleForNumber(n, rangeForRetry);
   const retryPaymentType=normalizePaymentType(retryPaymentCycle);
-  const retryRate=payoutRateForPaymentCycle({...rangeForRetry, number_rate:n.rate, number_payout:n.payout}, retryPaymentCycle);
+  const effectiveRetryRate = n.agent_id ? (n.agent_rate || (!n.manager_id ? n.rate : '')) : (n.manager_id ? (n.manager_rate || n.rate) : (n.rate || ''));
+  const retryRate=payoutRateForPaymentCycle({...rangeForRetry, number_rate:effectiveRetryRate, number_payout:n.payout}, retryPaymentCycle);
   const retrySenderType=classifySender(f.cli||'');
   const retryOtpCode=extractOtpCode(f.message||'');
   db.run(`INSERT INTO sms_records (number_id,number,range_id,cli,sender_type,message,otp_code,client_id,agent_id,manager_id,payout_rate,payout_amount,payment_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -4596,7 +4694,8 @@ function processIncomingSmsPayload(req, payload, sourceIp='', opts={}) {
   const rangeForSms=db.get('SELECT * FROM ranges WHERE id=?',[n.range_id])||{};
   const assignedPaymentCycle = assignedPaymentCycleForNumber(n, rangeForSms);
   const assignedPaymentType = normalizePaymentType(assignedPaymentCycle);
-  let smsPayoutRate=payoutRateForPaymentCycle({...rangeForSms, number_rate:n.rate, number_payout:n.payout}, assignedPaymentCycle);
+  const effectiveNumberRate = n.agent_id ? (n.agent_rate || (!n.manager_id ? n.rate : '')) : (n.manager_id ? (n.manager_rate || n.rate) : (n.rate || ''));
+  let smsPayoutRate=payoutRateForPaymentCycle({...rangeForSms, number_rate:effectiveNumberRate, number_payout:n.payout}, assignedPaymentCycle);
   let limitReason = '';
   if (incomingHasZeroPayout(b)) {
     smsPayoutRate = '0';

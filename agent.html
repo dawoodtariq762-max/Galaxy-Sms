@@ -943,7 +943,7 @@ async function openAllocAll(){const ids=selIds();if(!ids.length){alert('Please s
   document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the Client.`;
   document.getElementById('allocAllModal').classList.add('show');}
 async function confirmAllocAll(){const ids=selIds();const c=document.getElementById('aaClient').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;if(!c){alert('Select a client.');return;}
-  try{await API.post('/numbers/allocate',{ids,target_id:+c,payterm:pt,payout:po});closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
+  try{await API.post('/numbers/allocate',{ids,target_id:+c,payterm:pt,payout:po,rate:po});closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
 /* Smart Divide (to Clients) */
 async function openSmart(){const ranges=await API.get('/ranges');if(!clientsData.length)clientsData=await API.get('/users/client');
   document.getElementById('smRanges').innerHTML=ranges.map(r=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="smR" value="${r.id}" style="width:auto"/> ${r.name}</label>`).join('');

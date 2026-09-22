@@ -1502,44 +1502,119 @@ function downloadRangeTemplate(){
   const csv='Range,Prefix,Test Number,Currency,Payment Type,1/1,7/1,7/7,30/45,Memo\nNigeria MS 01,,,USD,weekly,NA,0.01,NA,0.01,\nMTN Nigeria,,,USD,daily,NA,0.01,NA,0.01,';
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='ranges-import-template.csv';a.click();URL.revokeObjectURL(a.href);
 }
+function extractNumbersFromText(text) {
+  if (!text) return [];
+  text = String(text).replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  const seen = new Set();
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s) continue;
+    const cells = s.includes("\t") || s.includes(";") || s.includes(",") ? s.split(/[\t,;]+/) : [s];
+    for (const cell of cells) {
+      const raw = cell.replace(/^[\"']+|[\"']+$/g, "").trim();
+      if (!raw) continue;
+      const spaceTokens = raw.split(/\s+/).filter(Boolean);
+      if (spaceTokens.length > 1 && spaceTokens.every(t => t.replace(/\D/g, "").length >= 5)) {
+        for (const t of spaceTokens) {
+          const hasPlus = t.startsWith("+");
+          const d = t.replace(/\D/g, "");
+          if (d.length >= 5) {
+            const num = (hasPlus ? "+" : "") + d;
+            if (!seen.has(num)) { seen.add(num); out.push(num); }
+          }
+        }
+        continue;
+      }
+      const hasPlus = raw.startsWith("+");
+      const d = raw.replace(/\D/g, "");
+      if (d.length >= 5) {
+        const num = (hasPlus ? "+" : "") + d;
+        if (!seen.has(num)) { seen.add(num); out.push(num); }
+      }
+    }
+  }
+  return out;
+}
 async function doImport(inputId){const f=document.getElementById(inputId).files[0];
-  if(!f){alert('Please select a file first.');return;}
-  if(inputId==='numFile'){
-    const rg=document.getElementById('importRange').value; if(!rg){alert('Enter the range name where numbers should be added.');return;}
+  if(!f){alert("Please select a file first.");return;}
+  if(inputId==="numFile"){
+    const rg=document.getElementById("importRange").value; if(!rg){alert("Enter the range name where numbers should be added.");return;}
+    const isExcel = /\.(xlsx|xls)$/i.test(f.name);
+    if (isExcel || f.size > 400 * 1024) {
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("range_name", rg);
+      fd.append("file_name", f.name);
+      const prov = document.getElementById("importProvider")?.value;
+      if (prov) fd.append("provider", prov);
+      try {
+        const r = await API.upload("/numbers/import-file", fd);
+        if (prov) await assignRangeProvider(rg, prov);
+        if (r.background && r.job) { showImportJob(r.job); pollImportJob(r.job.job_id); }
+      } catch (e) { alert("❌ " + e.message); }
+      return;
+    }
     const text=await f.text();
-    const nums=text.split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\+?\d{5,}$/.test(x));
-    if(!nums.length){alert('No valid numbers found in the file.');return;}
-    try{const r=await API.post('/numbers/import',{range_name:rg,numbers:nums,file_name:f.name});await assignRangeProvider(rg,document.getElementById('importProvider')?.value);if(r.background&&r.job){showImportJob(r.job);pollImportJob(r.job.job_id);}else{alert(`✅ ${r.inserted||0} numbers imported. Skipped: ${r.skipped||0}`);await loadRates();await loadNumbers();}}catch(e){alert('❌ '+e.message);}
+    const nums=extractNumbersFromText(text);
+    if(!nums.length){alert("No valid numbers found in the file.");return;}
+    try{
+      const r=await API.post("/numbers/import",{range_name:rg,numbers:nums,file_name:f.name});
+      await assignRangeProvider(rg,document.getElementById("importProvider")?.value);
+      if(r.background&&r.job){showImportJob(r.job);pollImportJob(r.job.job_id);}
+      else{alert(`✅ ${r.inserted||0} numbers imported. Skipped: ${r.skipped||0}`);await loadRates();await loadNumbers();}
+    }catch(e){alert("❌ "+e.message);}
   } else {
     try{
       const text=await f.text();
       const rows=parseTableText(text);
-      if(!rows.length){alert('No range rows found. Use CSV/TSV template.');return;}
-      const r=await API.post('/ranges/import',{ranges:rows,update_existing:true});
+      if(!rows.length){alert("No range rows found. Use CSV/TSV template.");return;}
+      const r=await API.post("/ranges/import",{ranges:rows,update_existing:true});
       alert(`✅ Ranges imported. Inserted: ${r.inserted||0}, Updated: ${r.updated||0}, Skipped: ${r.skipped||0}`);
-      document.getElementById('rangeFile').value='';document.getElementById('rangeFileInfo').innerHTML='';await loadRates();
-    }catch(e){alert('❌ '+e.message)}
+      document.getElementById("rangeFile").value="";document.getElementById("rangeFileInfo").innerHTML="";await loadRates();
+    }catch(e){alert("❌ "+e.message)}
   }
 }
 async function bulkImportTxtFiles(){
-  const files=[...(document.getElementById('bulkTxtFiles').files||[])];
-  if(!files.length){alert('Select TXT files first.');return;}
-  const createMissing=document.getElementById('bulkCreateMissingRanges').checked;
+  const files=[...(document.getElementById("bulkTxtFiles").files||[])];
+  if(!files.length){alert("Select TXT files first.");return;}
+  const createMissing=document.getElementById("bulkCreateMissingRanges").checked;
   let started=0,failed=0;
   for(const f of files){
-    const rangeName=f.name.replace(/\.[^.]+$/,'').trim();
+    const rangeName=f.name.replace(/\.[^.]+$/,"").trim();
+    const isExcel = /\.(xlsx|xls)$/i.test(f.name);
+    if (isExcel || f.size > 400 * 1024) {
+      try {
+        if(createMissing && !(ratesData||[]).some(r=>String(r.name).toLowerCase()===rangeName.toLowerCase())){
+          await API.post("/ranges/import",{ranges:[{Range:rangeName,Currency:"USD","30/45":"0"}],update_existing:false});
+          await loadRates();
+        }
+        const fd = new FormData();
+        fd.append("file", f);
+        fd.append("range_name", rangeName);
+        fd.append("file_name", f.name);
+        const prov = document.getElementById("bulkImportProvider")?.value;
+        if (prov) fd.append("provider", prov);
+        const r = await API.upload("/numbers/import-file", fd);
+        if (prov) await assignRangeProvider(rangeName, prov);
+        if (r.background && r.job) { showImportJob(r.job); pollImportJob(r.job.job_id); }
+        started++;
+      } catch (e) { console.warn("bulk file failed", f.name, e); failed++; }
+      continue;
+    }
     const text=await f.text();
-    const nums=text.split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\+?\d{5,}$/.test(x));
+    const nums=extractNumbersFromText(text);
     if(!rangeName||!nums.length){failed++;continue;}
     try{
       if(createMissing && !(ratesData||[]).some(r=>String(r.name).toLowerCase()===rangeName.toLowerCase())){
-        await API.post('/ranges/import',{ranges:[{Range:rangeName,Currency:'USD','30/45':'0'}],update_existing:false});
+        await API.post("/ranges/import",{ranges:[{Range:rangeName,Currency:"USD","30/45":"0"}],update_existing:false});
         await loadRates();
       }
-      const r=await API.post('/numbers/import',{range_name:rangeName,numbers:nums,file_name:f.name});
-      await assignRangeProvider(rangeName,document.getElementById('bulkImportProvider')?.value);
+      const r=await API.post("/numbers/import",{range_name:rangeName,numbers:nums,file_name:f.name});
+      await assignRangeProvider(rangeName,document.getElementById("bulkImportProvider")?.value);
       if(r.background&&r.job){showImportJob(r.job);pollImportJob(r.job.job_id);} started++;
-    }catch(e){console.warn('bulk file failed',f.name,e);failed++;}
+    }catch(e){console.warn("bulk file failed",f.name,e);failed++;}
   }
   bulkTxtInfo.innerHTML=`Started imports: <b>${started}</b>, Failed/skipped files: <b>${failed}</b>`;
   await loadImportBatches();
@@ -2122,7 +2197,7 @@ async function doImportTestNumbers(){
   if(!f){alert('Please select a test numbers file.');return;}
   if(!rangeName){alert('Please select a range.');return;}
   const text=await f.text();
-  const nums=text.split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^\+?\d{5,}$/.test(x));
+  const nums=extractNumbersFromText(text);
   if(!nums.length){alert('No valid test numbers found in the file.');return;}
   try{
     const r=await API.post('/test-numbers/import',{range_name:rangeName,numbers:nums});
@@ -2526,7 +2601,7 @@ async function pollImportJob(jobId){
     const job=await API.get('/numbers/import-jobs/'+encodeURIComponent(jobId));
     showImportJob(job);
     if(job.status==='queued'||job.status==='processing') return setTimeout(()=>pollImportJob(jobId),1500);
-    await loadRates(); await loadNumbers(); await loadImportBatches();
+    await loadRates(); if(typeof refreshNumberDependentViews==='function') await refreshNumberDependentViews(); else { await loadNumbers(); await loadImportBatches(); }
     alert(`✅ Import ${job.status}. Inserted: ${job.inserted||0}, Skipped: ${job.skipped||0}`);
   }catch(e){console.warn(e)}
 }

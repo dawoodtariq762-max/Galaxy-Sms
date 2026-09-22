@@ -658,8 +658,12 @@
 <div class="modal-overlay" id="allocAllModal"><div class="modal">
   <div class="modal-head"><h3>Allocate Selected Numbers</h3><button class="modal-close" onclick="closeModal('allocAllModal')">×</button></div>
   <div class="modal-body">
-    <div class="form-group"><label>Select Agent <span class="req">*</span></label><select id="aaAgent"><option value="">Please Select</option></select></div>
+    <div class="form-group"><label>Select Agent / Client <span class="req">*</span></label><select id="aaAgent"><option value="">Please Select</option></select></div>
     <div class="form-group"><label>Payterm</label><select id="aaPayterm"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
+    <div class="form-group"><label>Allocation Rate <span class="muted" style="font-weight:400;font-size:11.5px">(leave blank to use Rate Management default)</span></label>
+      <input type="number" id="aaRate" step="0.000001" min="0" placeholder="0.010"/>
+      <div class="hint" id="aaRateHint" style="font-size:11.5px;margin-top:4px">Sets the effective rate for the recipient. Your own rate remains unchanged.</div>
+    </div>
     <div class="form-group" style="display:none"><label>Payout ($) Locked</label><input type="number" id="aaPayout" step="0.001" value="0" placeholder="0" disabled/></div>
     <div class="hint" id="aaCount"></div>
   </div>
@@ -677,6 +681,7 @@
       <div class="form-group"><label>Numbers per Range <span class="req">*</span></label><input type="number" id="smQty" placeholder="e.g. 20"/></div>
       <div class="form-group"><label>Payterm</label><select id="smPayterm"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
     </div>
+    <div class="form-group"><label>Allocation Rate <span class="muted" style="font-weight:400;font-size:11.5px">(optional)</span></label><input type="number" id="smRate" step="0.000001" min="0" placeholder="e.g. 0.010"/></div>
   </div>
   <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('smartModal')">Cancel</button><button class="btn btn-teal" onclick="runSmartDivide()">Distribute</button></div>
 </div></div>
@@ -798,23 +803,35 @@ function toggleAll(cb){document.querySelectorAll('.rc').forEach(c=>c.checked=cb.
 function updSel(){document.getElementById('selInfo').textContent=document.querySelectorAll('.rc:checked').length+' selected';}
 function selIds(){return[...document.querySelectorAll('.rc:checked')].map(c=>parseInt(c.dataset.id));}
 async function unallocSel(){const ids=selIds();if(!ids.length){alert('Select numbers.');return;}try{await API.post('/numbers/unallocate',{ids});alert(`✅ ${ids.length} numbers unallocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
-/* Allocate All modal (to Agent) */
+/* Allocate All modal (to Agent or Client) */
 async function openAllocAll(){const ids=selIds();if(!ids.length){alert('Please select numbers first (checkbox).');return;}
   if(!agentsData.length)agentsData=await API.get('/users/agent');
-  document.getElementById('aaAgent').innerHTML='<option value="">Please Select</option>'+agentsData.map(a=>`<option value="${a.id}">${a.username}</option>`).join('');
+  try{ if(!clientsData.length) clientsData=await API.get('/users/client'); }catch(e){}
+  const agtOpts = agentsData.map(a=>`<option value="${a.id}">Agent: ${a.username}</option>`).join('');
+  const cliOpts = (clientsData||[]).map(c=>`<option value="${c.id}">Client: ${c.username}</option>`).join('');
+  document.getElementById('aaAgent').innerHTML='<option value="">Please Select</option>'+agtOpts+cliOpts;
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
-  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the Agent.`;
+  const rInp = document.getElementById('aaRate'); if(rInp) rInp.value='';
+  document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the recipient.`;
   document.getElementById('allocAllModal').classList.add('show');}
-async function confirmAllocAll(){const ids=selIds();const a=document.getElementById('aaAgent').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;if(!a){alert('Select an agent.');return;}
-  try{await API.post('/numbers/allocate',{ids,target_id:+a,payterm:pt,payout:po});closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
+async function confirmAllocAll(){const ids=selIds();const a=document.getElementById('aaAgent').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;if(!a){alert('Select an agent or client.');return;}
+  const rv = (document.getElementById('aaRate')?.value || '').trim();
+  const body = {ids, target_id:+a, payterm:pt, payout:rv||po};
+  if(rv) body.rate = rv;
+  try{await API.post('/numbers/allocate',body);closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
 /* Smart Divide (to Agents) */
 async function openSmart(){const ranges=await API.get('/ranges');if(!agentsData.length)agentsData=await API.get('/users/agent');
   document.getElementById('smRanges').innerHTML=ranges.map(r=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="smR" value="${r.id}" style="width:auto"/> ${r.name}</label>`).join('');
   document.getElementById('smAgents').innerHTML=agentsData.map(a=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="smA" value="${a.id}" style="width:auto"/> ${a.username}</label>`).join('');
-  document.getElementById('smQty').value='';document.getElementById('smartModal').classList.add('show');}
+  document.getElementById('smQty').value='';
+  const smR = document.getElementById('smRate'); if(smR) smR.value='';
+  document.getElementById('smartModal').classList.add('show');}
 async function runSmartDivide(){const range_ids=[...document.querySelectorAll('.smR:checked')].map(c=>+c.value);const target_ids=[...document.querySelectorAll('.smA:checked')].map(c=>+c.value);const qty=parseInt(document.getElementById('smQty').value);const payterm=document.getElementById('smPayterm')?.value||'weekly';
+  const rate=(document.getElementById('smRate')?.value||'').trim();
   if(!range_ids.length){alert('Select range.');return;}if(!target_ids.length){alert('Select an agent.');return;}if(!qty||qty<=0){alert('Enter quantity.');return;}
-  try{const r=await API.post('/numbers/smart-divide',{range_ids,target_ids,qty,payterm});closeModal('smartModal');alert(`✅ Smart divide complete!\nTotal: ${r.total}`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
+  const body = {range_ids,target_ids,qty,payterm};
+  if(rate) body.rate = rate;
+  try{const r=await API.post('/numbers/smart-divide',body);closeModal('smartModal');alert(`✅ Smart divide complete!\nTotal: ${r.total}`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
 
 /* ===== BULK ALLOC ===== */
 function cycleRate(r,cycle){cycle=cycle||document.getElementById('baPayterm')?.value||'weekly_7_1';if(cycle==='daily')return r.r1||r.rate_1_1||r.rate||'0';if(cycle==='weekly_7_7')return r.r3||r.rate_7_7||r.r2||r.rate_7_1||r.rate||'0';if(cycle==='monthly_30x45')return r.r4||r.rate_30_45||r.rate||'0';return r.r2||r.rate_7_1||r.r3||r.rate_7_7||r.rate||'0';}

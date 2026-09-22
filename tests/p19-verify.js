@@ -410,14 +410,14 @@ function openDb() {
   const a2sms = dbo.prepare('SELECT payout_amount, payment_type FROM sms_records WHERE number=? ORDER BY id').all(a2num);
   t('F4-H1 A2 SMS payout = range rate 0.020 (no override)', a2sms.every(r => r.payout_amount === '0.02' || r.payout_amount === '0.020' || Number(r.payout_amount) === 0.02), JSON.stringify(a2sms.map(r => r.payout_amount)));
 
-  // new SMS on an overridden number (via manager chain): M1->A1 reallocated number (0.013)
+  // new SMS on an overridden number (via manager chain): M1->A1 reallocated number (manager assigned 0.099, admin rate was 0.013)
   const relNum = dbo.prepare("SELECT number FROM numbers WHERE id=?").get(mIdsWithRate[0]).number;
   s = await sms(relNum, '666', 'code 2222');
   t('F4-H2 ingest on 0.013-overridden number', s.status === 200, JSON.stringify(s.j).slice(0, 60));
   const relSms = dbo.prepare('SELECT payout_amount, payment_type FROM sms_records WHERE number=? ORDER BY id DESC LIMIT 1').get(relNum);
-  t('F4-H3 SMS payout uses ALLOCATION rate 0.013 (not range 0.010)', Number(relSms.payout_amount) === 0.013, JSON.stringify(relSms));
+  t('F4-H3 SMS payout uses ALLOCATION rate 0.099 (assigned by Manager to Agent)', Number(relSms.payout_amount) === 0.099, JSON.stringify(relSms));
   const relLedger = dbo.prepare('SELECT amount, payment_type FROM payment_ledger WHERE sms_record_id=(SELECT id FROM sms_records WHERE number=? ORDER BY id DESC LIMIT 1)').get(relNum);
-  t('F4-H4 ledger amount snapshots 0.013', relLedger && Number(relLedger.amount) === 0.013, JSON.stringify(relLedger));
+  t('F4-H4 ledger amount snapshots 0.099', relLedger && Number(relLedger.amount) === 0.099, JSON.stringify(relLedger));
 
   // TEST F: change Rate Management AFTER allocations
   // Rate Mgmt change — full body bhejte hain (endpoint partial body pe undefined bind
@@ -436,7 +436,7 @@ function openDb() {
   // old SMS rows keep their snapshot
   pg = await api('/api/sms/paged?from=' + today + '&to=' + today + '&limit=50', 'GET', null, adm);
   const oldRow = (pg.j.rows || []).find(r => r.number === relNum);
-  t('F4-F3 old SMS row keeps 0.013 snapshot after rate change', oldRow && Number(oldRow.payout_amount) === 0.013, JSON.stringify(oldRow && oldRow.payout_amount));
+  t('F4-F3 old SMS row keeps 0.099 snapshot after rate change', oldRow && Number(oldRow.payout_amount) === 0.099, JSON.stringify(oldRow && oldRow.payout_amount));
   // new allocation after rate change picks up NEW default
   const idsF = (await Promise.all([numsR1[8], numsR1[9]].map(idOf)));
   a = await api('/api/numbers/allocate', 'POST', { ids: idsF, target_id: A2ID, payterm: 'weekly_7_1' }, adm);
