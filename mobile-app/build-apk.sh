@@ -53,9 +53,10 @@ if [ ! -f galaxy-release.keystore ]; then
 fi
 
 echo "7. Signing APK..."
-apksigner sign --ks galaxy-release.keystore --ks-pass pass:galaxy123 --out ../galaxy-chat-v1.apk bin/aligned.apk
+apksigner sign --ks galaxy-release.keystore --ks-pass pass:galaxy123 --out ../galaxy-chat-v2.apk bin/aligned.apk
+cp ../galaxy-chat-v2.apk /home/user/galaxy-chat-v2.apk 2>/dev/null || true
 
 echo "8. Verifying signature..."
-apksigner verify --verbose ../galaxy-chat-v1.apk
+apksigner verify --verbose ../galaxy-chat-v2.apk
 
-echo "✓ Build complete: ../galaxy-chat-v1.apk ($(du -h ../galaxy-chat-v1.apk | cut -f1))"
+echo "✓ Build complete: ../galaxy-chat-v2.apk ($(du -h ../galaxy-chat-v1.apk | cut -f1))"

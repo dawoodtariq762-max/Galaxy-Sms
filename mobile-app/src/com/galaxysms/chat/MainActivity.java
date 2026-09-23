@@ -10,11 +10,13 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -30,6 +32,8 @@ public class MainActivity extends Activity {
     private static final String CHANNEL_ID = "galaxy_chat_notifications";
     private static final String PREF_NAME = "galaxy_chat_prefs";
     private static final AtomicInteger notifSeq = new AtomicInteger(1000);
+    private static final int FILE_CHOOSER_REQUEST_CODE = 2001;
+    private ValueCallback<Uri[]> mFilePathCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,17 +70,86 @@ public class MainActivity extends Activity {
                     view.loadUrl(url);
                     return true;
                 }
+                if (url.endsWith(".apk") || url.contains("/api/chat/app/download") || url.contains("/download")) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        return true;
+                    } catch (Exception e) {}
+                }
                 return false;
             }
         });
 
-        // WebChromeClient for dialogs
-        webView.setWebChromeClient(new WebChromeClient());
+        // WebChromeClient with native file chooser support
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (mFilePathCallback != null) {
+                    mFilePathCallback.onReceiveValue(null);
+                    mFilePathCallback = null;
+                }
+                mFilePathCallback = filePathCallback;
+
+                Intent intent = null;
+                if (fileChooserParams != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    try {
+                        intent = fileChooserParams.createIntent();
+                    } catch (Exception e) {
+                        intent = null;
+                    }
+                }
+                if (intent == null) {
+                    intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                    String[] mimes = {"text/plain", "text/csv", "application/vnd.ms-excel", "text/comma-separated-values"};
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimes);
+                }
+
+                try {
+                    startActivityForResult(Intent.createChooser(intent, "Select File (.txt, .csv)"), FILE_CHOOSER_REQUEST_CODE);
+                    return true;
+                } catch (Exception e) {
+                    if (mFilePathCallback != null) {
+                        mFilePathCallback.onReceiveValue(null);
+                        mFilePathCallback = null;
+                    }
+                    return false;
+                }
+            }
+        });
 
         // Expose Native Android Bridge to the WebView
         webView.addJavascriptInterface(new WebAppInterface(this), "GalaxyNative");
 
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+            if (mFilePathCallback != null) {
+                Uri[] results = null;
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    String dataString = data.getDataString();
+                    if (dataString != null) {
+                        results = new Uri[]{Uri.parse(dataString)};
+                    } else if (data.getClipData() != null) {
+                        final int count = data.getClipData().getItemCount();
+                        results = new Uri[count];
+                        for (int i = 0; i < count; i++) {
+                            results[i] = data.getClipData().getItemAt(i).getUri();
+                        }
+                    }
+                }
+                mFilePathCallback.onReceiveValue(results);
+                mFilePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     private void requestRuntimePermissions() {
@@ -160,6 +233,29 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void toast(String msg) {
             runOnUiThread(() -> Toast.makeText(context, msg, Toast.LENGTH_SHORT).show());
+        }
+
+        @JavascriptInterface
+        public String getAppVersion() {
+            return "2.0.0";
+        }
+
+        @JavascriptInterface
+        public int getVersionCode() {
+            return 2;
+        }
+
+        @JavascriptInterface
+        public void openBrowser(String url) {
+            try {
+                if (url != null && !url.trim().isEmpty()) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(context, "Could not open link: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
         }
 
         @JavascriptInterface

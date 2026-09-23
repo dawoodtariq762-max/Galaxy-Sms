@@ -1497,6 +1497,46 @@ module.exports = function mountChat(app, deps) {
     });
   });
 
+
+  /* ================================================================
+   * MOBILE APP VERSION & IN-APP UPDATE SYSTEM
+   * ================================================================ */
+  app.get('/api/chat/app/version', (req, res) => {
+    const v2ApkPath = path.join(__dirname, '..', 'galaxy-chat-v2.apk');
+    const v1ApkPath = path.join(__dirname, '..', 'galaxy-chat-v1.apk');
+    let apkSize = 0;
+    if (fs.existsSync(v2ApkPath)) {
+      apkSize = fs.statSync(v2ApkPath).size;
+    } else if (fs.existsSync(v1ApkPath)) {
+      apkSize = fs.statSync(v1ApkPath).size;
+    }
+
+    res.json({
+      latestVersion: '2.0.0',
+      versionCode: 2,
+      minSupportedVersion: '1.0.0',
+      downloadUrl: '/api/chat/app/download',
+      apkSize: apkSize,
+      releaseNotes: 'Galaxy SMS Chat v2.0.0:\n• Official Galaxy SMS Channel for instant announcements\n• Super Manager role with All-Chats access & display alias\n• Media & file sharing enhancements\n• In-app update notifications & 1-tap upgrades',
+      releaseDate: '2026-09-23',
+      mandatory: false
+    });
+  });
+
+  app.get('/api/chat/app/download', (req, res) => {
+    const v2ApkPath = path.join(__dirname, '..', 'galaxy-chat-v2.apk');
+    const v1ApkPath = path.join(__dirname, '..', 'galaxy-chat-v1.apk');
+    const apkFile = fs.existsSync(v2ApkPath) ? v2ApkPath : (fs.existsSync(v1ApkPath) ? v1ApkPath : null);
+
+    if (!apkFile) {
+      return res.status(404).json({ error: 'Chat APK file not found on server.' });
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="galaxy-chat-v2.apk"');
+    res.sendFile(apkFile);
+  });
+
   app.post('/api/complaints/:id/replies', chatAuth, (req, res) => {
     const cm = db.get('SELECT * FROM complaints WHERE id=?', [intId(req.params.id)]);
     if (!cm) return res.status(404).json({ error: 'Complaint not found' });

@@ -470,6 +470,18 @@
     <!-- Populated dynamically based on user role -->
   </div>
 
+  <!-- In-App Update Top Banner -->
+  <div id="updateNoticeBanner" style="display:none;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(135deg,rgba(48,171,237,0.22),rgba(127,24,179,0.28));border-bottom:1px solid rgba(48,171,237,0.35);font-size:12.5px;color:var(--text);z-index:10">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:16px">🚀</span>
+      <span><strong>Update Available:</strong> <span id="bannerVer" style="color:var(--accent);font-weight:700">v2.0.0</span></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button type="button" onclick="showUpdateModal()" style="background:var(--accent);color:#070D1F;border:none;border-radius:6px;padding:4px 10px;font-size:11.5px;font-weight:800;cursor:pointer">Update</button>
+      <button type="button" onclick="$('updateNoticeBanner').style.display='none'" style="background:transparent;border:none;color:var(--text-muted);font-size:14px;cursor:pointer;padding:0 4px">✕</button>
+    </div>
+  </div>
+
   <div class="search-wrap" id="searchWrap">
     <input type="text" class="search-box" id="sQuery" placeholder="Search conversations or contacts..." oninput="onSearchInput()"/>
   </div>
@@ -578,6 +590,27 @@
   </div>
 </div>
 
+<!-- IN-APP UPDATE MODAL -->
+<div class="modal-overlay" id="updateModal">
+  <div class="modal-box" style="text-align:center;padding:22px 18px;max-width:340px">
+    <div style="font-size:46px;margin-bottom:8px;filter:drop-shadow(0 4px 12px rgba(48,171,237,0.4))">🚀</div>
+    <h3 style="font-size:18px;font-weight:800;margin-bottom:4px" id="updTitle">New Update Available</h3>
+    <div style="display:inline-block;padding:2px 10px;background:rgba(48,171,237,0.18);border:1px solid rgba(48,171,237,0.35);border-radius:20px;color:var(--accent);font-size:12px;font-weight:700;margin-bottom:12px" id="updBadge">v2.0.0</div>
+    <div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:16px;text-align:left;background:var(--surface-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:12px;max-height:140px;overflow-y:auto" id="updNotes">
+      • Official Galaxy SMS Channel for instant announcements<br/>
+      • Super Manager role with All-Chats access &amp; display alias<br/>
+      • Improved media preview &amp; file attachments<br/>
+      • Enhanced real-time stability &amp; 1-tap in-app upgrades
+    </div>
+    <button type="button" class="btn-primary" style="margin-bottom:8px" id="btnDoUpdate" onclick="downloadAppUpdate()">
+      Download &amp; Install Update
+    </button>
+    <button type="button" class="btn-sec" style="background:transparent;border:none;color:var(--text-muted);font-size:13px;padding:8px;cursor:pointer" onclick="dismissAppUpdate()">
+      Remind Me Later
+    </button>
+  </div>
+</div>
+
 <!-- 5. MESSAGE ACTION SHEET -->
 <div class="sheet-overlay" id="msgSheet" onclick="onSheetBackdrop(event)">
   <div class="sheet-card" id="sheetCard">
@@ -625,7 +658,9 @@
     getPref: (k) => { try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } },
     vibrate: (ms) => { if (navigator.vibrate) navigator.vibrate(ms); },
     toast: (msg) => { alert(msg); },
-    showNotification: (title, body) => {}
+    showNotification: (title, body) => {},
+    openBrowser: (url) => { window.open(url, '_blank') || (window.location.href = url); },
+    getAppVersion: () => '2.0.0'
   };
 
   function $(id) { return document.getElementById(id); }
@@ -665,6 +700,10 @@
     }
     if ($('screenChat').classList.contains('active')) {
       closeChat();
+      return true;
+    }
+    if ($('updateModal') && $('updateModal').classList.contains('active')) {
+      $('updateModal').classList.remove('active');
       return true;
     }
     if ($('compModal').classList.contains('active')) {
@@ -808,7 +847,95 @@
     setupChips();
     loadConversations();
     connectSSE();
+    setTimeout(() => { window.checkAppUpdate(false); }, 1500);
   }
+
+
+  // ================================================================
+  // IN-APP UPDATE SYSTEM
+  // ================================================================
+  const CURRENT_APP_VERSION = (window.GalaxyNative && window.GalaxyNative.getAppVersion) ? window.GalaxyNative.getAppVersion() : '2.0.0';
+  let latestUpdateInfo = null;
+
+  function compareSemver(v1, v2) {
+    const p1 = String(v1 || '0').split('.').map(n => parseInt(n, 10) || 0);
+    const p2 = String(v2 || '0').split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+      const a = p1[i] || 0;
+      const b = p2[i] || 0;
+      if (a > b) return 1;
+      if (a < b) return -1;
+    }
+    return 0;
+  }
+
+  window.checkAppUpdate = async function(isManual = false) {
+    try {
+      const srv = (S.server || PRODUCTION_SERVER_URL).replace(/\/+$/, '');
+      const res = await fetch(srv + '/api/chat/app/version');
+      if (!res.ok) {
+        if (isManual) Native.toast('Could not fetch update info.');
+        return;
+      }
+      const data = await res.json();
+      latestUpdateInfo = data;
+      const hasNewer = compareSemver(data.latestVersion, CURRENT_APP_VERSION) > 0;
+      const dismissedVer = Native.getPref('dismissed_update_version');
+
+      const banner = $('updateNoticeBanner');
+      if (hasNewer) {
+        if (banner) {
+          $('bannerVer').textContent = 'v' + data.latestVersion;
+          banner.style.display = 'flex';
+        }
+        if (isManual || dismissedVer !== data.latestVersion) {
+          window.showUpdateModal(data);
+        }
+      } else {
+        if (banner) banner.style.display = 'none';
+        if (isManual) {
+          Native.toast('You are on the latest version (v' + CURRENT_APP_VERSION + ').');
+        }
+      }
+    } catch(e) {
+      if (isManual) Native.toast('Update check failed: ' + e.message);
+    }
+  };
+
+  window.showUpdateModal = function(data) {
+    const info = data || latestUpdateInfo;
+    if (!info) return;
+    $('updBadge').textContent = 'v' + info.latestVersion;
+    if (info.releaseNotes) {
+      $('updNotes').innerHTML = escapeHtml(info.releaseNotes).replace(/\n/g, '<br/>');
+    }
+    $('updateModal').classList.add('active');
+  };
+
+  window.dismissAppUpdate = function() {
+    if (latestUpdateInfo && latestUpdateInfo.latestVersion) {
+      Native.savePref('dismissed_update_version', latestUpdateInfo.latestVersion);
+    }
+    $('updateModal').classList.remove('active');
+  };
+
+  window.downloadAppUpdate = function() {
+    if (!latestUpdateInfo || !latestUpdateInfo.downloadUrl) {
+      latestUpdateInfo = { downloadUrl: '/api/chat/app/download' };
+    }
+    let url = latestUpdateInfo.downloadUrl;
+    if (!url.startsWith('http')) {
+      const srv = (S.server || PRODUCTION_SERVER_URL).replace(/\/+$/, '');
+      url = srv + url;
+    }
+    Native.toast('Downloading update APK...');
+    if (window.GalaxyNative && window.GalaxyNative.openBrowser) {
+      window.GalaxyNative.openBrowser(url);
+    } else {
+      window.open(url, '_blank') || (window.location.href = url);
+    }
+    $('updateModal').classList.remove('active');
+  };
 
   // Setup Role-Based Chips (Clean horizontal segment inside Chats tab)
   function setupChips() {
@@ -1091,6 +1218,17 @@
           <h3 style="font-size:18px;font-weight:800">${escapeHtml(S.user.name || S.user.username)}</h3>
           <p style="font-size:12px;color:var(--text-muted);margin-top:4px">@${escapeHtml(S.user.username)}</p>
           <div style="margin-top:8px"><span class="role-tag role-${S.user.role}">${S.user.role.toUpperCase()}</span></div>
+        </div>
+
+        <div style="background:var(--surface-elevated);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase">App Version</div>
+            <span class="role-tag" style="background:rgba(48,171,237,0.18);color:var(--accent);font-size:11px">v${CURRENT_APP_VERSION}</span>
+          </div>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Galaxy SMS Chat for Android with Official Channel &amp; Super Manager support.</p>
+          <button type="button" class="btn-primary" style="padding:10px 14px;font-size:13px;margin:0;width:100%" onclick="checkAppUpdate(true)">
+            🚀 Check for Updates
+          </button>
         </div>
 
         <div style="background:var(--surface-elevated);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;margin-bottom:16px">

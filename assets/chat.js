@@ -179,7 +179,14 @@
     ensureStyle();
     if (page.dataset.built) return; page.dataset.built = '1';
     page.innerHTML = `
-    <div class="page-head"><div><h2>Internal Chat</h2><div class="breadcrumb"><b>Communication</b> › Chat</div></div></div>
+    <div class="page-head" style="display:flex;justify-content:space-between;align-items:center">
+      <div><h2>Internal Chat</h2><div class="breadcrumb"><b>Communication</b> › Chat</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <a href="/api/chat/app/download" download="galaxy-chat-v2.apk" class="px-btn px-btn-sm" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,rgba(48,171,237,.18),rgba(127,24,179,.18));border:1px solid rgba(48,171,237,.4);color:#30ABED;text-decoration:none;font-weight:700;padding:6px 12px;border-radius:8px;font-size:12px" title="Download Android Mobile App APK">
+          <span>📱</span> Download Android APK (v2.0)
+        </a>
+      </div>
+    </div>
     <div class="gx-chat" id="gxcRoot">
       <div class="gxc-side">
         <div class="gxc-tabs" id="gxcScopeTabs" style="display:${(IS_ADMIN || IS_SUPER_MANAGER) ? 'flex' : 'none'}">
