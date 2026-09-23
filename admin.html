@@ -1225,7 +1225,9 @@ const roleMeta={manager:{title:'Managers',crumb:'Managers',singular:'Manager'},a
 function buildUserPage(role){const m=roleMeta[role];
   document.getElementById('page-'+role+'s').innerHTML=`
   <div class="page-head"><div><h2>${m.title}</h2><div class="breadcrumb"><b>Users Master</b> › ${m.crumb}</div></div>
-    <div class="head-actions"><button type="button" class="gx-btn gx-blue"  onclick="openUserModal('${role}',-1)" data-tip="Add user" title="Add user" aria-label="Add user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button><button type="button" class="gx-btn danger" data-tip="Delete Selected" aria-label="Delete Selected" onclick="deleteSelectedUsers('${role}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div>
+    <div class="head-actions">
+      ${role==='manager'?`<button type="button" class="gx-btn" onclick="openAssignSuperManagerModal()" style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);color:#f59e0b;font-weight:700;display:inline-flex;align-items:center;gap:6px" title="Assign Super Manager Role">⭐ Assign Super Manager</button>`:''}
+      <button type="button" class="gx-btn gx-blue"  onclick="openUserModal('${role}',-1)" data-tip="Add user" title="Add user" aria-label="Add user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button><button type="button" class="gx-btn danger" data-tip="Delete Selected" aria-label="Delete Selected" onclick="deleteSelectedUsers('${role}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div>
   <div class="table-wrap" style="padding:16px 18px;margin-top:0"><div style="font-weight:600;margin-bottom:12px">MANAGE ${m.title.toUpperCase()}</div>
     <div class="table-controls"><div class="tc-left"><label>Show Records:</label>
       <select id="${role}Len" onchange="renderUsers('${role}')"><option>10</option><option selected>25</option><option>50</option><option>100</option><option value="All">All</option></select>
@@ -1262,7 +1264,7 @@ function renderUsers(role){const len=document.getElementById(role+'Len').value,q
     <td>${r.active?'<span class="check-ok">✔</span>':'<span class="tag tag-red">Disabled</span>'}</td>
     ${(()=>{const H=window.hierStats||{};const h=(role==='manager'?(H.managers||{}):(role==='agent'?(H.agents||{}):(H.clients||{})))||{};const c=h[r.id]||{};if(role==='manager')return `<td data-label="Agents">${c.agents||0}</td><td data-label="Clients">${c.clients||0}</td><td data-label="Numbers">${(c.numbers||0).toLocaleString()}</td>`;if(role==='agent')return `<td data-label="Clients">${c.clients||0}</td><td data-label="Numbers">${(c.numbers||0).toLocaleString()}</td>`;return `<td data-label="Numbers">${(c.numbers||0).toLocaleString()}</td><td data-label="Parent Agent" class="muted">${r.parent_agent||'\u2014'}</td><td data-label="Parent Manager" class="muted">${r.parent_manager||'\u2014'}</td>`;})()}
     <td style="white-space:nowrap">
-      ${role==='manager'?`<button class="icon-btn" style="color:#f59e0b" onclick="openSuperManagerModal(${r.id},'${pesc(r.username)}',${r.is_super_manager?1:0},'${pesc(r.chat_display_name||'')}')" title="Configure Super Manager Role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>`:''}
+      ${role==='manager'?`<button class="gx-btn" style="margin-right:4px;padding:3px 7px;font-size:11px;font-weight:700;${r.is_super_manager?'background:rgba(245,158,11,.2);color:#f59e0b;border:1px solid rgba(245,158,11,.4)':'background:rgba(255,255,255,.05);color:var(--text-muted);border:1px solid var(--border)'}" onclick="openSuperManagerModal(${r.id},'${pesc(r.username)}',${r.is_super_manager?1:0},'${pesc(r.chat_display_name||'')}')" title="Configure Super Manager Role">${r.is_super_manager?'⭐ Super Manager':'+ Super Manager'}</button>`:''}
       <button class="icon-btn btn-blue" onclick="viewUser('${role}',${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
       <button class="icon-btn btn-amber" onclick="openUserModal('${role}',${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button>
       <button class="icon-btn btn-red" onclick="deleteUser('${role}',${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td></tr>`).join('');
@@ -3071,6 +3073,106 @@ function openSetChatPasswordModal(userId, username){
       errBox.textContent = e.message;
       errBox.style.display = 'block';
       ov.querySelector('#mChatPwSave').disabled = false;
+    }
+  });
+}
+
+
+function openAssignSuperManagerModal() {
+  const managers = usersData.manager || [];
+  if (!managers.length) {
+    alert('No manager accounts found. Please create a manager account first.');
+    return;
+  }
+  const existing = document.getElementById('assignSuperManagerModal');
+  if (existing) existing.remove();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay show';
+  ov.id = 'assignSuperManagerModal';
+
+  const optionsHtml = managers.map(m => `<option value="${m.id}" data-username="${pesc(m.username)}" data-issuper="${m.is_super_manager?1:0}" data-dispname="${pesc(m.chat_display_name||'')}">${pesc(m.username)} ${m.is_super_manager ? '⭐ (Current Super Manager)' : ''}</option>`).join('');
+
+  ov.innerHTML = `
+    <div class="modal" style="width:min(480px,96%)">
+      <div class="modal-head">
+        <h3 style="display:flex;align-items:center;gap:8px">⭐ Assign / Manage Super Manager</h3>
+        <button class="modal-close" onclick="document.getElementById('assignSuperManagerModal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin-bottom:14px;font-size:13px;line-height:1.5">
+          Select an existing Manager to grant or revoke <b>Super Manager</b> status. Super Managers have server-enforced access to <b>All Chats</b> (view, open, read, and reply), and their real username is masked in chat with the configured display name.
+        </p>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Select Manager <span class="req">*</span></label>
+          <select id="asmMgrSelect" style="width:100%" onchange="onAsmMgrChange(this)">
+            ${optionsHtml}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:650">
+            <input type="checkbox" id="asmChkEnabled" style="width:auto;transform:scale(1.2)" onchange="document.getElementById('asmNameWrap').style.display=this.checked?'block':'none'"/>
+            <span>Assign Super Manager Role</span>
+          </label>
+        </div>
+        <div class="form-group" id="asmNameWrap" style="margin-bottom:12px">
+          <label>Chat Display Name <span class="req">*</span></label>
+          <input type="text" id="asmDisplayNameInput" value="Galaxy Support" placeholder="e.g. Galaxy Support, Support Desk" maxlength="60" style="width:100%"/>
+          <small class="muted" style="display:block;margin-top:4px">Shown to all participants when this Super Manager replies in any chat.</small>
+        </div>
+        <div id="asmModalErr" class="msg err" style="display:none;margin-top:10px"></div>
+      </div>
+      <div class="modal-foot" style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost" onclick="document.getElementById('assignSuperManagerModal').remove()">Cancel</button>
+        <button class="btn btn-blue" id="asmSaveBtn">Save Changes</button>
+      </div>
+    </div>`;
+
+  window.onAsmMgrChange = function(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    const isSuper = opt.dataset.issuper === '1';
+    const dispName = opt.dataset.dispname || 'Galaxy Support';
+    ov.querySelector('#asmChkEnabled').checked = isSuper;
+    ov.querySelector('#asmNameWrap').style.display = isSuper ? 'block' : 'none';
+    ov.querySelector('#asmDisplayNameInput').value = dispName;
+  };
+
+  document.body.appendChild(ov);
+  window.onAsmMgrChange(ov.querySelector('#asmMgrSelect'));
+
+  ov.querySelector('#asmSaveBtn').addEventListener('click', async () => {
+    const sel = ov.querySelector('#asmMgrSelect');
+    const opt = sel.options[sel.selectedIndex];
+    const userId = parseInt(sel.value, 10);
+    const username = opt ? opt.dataset.username : 'Manager';
+    const isChecked = ov.querySelector('#asmChkEnabled').checked;
+    const dispName = ov.querySelector('#asmDisplayNameInput').value.trim();
+    const errBox = ov.querySelector('#asmModalErr');
+
+    if (isChecked && !dispName) {
+      errBox.textContent = 'Please enter a custom Chat Display Name.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      ov.querySelector('#asmSaveBtn').disabled = true;
+      await API.post(`/chat/admin/super-manager/${userId}`, {
+        is_super_manager: isChecked ? 1 : 0,
+        chat_display_name: isChecked ? dispName : ''
+      });
+      ov.remove();
+      if (isChecked) {
+        alert(`✅ "${username}" is now a Super Manager!\n\nChat Display Name: "${dispName}"\nAccess to All Chats enabled.`);
+      } else {
+        alert(`✅ Super Manager role revoked for "${username}".`);
+      }
+      loadUsers('manager');
+      if (typeof loadChatAccounts === 'function') loadChatAccounts();
+    } catch (e) {
+      errBox.textContent = '❌ ' + e.message;
+      errBox.style.display = 'block';
+      ov.querySelector('#asmSaveBtn').disabled = false;
     }
   });
 }

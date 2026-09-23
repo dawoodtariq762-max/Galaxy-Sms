@@ -1397,7 +1397,18 @@ function paymentCycleInfo(type, earnedAt){
 function walletValid(v){ return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(v||'').trim()); } /* legacy TRC20 check — pre-P19j records only */
 /* P19j: Binance UID = 8-12 digit numeric ID (Binance Pay profile). Deliberately not overly restrictive. */
 function binanceUidValid(v){ return /^\d{8,12}$/.test(String(v||'').trim()); }
-function agentManagerId(agentId){ return db.get("SELECT parent_id FROM users WHERE id=? AND role='agent'",[agentId])?.parent_id || null; }
+function getAgentManager(agentId) {
+  if (!agentId) return null;
+  const agent = db.get("SELECT id, username, parent_id FROM users WHERE id=? AND role='agent'", [agentId]);
+  if (!agent || !agent.parent_id) return null;
+  const parent = db.get("SELECT id, username, role FROM users WHERE id=?", [agent.parent_id]);
+  if (parent && parent.role === 'manager') return parent;
+  return null;
+}
+function agentManagerId(agentId) {
+  const m = getAgentManager(agentId);
+  return m ? m.id : null;
+}
 function recordPaymentLedgerForSms(smsId, persist=true){
   /* P16: priority 1) sms.payment_type (ingestion snapshot) 2) numbers.payterm (allocation)
      3) users.payment_type (agent default) 4) ranges.payment_type 5) weekly — backfill rows ke liye bhi sahi cycle */
@@ -2330,9 +2341,16 @@ function handleAllocate(req, res) {
     vals = [target.id, rateVal, rateVal];
   } else if (target.role === 'agent') {
     if (req.user.role === 'admin') {
-      // Admin -> Agent direct: no manager in chain
-      sets = "agent_id=?, manager_id=NULL, client_id=NULL, manager_rate='', agent_rate=?, client_rate='', payout='0', rate=?";
-      vals = [target.id, rateVal, rateVal];
+      const agentMgr = getAgentManager(target.id);
+      if (agentMgr) {
+        // Scenario B: Manager Agent — follows hierarchy Admin -> Manager A -> Agent
+        sets = "agent_id=?, manager_id=?, client_id=NULL, agent_rate=?, client_rate='', payout='0', rate=?";
+        vals = [target.id, agentMgr.id, rateVal, rateVal];
+      } else {
+        // Scenario A: Direct Admin Agent — no manager in chain
+        sets = "agent_id=?, manager_id=NULL, client_id=NULL, manager_rate='', agent_rate=?, client_rate='', payout='0', rate=?";
+        vals = [target.id, rateVal, rateVal];
+      }
     } else {
       // Manager -> Agent: manager_rate and numbers.rate PRESERVED!
       sets = "agent_id=?, manager_id=?, client_id=NULL, agent_rate=?, client_rate='', payout='0'";
@@ -2483,7 +2501,7 @@ app.get("/api/agent/self-allocate/ranges", authRequired, requireRole("agent"), (
 
     const results = ranges.map(r => {
       const agentCount = db.get(
-        "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND agent_id=?",
+        "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND agent_id=? AND alloc_source='self_allocate'",
         [r.id, agentId]
       )?.c || 0;
 
@@ -2607,7 +2625,7 @@ app.post("/api/agent/self-allocate", authRequired, requireRole("agent"), (req, r
     if (!db.inTransaction()) db.exec("BEGIN IMMEDIATE");
 
     const currentCount = db.get(
-      "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND agent_id=?",
+      "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND agent_id=? AND alloc_source='self_allocate'",
       [rangeId, agentId]
     )?.c || 0;
 
@@ -3088,62 +3106,102 @@ function auditJobAction(user, action, module, details={}){
 async function performSmartDivideJob(job){
   const { user, range_ids, target_ids, qty, payterm } = job;
   const wantRole = job.wantRole || { admin: 'manager', manager: 'agent', agent: 'client' }[user.role];
-  const col = { manager: 'manager_id', agent: 'agent_id', client: 'client_id' }[wantRole];
-  let ownerCond = '1=1', ownerParams = [];
-  if (user.role === 'manager') { ownerCond = 'manager_id=?'; ownerParams = [user.id]; }
-  else if (user.role === 'agent') { ownerCond = 'agent_id=?'; ownerParams = [user.id]; }
-  /* P12 PAYMENT FIX: normalizePaymentCycle (pehle normalizePaymentType tha jo weekly_7_7 ko 'weekly' collapse kar deta tha — rollback: normalizePaymentType(payterm || 'weekly')) */
   const smartType = normalizePaymentCycle(payterm || 'weekly_7_1');
-  setJob(job,{status:'processing',started_at:new Date().toISOString(),progress:0,processed:0,total:0,message:'Selecting numbers'});
+  setJob(job,{status:'processing',started_at:new Date().toISOString(),progress:0,processed:0,total:0,message:'Allocating unallocated numbers'});
   try{
-    /* P12 PAYMENT FIX: users.payment_type overwrite removed — smart-divide cycle ab sirf allocated numbers ke payterm par (rollback: upar wala line). */
-    const report=[]; let total=0; let planned=0;
-    // First pass counts selected IDs and keeps pools in memory; avoids DB save per number.
-    const rangePools=[];
-    for(const rid of range_ids){
-      const pool=db.all(`SELECT id FROM numbers WHERE range_id=? AND ${col} IS NULL AND ${ownerCond} LIMIT ?`, [rid, ...ownerParams, qty]).map(r=>r.id);
-      rangePools.push({rid,pool}); planned += pool.length;
+    const report=[]; let total=0;
+    
+    // Strict Database-Level Unallocated condition:
+    // Admin: strictly completely unallocated numbers (no manager, no agent, no client)
+    // Manager: numbers belonging to manager that are NOT allocated downstream (agent_id IS NULL AND client_id IS NULL)
+    // Agent: numbers belonging to agent that are NOT allocated downstream (client_id IS NULL)
+    let unallocCond = '';
+    let baseParams = [];
+    if (user.role === 'admin') {
+      unallocCond = 'manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL';
+      baseParams = [];
+    } else if (user.role === 'manager') {
+      unallocCond = 'manager_id=? AND agent_id IS NULL AND client_id IS NULL';
+      baseParams = [user.id];
+    } else if (user.role === 'agent') {
+      unallocCond = 'agent_id=? AND client_id IS NULL';
+      baseParams = [user.id];
     }
-    setJob(job,{total:planned,message:'Updating allocations'});
-    // Process in chunks without a long transaction so other requests can run between chunks.
-    for(const {rid,pool} of rangePools){
-      const take=pool.length;
-      const perBase=Math.floor(take/target_ids.length); let rem=take%target_ids.length, ptr=0;
-      const split=target_ids.map(t=>{const c=perBase+(rem>0?1:0); if(rem>0)rem--; return {t,c};});
-      for(const sp of split){
-        const ids=pool.slice(ptr, ptr+sp.c); ptr += sp.c;
-        for(const part of chunkIds(ids, 1000)){
-          if(!part.length) continue;
-          const ph=part.map(()=>'?').join(',');
-          if(wantRole==='client'){
-            const clientRateVal = job.rate || '0';
-            if (user.role === 'admin') {
-              db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=NULL, manager_id=NULL, manager_rate='', agent_rate='', client_rate=?, payout=?, rate=? WHERE id IN (${ph})`, [sp.t, clientRateVal, clientRateVal, clientRateVal, ...part]);
-            } else if (user.role === 'manager') {
-              db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=NULL, manager_id=?, agent_rate='', client_rate=?, payout=? WHERE id IN (${ph})`, [sp.t, user.id, clientRateVal, clientRateVal, ...part]);
-            } else {
-              const agtMgrId = user.id ? agentManagerId(user.id) : null;
-              db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=?, manager_id=COALESCE(manager_id, ?), client_rate=?, payout=? WHERE id IN (${ph})`, [sp.t, user.id, agtMgrId, clientRateVal, clientRateVal, ...part]);
+
+    for (const rid of range_ids) {
+      let pool = [];
+      let take = 0;
+      let split = [];
+
+      try {
+        if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
+
+        // Select ONLY genuinely unallocated numbers inside immediate transaction lock
+        pool = db.all(
+          `SELECT id FROM numbers WHERE range_id=? AND ${unallocCond} ORDER BY id ASC LIMIT ?`,
+          [rid, ...baseParams, qty]
+        ).map(r => r.id);
+
+        take = pool.length;
+        if (take > 0) {
+          const perBase = Math.floor(take / target_ids.length);
+          let rem = take % target_ids.length;
+          split = target_ids.map(t => {
+            const c = perBase + (rem > 0 ? 1 : 0);
+            if (rem > 0) rem--;
+            return { t, c };
+          });
+
+          let ptr = 0;
+          for (const sp of split) {
+            const ids = pool.slice(ptr, ptr + sp.c);
+            ptr += sp.c;
+            for (const part of chunkIds(ids, 1000)) {
+              if (!part.length) continue;
+              const ph = part.map(() => '?').join(',');
+              if (wantRole === 'client') {
+                const clientRateVal = job.rate || '0';
+                if (user.role === 'admin') {
+                  db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=NULL, manager_id=NULL, manager_rate='', agent_rate='', client_rate=?, payout=?, rate=?, alloc_source='manual' WHERE id IN (${ph})`, [sp.t, clientRateVal, clientRateVal, clientRateVal, ...part]);
+                } else if (user.role === 'manager') {
+                  db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=NULL, manager_id=?, agent_rate='', client_rate=?, payout=?, alloc_source='manual' WHERE id IN (${ph})`, [sp.t, user.id, clientRateVal, clientRateVal, ...part]);
+                } else {
+                  const agtMgrId = user.id ? agentManagerId(user.id) : null;
+                  db.runNoSave(`UPDATE numbers SET client_id=?, agent_id=?, manager_id=COALESCE(manager_id, ?), client_rate=?, payout=?, alloc_source='manual' WHERE id IN (${ph})`, [sp.t, user.id, agtMgrId, clientRateVal, clientRateVal, ...part]);
+                }
+              } else if (wantRole === 'agent') {
+                const agentRateVal = job.rate || '';
+                if (user.role === 'admin') {
+                  const agentMgr = getAgentManager(sp.t);
+                  if (agentMgr) {
+                    // Scenario B: Manager Agent — follow Admin -> Manager -> Agent hierarchy
+                    db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, agent_rate=?, client_rate='', payout='0', payterm=?, alloc_source='manual' WHERE id IN (${ph})`, [sp.t, agentMgr.id, agentRateVal, smartType, ...part]);
+                  } else {
+                    // Scenario A: Direct Admin Agent — no manager in chain
+                    db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, manager_rate='', agent_rate=?, client_rate='', payout='0', rate=?, payterm=?, alloc_source='manual' WHERE id IN (${ph})`, [sp.t, agentRateVal, agentRateVal, smartType, ...part]);
+                  }
+                } else {
+                  db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, agent_rate=?, client_rate='', payout='0', payterm=?, alloc_source='manual' WHERE id IN (${ph})`, [sp.t, user.id, agentRateVal, smartType, ...part]);
+                }
+              } else {
+                // Admin -> Manager
+                const mgrRateVal = job.rate || '';
+                db.runNoSave(`UPDATE numbers SET manager_id=?, agent_id=NULL, client_id=NULL, manager_rate=?, agent_rate='', client_rate='', payout='0', rate=?, alloc_source='manual' WHERE id IN (${ph})`, [sp.t, mgrRateVal, mgrRateVal, ...part]);
+              }
+              total += part.length;
             }
-          } else if(wantRole==='agent'){
-            const agentRateVal = job.rate || '';
-            if (user.role === 'admin') {
-              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, manager_rate='', agent_rate=?, client_rate='', payout='0', rate=?, payterm=? WHERE id IN (${ph})`, [sp.t, agentRateVal, agentRateVal, smartType, ...part]);
-            } else {
-              db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=?, client_id=NULL, agent_rate=?, client_rate='', payout='0', payterm=? WHERE id IN (${ph})`, [sp.t, user.id, agentRateVal, smartType, ...part]);
-            }
-          } else {
-            // Admin -> Manager
-            const mgrRateVal = job.rate || '';
-            db.runNoSave(`UPDATE numbers SET manager_id=?, agent_id=NULL, client_id=NULL, manager_rate=?, agent_rate='', client_rate='', payout='0', rate=? WHERE id IN (${ph})`, [sp.t, mgrRateVal, mgrRateVal, ...part]);
           }
-          total += part.length;
-          setJob(job,{processed:total,progress:planned?Math.floor(total/planned*100):100});
-          await sleepImmediate();
         }
+        if (db.inTransaction()) db.exec('COMMIT');
+      } catch (err) {
+        if (db.inTransaction()) db.exec('ROLLBACK');
+        throw err;
       }
-      const rname=db.get('SELECT name FROM ranges WHERE id=?',[rid]);
-      report.push({range:rname?rname.name:rid,taken:take,split});
+
+      const rname = db.get('SELECT name FROM ranges WHERE id=?', [rid]);
+      report.push({ range: rname ? rname.name : rid, taken: take, split });
+      setJob(job, { processed: total, total });
+      await sleepImmediate();
     }
     db.save(); clearApiReadCache();
     auditJobAction(user,'smart_divide_numbers_background','numbers',{total,report,payterm:smartType,...(job.rate?{rate_override:job.rate}:{})});
@@ -5015,9 +5073,11 @@ function processIncomingSmsPayload(req, payload, sourceIp='', opts={}) {
      Any other provider payout (or none at all) is IGNORED for display - the
      panel always calculates payout from its own rate cards. */
   if (opts.forceZeroPayout) { smsPayoutRate = '0'; if (!limitReason) limitReason = 'provider_payout_zero'; }
+  const agentMgr = n.agent_id ? getAgentManager(n.agent_id) : null;
+  const resolvedManagerId = n.manager_id || (agentMgr ? agentMgr.id : null);
   db.run(`INSERT INTO sms_records (number_id,number,range_id,cli,sender_type,message,otp_code,client_id,agent_id,manager_id,is_test,test_batch_id,source,payout_rate,payout_amount,limit_reason,payment_type,received_at)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(NULLIF(?,''),datetime('now')))`,
-    [n.id, n.number, n.range_id, cli || '', senderType, message || '', otpCode, n.client_id, n.agent_id, n.manager_id, opts.isTest?1:0, opts.testBatchId||'', opts.source||'carrier', smsPayoutRate, smsPayoutRate, limitReason, assignedPaymentType, opts.received_at || '']);
+    [n.id, n.number, n.range_id, cli || '', senderType, message || '', otpCode, n.client_id, n.agent_id, resolvedManagerId, opts.isTest?1:0, opts.testBatchId||'', opts.source||'carrier', smsPayoutRate, smsPayoutRate, limitReason, assignedPaymentType, opts.received_at || '']);
   const saved = db.get('SELECT id, received_at FROM sms_records ORDER BY id DESC LIMIT 1');
   if (!opts.isTest) { try { recordSmsStats({ m: n.manager_id, a: n.agent_id, c: n.client_id, cli, payout: smsPayoutRate, ts: saved?.received_at }); } catch (_) {} }
   // Remember the provider's unique id so a retry of this exact callback is

@@ -255,7 +255,7 @@ module.exports = function mountChat(app, deps) {
       return res.json({
         ok: true,
         token: signChat(user),
-        user: { id: user.id, username: user.username, role: user.role, name: user.name || user.username }
+        user: { id: user.id, username: user.username, role: user.role, name: user.name || user.username, is_super_manager: 0, chat_display_name: '' }
       });
     }
 
@@ -281,10 +281,18 @@ module.exports = function mountChat(app, deps) {
 
     db.run(`UPDATE chat_credentials SET failed_attempts=0, locked_until=NULL, last_login_at=datetime('now'), updated_at=datetime('now') WHERE user_id=?`, [user.id]);
     logAction({ user, ip: req.ip }, 'chat_login', 'chat', { username: user.username, role: user.role });
+    const freshUser = getUser(user.id) || user;
     return res.json({
       ok: true,
       token: signChat(user),
-      user: { id: user.id, username: user.username, role: user.role, name: user.name || user.username }
+      user: {
+        id: freshUser.id,
+        username: freshUser.username,
+        role: freshUser.role,
+        name: freshUser.name || freshUser.username,
+        is_super_manager: (freshUser.role === 'manager' && freshUser.is_super_manager === 1) ? 1 : 0,
+        chat_display_name: freshUser.chat_display_name || ''
+      }
     });
   });
 

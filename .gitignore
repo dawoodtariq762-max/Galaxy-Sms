@@ -24,3 +24,12 @@ npm-debug.log*
 # pm2 / runtime
 .pm2/
 powerx-logs/
+
+# runtime uploads
+data/chat_uploads/*
+!data/chat_uploads/.gitkeep
+data/chat_voice/*
+!data/chat_voice/.gitkeep
+
+# mobile build intermediate artifacts
+mobile-app/bin/

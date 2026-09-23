@@ -234,8 +234,8 @@ function openDb() {
   t('F4-D2 smart-divide numbers carry 0.017', sdRate.length === 2, 'count=' + sdRate.length);
 
   /* manager->agent: rate param IGNORED for manager; existing admin rate PRESERVED */
-  const mIdsWithRate = dbo.prepare("SELECT id FROM numbers WHERE manager_id=? AND rate='0.013'").all(M1ID).map(r => r.id);
-  const mIdsNoRate = dbo.prepare("SELECT id FROM numbers WHERE manager_id=? AND rate=''").all(M1ID).map(r => r.id);
+  const mIdsWithRate = dbo.prepare("SELECT id FROM numbers WHERE manager_id=? AND agent_id IS NULL AND rate='0.013'").all(M1ID).map(r => r.id);
+  const mIdsNoRate = dbo.prepare("SELECT id FROM numbers WHERE manager_id=? AND agent_id IS NULL AND rate=''").all(M1ID).map(r => r.id);
   a = await api('/api/numbers/allocate', 'POST', { ids: mIdsWithRate.slice(0, 1), target_id: A1ID, payterm: 'weekly_7_1', rate: '0.099' }, m1Tok);
   t('F4-M1 manager allocation ok (rate param sent)', a.status === 200, JSON.stringify(a.j).slice(0, 60));
   const movedRow = dbo.prepare('SELECT rate, agent_id, manager_id FROM numbers WHERE id=?').get(mIdsWithRate[0]);
