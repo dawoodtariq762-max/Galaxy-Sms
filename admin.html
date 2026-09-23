@@ -1256,12 +1256,13 @@ function renderUsers(role){const len=document.getElementById(role+'Len').value,q
   let rows=(usersData[role]||[]).filter(r=>r.username.toLowerCase().includes(q)||(r.name||'').toLowerCase().includes(q)||(r.email||'').toLowerCase().includes(q));
   const pag=API.paginateRows('adminUsers'+role,rows,len,role+'Info',()=>renderUsers(role));const total=pag.total;rows=pag.rows;
   document.getElementById(role+'Body').innerHTML=rows.map(r=>`<tr>
-    <td><input type="checkbox" class="uchk-${role}" data-id="${r.id}"/></td><td><b>${r.username}</b></td>
+    <td><input type="checkbox" class="uchk-${role}" data-id="${r.id}"/></td><td><b>${r.username}</b>${(role==='manager'&&r.is_super_manager)?` <span class="tag" style="background:rgba(245,158,11,.15);color:#f59e0b;font-weight:700;margin-left:6px" title="Chat Display Name: ${pesc(r.chat_display_name)}">⭐ Super Manager [${pesc(r.chat_display_name)}]</span>`:''}</td>
     <td>${r.name||'<span class="muted">—</span>'}</td><td>${r.email||'<span class="muted">—</span>'}</td>
     <td>${(role==='agent'?(r.whatsapp||r.contact):r.contact)||'<span class="muted">—</span>'}</td><td>${r.skype||'<span class="muted">—</span>'}</td>
     <td>${r.active?'<span class="check-ok">✔</span>':'<span class="tag tag-red">Disabled</span>'}</td>
     ${(()=>{const H=window.hierStats||{};const h=(role==='manager'?(H.managers||{}):(role==='agent'?(H.agents||{}):(H.clients||{})))||{};const c=h[r.id]||{};if(role==='manager')return `<td data-label="Agents">${c.agents||0}</td><td data-label="Clients">${c.clients||0}</td><td data-label="Numbers">${(c.numbers||0).toLocaleString()}</td>`;if(role==='agent')return `<td data-label="Clients">${c.clients||0}</td><td data-label="Numbers">${(c.numbers||0).toLocaleString()}</td>`;return `<td data-label="Numbers">${(c.numbers||0).toLocaleString()}</td><td data-label="Parent Agent" class="muted">${r.parent_agent||'\u2014'}</td><td data-label="Parent Manager" class="muted">${r.parent_manager||'\u2014'}</td>`;})()}
     <td style="white-space:nowrap">
+      ${role==='manager'?`<button class="icon-btn" style="color:#f59e0b" onclick="openSuperManagerModal(${r.id},'${pesc(r.username)}',${r.is_super_manager?1:0},'${pesc(r.chat_display_name||'')}')" title="Configure Super Manager Role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>`:''}
       <button class="icon-btn btn-blue" onclick="viewUser('${role}',${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
       <button class="icon-btn btn-amber" onclick="openUserModal('${role}',${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button>
       <button class="icon-btn btn-red" onclick="deleteUser('${role}',${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td></tr>`).join('');
@@ -2931,7 +2932,12 @@ function renderChatAccounts(){
     if (isAdmin) {
       actionButtons = '<span class="muted" style="font-size:12px">Protected Master</span>';
     } else {
+      let smBtn = '';
+      if (a.role === 'manager') {
+        smBtn = `<button class="gx-btn" onclick="openSuperManagerModal(${a.id}, '${pesc(a.username)}', ${a.is_super_manager ? 1 : 0}, '${pesc(a.chat_display_name || '')}')" title="Configure Super Manager Chat Role" style="font-size:12px;padding:5px 9px;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);font-weight:700">⭐ Super Manager</button>`;
+      }
       actionButtons = `
+        ${smBtn}
         <button class="gx-btn gx-blue" onclick="openSetChatPasswordModal(${a.id}, '${pesc(a.username)}')" title="Set or Reset Chat Password" style="font-size:12px;padding:5px 10px;font-weight:700">🔑 Set Password</button>
         <button class="gx-btn ${isEnabled ? 'gx-red' : 'gx-green'}" onclick="toggleChatAccount(${a.id}, ${isEnabled ? 0 : 1}, '${pesc(a.username)}')" title="${isEnabled ? 'Disable Chat Access' : 'Enable Chat Access'}" style="font-size:12px;padding:5px 9px">
           ${isEnabled ? 'Disable' : 'Enable'}
@@ -2939,10 +2945,14 @@ function renderChatAccounts(){
       `;
     }
 
+    const smTag = (a.role === 'manager' && a.is_super_manager)
+      ? `<div style="margin-top:4px"><span class="tag" style="background:rgba(245,158,11,.15);color:#f59e0b;font-weight:700;font-size:10.5px" title="Masked Chat Display Name: ${pesc(a.chat_display_name)}">⭐ Super Manager [${pesc(a.chat_display_name)}]</span></div>`
+      : '';
+
     tr.innerHTML = `
       <td class="mono"><b>${pesc(a.username)}</b></td>
       <td><div><b>${pesc(a.name || a.username)}</b></div><div class="muted" style="font-size:11.5px">${pesc(a.email || 'No email')}</div></td>
-      <td><span class="tag ${roleTagClass}">${pesc(a.role.toUpperCase())}</span></td>
+      <td><span class="tag ${roleTagClass}">${pesc(a.role.toUpperCase())}</span>${smTag}</td>
       <td>${parentDisp}</td>
       <td>${statusTag}</td>
       <td>${pwStatus}</td>
@@ -3061,6 +3071,81 @@ function openSetChatPasswordModal(userId, username){
       errBox.textContent = e.message;
       errBox.style.display = 'block';
       ov.querySelector('#mChatPwSave').disabled = false;
+    }
+  });
+}
+
+function openSuperManagerModal(userId, username, isSuper, currentDisplayName) {
+  const existing = document.getElementById('superManagerModal');
+  if (existing) existing.remove();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay show';
+  ov.id = 'superManagerModal';
+  ov.innerHTML = `
+    <div class="modal" style="width:min(460px,96%)">
+      <div class="modal-head">
+        <h3 style="display:flex;align-items:center;gap:8px">⭐ Super Manager: <span class="mono">${pesc(username)}</span></h3>
+        <button class="modal-close" onclick="closeSuperManagerModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin-bottom:14px;font-size:13px;line-height:1.5">
+          Super Manager grants server-enforced access to <b>All Chats</b> (view, open, read, and reply). In all conversation replies, this manager's real username is masked and replaced with their custom display name.
+        </p>
+        <div class="form-group" style="margin-bottom:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:650">
+            <input type="checkbox" id="smChkEnabled" ${isSuper ? 'checked' : ''} style="width:auto;transform:scale(1.2)" onchange="document.getElementById('smNameWrap').style.display=this.checked?'block':'none'"/>
+            <span>Assign Super Manager Role</span>
+          </label>
+        </div>
+        <div class="form-group" id="smNameWrap" style="margin-bottom:12px;display:${isSuper ? 'block' : 'none'}">
+          <label>Chat Display Name <span class="req">*</span></label>
+          <input type="text" id="smDisplayNameInput" value="${pesc(currentDisplayName || 'Galaxy Support')}" placeholder="e.g. Galaxy Support, Support Team" maxlength="60" style="width:100%"/>
+          <small class="muted" style="display:block;margin-top:4px">Shown to all participants when this Super Manager replies in any chat.</small>
+        </div>
+        <div id="smModalErr" class="msg err" style="display:none;margin-top:10px"></div>
+      </div>
+      <div class="modal-foot" style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost" onclick="closeSuperManagerModal()">Cancel</button>
+        <button class="btn btn-blue" id="smSaveBtn">Save Changes</button>
+      </div>
+    </div>`;
+
+  window.closeSuperManagerModal = function() {
+    const el = document.getElementById('superManagerModal');
+    if (el) { el.classList.remove('show'); el.remove(); }
+  };
+
+  document.body.appendChild(ov);
+
+  ov.querySelector('#smSaveBtn').addEventListener('click', async () => {
+    const isChecked = ov.querySelector('#smChkEnabled').checked;
+    const dispName = ov.querySelector('#smDisplayNameInput').value.trim();
+    const errBox = ov.querySelector('#smModalErr');
+
+    if (isChecked && !dispName) {
+      errBox.textContent = 'Please enter a custom Chat Display Name.';
+      errBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      ov.querySelector('#smSaveBtn').disabled = true;
+      const res = await API.post(`/chat/admin/super-manager/${userId}`, {
+        is_super_manager: isChecked ? 1 : 0,
+        chat_display_name: isChecked ? dispName : ''
+      });
+      closeSuperManagerModal();
+      if (isChecked) {
+        alert(`✅ "${username}" is now a Super Manager!\n\nChat Display Name: "${dispName}"\nAccess to All Chats enabled.`);
+      } else {
+        alert(`✅ Super Manager role revoked for "${username}".`);
+      }
+      if (typeof loadChatAccounts === 'function') loadChatAccounts();
+      if (typeof loadUsers === 'function') loadUsers('manager');
+    } catch (e) {
+      errBox.textContent = e.message;
+      errBox.style.display = 'block';
+      ov.querySelector('#smSaveBtn').disabled = false;
     }
   });
 }

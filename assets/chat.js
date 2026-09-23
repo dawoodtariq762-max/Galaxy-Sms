@@ -19,10 +19,11 @@
   function jwtPayload() { try { const t = localStorage.getItem('ms_token') || ''; const p = t.split('.')[1]; return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { return {}; } }
   const ME = Object.assign({ id: 0, role: 'client' }, jwtPayload());
   const IS_ADMIN = ME.role === 'admin';
+  let IS_SUPER_MANAGER = false;
   const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', agent: 'Agent', client: 'Client' };
 
   /* ---------- state ---------- */
-  const S = { convs: [], convId: null, other: null, oldest: null, hasOlder: false, scope: 'mine', q: '', started: false, es: null, pollTimer: null, lastMsgId: {}, readTimer: null, cFilter: '', complaints: [], lastEvt: 0, monitor: null, sseRetryTimer: null, connecting: false, convsTimer: null, lastDingAt: 0, sounded: {}, soundedOrder: [], lastUnread: null, audioUnlocked: false };
+  const S = { convs: [], convId: null, other: null, oldest: null, hasOlder: false, scope: 'mine', q: '', started: false, es: null, pollTimer: null, lastMsgId: {}, readTimer: null, cFilter: '', complaints: [], lastEvt: 0, monitor: null, sseRetryTimer: null, connecting: false, convsTimer: null, lastDingAt: 0, sounded: {}, soundedOrder: [], lastUnread: null, audioUnlocked: false, inChannel: false };
   const EMOJI = ('😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😋 😛 😜 🤪 🤨 🧐 🤓 😎 🤔 🤗 🤫 🤭 😐 😑 😶 😏 🙄 😬 😮 😯 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 👍 👎 👌 ✌️ 🤞 🤟 🤘 👏 🙌 🤝 🙏 💪 👋 🖐 ✋ 🤙 ❤️ 🧡 💛 💚 💙 💜 🖤 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 ⭐ 🌟 ✨ ⚡ 🔥 💥 💯 ✅ ❌ ❗ ❓ 💤 🎉 🎊 🎁 🏆 ⏰ 📌 📎 🔒 🔑 💡 📱 💻').split(' ');
 
   /* ---------- tiny DOM helpers ---------- */
@@ -126,6 +127,19 @@
 .gxc-cstatus.InProgress{background:rgba(48,171,237,.16);color:#30ABED}
 .gxc-cstatus.Resolved{background:rgba(37,217,164,.16);color:#25D9A4}
 .gxc-citem{cursor:pointer}
+/* Official Channel styles */
+.gxc-channel-banner{display:flex;gap:10px;align-items:center;padding:10px 12px;margin:8px 8px 4px;border-radius:12px;cursor:pointer;background:linear-gradient(96deg,rgba(48,171,237,.12),rgba(127,24,179,.10));border:1px solid rgba(48,171,237,.28);transition:all .18s ease}
+.gxc-channel-banner:hover{background:linear-gradient(96deg,rgba(48,171,237,.18),rgba(127,24,179,.16));border-color:rgba(48,171,237,.45)}
+.gxc-channel-banner.on{background:linear-gradient(96deg,rgba(48,171,237,.24),rgba(127,24,179,.20));border-color:#30ABED;box-shadow:0 0 16px rgba(48,171,237,.2)}
+.gxc-channel-feed{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.gxc-channel-card{background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.25);position:relative}
+.gxc-channel-card-head{display:flex;align-items:center;gap:10px}
+.gxc-channel-badge{font-size:10px;padding:2px 7px;border-radius:99px;background:linear-gradient(96deg,#30ABED,#7F18B3);color:#fff;font-weight:700}
+.gxc-channel-title{font-size:15px;font-weight:700;color:#fff;margin-top:2px}
+.gxc-channel-body{font-size:13.5px;line-height:1.55;color:var(--px-text,#E7EAF8);white-space:pre-wrap;word-break:break-word}
+.gxc-channel-media-img{max-width:100%;max-height:420px;border-radius:10px;object-fit:cover;cursor:pointer;border:1px solid rgba(255,255,255,.1)}
+.gxc-channel-media-vid{max-width:100%;max-height:420px;border-radius:10px;background:#000;border:1px solid rgba(255,255,255,.1);width:100%}
+.gxc-channel-readonly{text-align:center;padding:12px 16px;font-size:12.5px;color:var(--px-muted,#9BA3C9);background:rgba(0,0,0,.25);border-top:1px solid var(--px-border,rgba(120,140,190,.25))}
 .gx-comp{display:flex;flex-direction:column;gap:12px}
 @media(max-width:900px){
   /* P19k #1: 78+16+62+12 ≈ 168px header stack (wrapped topbar + page-head + paddings) */
@@ -168,7 +182,20 @@
     <div class="page-head"><div><h2>Internal Chat</h2><div class="breadcrumb"><b>Communication</b> › Chat</div></div></div>
     <div class="gx-chat" id="gxcRoot">
       <div class="gxc-side">
-        ${IS_ADMIN ? `<div class="gxc-tabs"><div class="gxc-tab on" id="gxcTabMine">My Chats</div><div class="gxc-tab" id="gxcTabAll">All Chats</div></div>` : ''}
+        <div class="gxc-tabs" id="gxcScopeTabs" style="display:${(IS_ADMIN || IS_SUPER_MANAGER) ? 'flex' : 'none'}">
+          <div class="gxc-tab on" id="gxcTabMine">My Chats</div>
+          <div class="gxc-tab" id="gxcTabAll">All Chats</div>
+        </div>
+        <div class="gxc-channel-banner" id="gxcChannelBanner">
+          <div class="gxc-av a-channel" style="background:linear-gradient(135deg,#30ABED,#7F18B3);font-size:16px">📢</div>
+          <div class="gxc-imid">
+            <div class="gxc-top"><span class="gxc-nm" style="color:#30ABED;font-weight:750">Galaxy SMS Official</span><span class="gxc-role" style="background:rgba(48,171,237,.2);color:#30ABED">Official</span></div>
+            <div class="gxc-last" id="gxcChannelBannerLast">Official announcements & updates</div>
+          </div>
+          <div class="gxc-meta">
+            <span class="gxc-badge" id="gxcChannelBadge" style="display:none">0</span>
+          </div>
+        </div>
         <div class="gxc-search">
           <input type="text" id="gxcSearch" placeholder="Search chats..." style="flex:1;min-width:0"/>
           <button class="gxc-send gxc-newbtn" id="gxcNew" title="New chat">+ New</button>
@@ -176,16 +203,15 @@
         <div class="gxc-list" id="gxcList"></div>
       </div>
       <div class="gxc-main" id="gxcMain">
-        <div class="gxc-empty">No conversation is open yet — select one from the list or start a new one with <b>+ New</b>.</div>
+        <div class="gxc-empty">No conversation is open yet — select one from the list, view <b>Galaxy SMS Official</b> announcements, or start a new chat with <b>+ New</b>.</div>
       </div>
     </div>
     <div class="gxc-emoji-pop" id="gxcEmojiPop"></div>`;
     $('gxcSearch').addEventListener('input', e => { S.q = e.target.value.trim().toLowerCase(); renderConvList(); });
     $('gxcNew').addEventListener('click', openContactsModal);
-    if (IS_ADMIN) {
-      $('gxcTabMine').addEventListener('click', () => setScope('mine'));
-      $('gxcTabAll').addEventListener('click', () => setScope('all'));
-    }
+    $('gxcChannelBanner').addEventListener('click', openChannelView);
+    $('gxcTabMine').addEventListener('click', () => setScope('mine'));
+    $('gxcTabAll').addEventListener('click', () => setScope('all'));
     const pop = $('gxcEmojiPop');
     EMOJI.forEach(em => { const b = document.createElement('button'); b.type = 'button'; b.textContent = em; b.addEventListener('click', () => insertEmoji(em)); pop.appendChild(b); });
     document.addEventListener('click', (e) => { if (!e.target.closest('#gxcEmojiPop') && !e.target.closest('#gxcEmojibtn')) pop.classList.remove('show'); });
@@ -239,7 +265,7 @@
       const roles = who ? who.role_label : `${c.user_a.role_label} ↔ ${c.user_b.role_label}`;
       const av = who ? who.role : 'agent';
       const div = document.createElement('div');
-      div.className = 'gxc-item' + (c.id === S.convId ? ' on' : '');
+      div.className = 'gxc-item' + (!S.inChannel && c.id === S.convId ? ' on' : '');
       div.innerHTML = `<div class="gxc-av a-${esc(av)}">${esc((title || '?').charAt(0).toUpperCase())}</div>
         <div class="gxc-imid"><div class="gxc-top"><span class="gxc-nm">${esc(title)}</span><span class="gxc-role">${esc(roles)}</span></div>
         <div class="gxc-last">${esc(c.last_message_text || 'No messages yet')}</div></div>
@@ -291,6 +317,8 @@
 
   /* ---------- conversation ---------- */
   async function openConv(conv, isAdminAllView) {
+    S.inChannel = false;
+    const ban = $('gxcChannelBanner'); if (ban) ban.classList.remove('on');
     S.convId = conv.id; S.other = conv.other || null; S.isAdminAll = !!isAdminAllView;
     const root = $('gxcRoot'); if (root) root.classList.add('conv-open');
     updateFabVisibility();
@@ -646,6 +674,9 @@
       es.addEventListener('msg', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveMsg(d.c, d.m); } catch (e) {} });
       es.addEventListener('msg_deleted', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveDeleted(d.c, d.message_id); } catch (e) {} });
       es.addEventListener('read', (ev) => { try { touchSse(); onLiveRead(JSON.parse(ev.data)); } catch (e) {} });
+      es.addEventListener('channel_post', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveChannelPost(d.post); } catch (e) {} });
+      es.addEventListener('channel_post_updated', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveChannelPostUpdated(d.post); } catch (e) {} });
+      es.addEventListener('channel_post_deleted', (ev) => { try { const d = JSON.parse(ev.data); touchSse(); onLiveChannelPostDeleted(d.id); } catch (e) {} });
       es.addEventListener('allocation_update', (ev) => {
         try {
           touchSse();
@@ -759,6 +790,12 @@
          (SSE mode me per-message dingOnce pehle hi ho chuka hota hai; 2s throttle double ko rokta hai.) */
       if (prev !== null && b.chat > prev) playDing();
       setBadge('gxChatBadge', b.chat); setBadge('gxCompBadge', b.complaints);
+      setBadge('gxcChannelBadge', b.channel); setBadge('gxChannelBadge', b.channel);
+      if (b.is_super_manager !== undefined) {
+        IS_SUPER_MANAGER = !!b.is_super_manager;
+        const tabs = $('gxcScopeTabs');
+        if (tabs) tabs.style.display = (IS_ADMIN || IS_SUPER_MANAGER) ? 'flex' : 'none';
+      }
       /* P19j: floating Chat shortcut badge — same numbers as the sidebar badge (no separate tracking) */
       const fb = $('gxChatFabBadge');
       if (fb) { fb.textContent = b.chat > 99 ? '99+' : String(b.chat); fb.classList.toggle('show', b.chat > 0); }
@@ -997,6 +1034,404 @@
   }
 
   /* ================= public API ================= */
+  /* ================================================================
+   * GALAXY SMS OFFICIAL CHANNEL FRONTEND
+   * ================================================================ */
+  let chanPosts = [], chanHasOlder = false, chanOldestId = null, chanSelectedMedia = null;
+
+  async function openChannelView() {
+    S.convId = null; S.other = null; S.inChannel = true;
+    const root = $('gxcRoot'); if (root) root.classList.add('conv-open');
+    updateFabVisibility();
+    const ban = $('gxcChannelBanner'); if (ban) ban.classList.add('on');
+    document.querySelectorAll('.gxc-item.on').forEach(el => el.classList.remove('on'));
+
+    const main = $('gxcMain');
+    main.innerHTML = `
+      <div class="gxc-head">
+        <button class="gxc-back" id="gxcBack" title="Back">‹</button>
+        <div class="gxc-av" style="background:linear-gradient(135deg,#30ABED,#7F18B3);font-size:16px;width:34px;height:34px;min-width:34px">📢</div>
+        <div style="flex:1;min-width:0">
+          <div class="gxc-nm" style="display:flex;align-items:center;gap:6px">
+            <span>Galaxy SMS Official</span>
+            <span style="font-size:10px;padding:1px 6px;border-radius:99px;background:rgba(48,171,237,.2);color:#30ABED;font-weight:700">Official Channel</span>
+          </div>
+          <div class="gxc-last">Platform announcements, route releases & policy updates</div>
+        </div>
+      </div>
+      <div class="gxc-channel-feed" id="gxcChannelFeed">
+        <div class="gxc-empty">Loading announcements...</div>
+      </div>
+      ${IS_ADMIN ? `
+        <div class="gxc-channel-compose" style="padding:10px 14px;border-top:1px solid var(--px-border,rgba(120,140,190,.25));background:var(--px-surface,#0D142C)">
+          <div id="gxcChanMediaPrev" class="gxc-attach-preview" style="display:none"></div>
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <button class="gxc-emojibtn" id="gxcChanEmojibtn" type="button" title="Emoji">🙂</button>
+            <label class="gxc-emojibtn" id="gxcChanMediaBtn" for="gxcChanMediaInput" title="Attach image or video (.jpg, .png, .mp4, .webm)" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center">📷</label>
+            <input type="file" id="gxcChanMediaInput" accept="image/*,video/*,.jpg,.jpeg,.png,.webp,.gif,.mp4,.webm,.mov" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+              <input type="text" id="gxcChanTitle" placeholder="Title (optional)" style="background:var(--px-surface-2,#131C3E);border:1px solid var(--px-border,rgba(120,140,190,.25));border-radius:8px;padding:6px 10px;font-size:12.5px;color:#fff"/>
+              <textarea class="gxc-input" id="gxcChanInput" rows="1" maxlength="4000" placeholder="Broadcast a new update (Unicode & emojis supported)..."></textarea>
+            </div>
+            <button class="gxc-send" id="gxcChanPublish" type="button" style="height:auto;padding:10px 18px">Publish</button>
+          </div>
+        </div>
+      ` : `
+        <div class="gxc-channel-readonly">
+          📢 Broadcast announcement channel · Read-only for platform members
+        </div>
+      `}
+    `;
+
+    $('gxcBack').addEventListener('click', () => {
+      root.classList.remove('conv-open');
+      S.inChannel = false;
+      if (ban) ban.classList.remove('on');
+      updateFabVisibility();
+      renderConvList();
+    });
+
+    if (IS_ADMIN) {
+      setupChannelComposer();
+    }
+
+    await loadChannelPosts(true);
+  }
+
+  function setupChannelComposer() {
+    chanSelectedMedia = null;
+    const mediaInp = $('gxcChanMediaInput');
+    const mediaPrev = $('gxcChanMediaPrev');
+    const txtInp = $('gxcChanInput');
+    const titleInp = $('gxcChanTitle');
+    const pubBtn = $('gxcChanPublish');
+    const emBtn = $('gxcChanEmojibtn');
+
+    if (emBtn) {
+      emBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        $('gxcEmojiPop').classList.toggle('show');
+      });
+    }
+
+    mediaInp.addEventListener('change', () => {
+      if (mediaInp.files && mediaInp.files[0]) {
+        const f = mediaInp.files[0];
+        const ext = (f.name || '').split('.').pop().toLowerCase();
+        const allowed = ['jpg','jpeg','png','webp','gif','mp4','webm','mov','m4v'];
+        if (!allowed.includes(ext)) {
+          alert('❌ Allowed media formats: JPG, PNG, WEBP, GIF, MP4, WEBM, MOV.');
+          mediaInp.value = '';
+          return;
+        }
+        if (f.size > 50 * 1024 * 1024) {
+          alert('❌ Media size exceeds maximum limit of 50MB.');
+          mediaInp.value = '';
+          return;
+        }
+        chanSelectedMedia = f;
+        updateChanMediaUI();
+      }
+    });
+
+    function updateChanMediaUI() {
+      if (!chanSelectedMedia) {
+        mediaPrev.style.display = 'none';
+        mediaPrev.innerHTML = '';
+        pubBtn.disabled = !txtInp.value.trim();
+        return;
+      }
+      const isVid = ['mp4','webm','mov','m4v'].includes((chanSelectedMedia.name||'').split('.').pop().toLowerCase());
+      mediaPrev.style.display = 'flex';
+      mediaPrev.innerHTML = `
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isVid ? '🎥' : '📷'} <b>${esc(chanSelectedMedia.name)}</b> (${formatBytes(chanSelectedMedia.size)})</span>
+        <button type="button" class="gxc-attach-x" title="Remove media">✕</button>
+      `;
+      mediaPrev.querySelector('.gxc-attach-x').addEventListener('click', () => {
+        chanSelectedMedia = null;
+        mediaInp.value = '';
+        updateChanMediaUI();
+      });
+      pubBtn.disabled = false;
+    }
+
+    txtInp.addEventListener('input', () => {
+      txtInp.style.height = 'auto';
+      txtInp.style.height = Math.min(txtInp.scrollHeight, 120) + 'px';
+      pubBtn.disabled = (!txtInp.value.trim() && !chanSelectedMedia);
+    });
+
+    pubBtn.addEventListener('click', async () => {
+      const body = txtInp.value.trim();
+      const title = titleInp ? titleInp.value.trim() : '';
+      if (!body && !chanSelectedMedia) return;
+
+      pubBtn.disabled = true;
+      pubBtn.textContent = 'Publishing...';
+
+      try {
+        const fd = new FormData();
+        if (body) fd.append('body', body);
+        if (title) fd.append('title', title);
+        if (chanSelectedMedia) fd.append('media', chanSelectedMedia);
+
+        const token = sessionStorage.getItem('ms_token') || localStorage.getItem('ms_token') || '';
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const res = await fetch('/api/chat/channel/posts', {
+          method: 'POST',
+          headers,
+          body: fd
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to publish post');
+
+        txtInp.value = '';
+        if (titleInp) titleInp.value = '';
+        chanSelectedMedia = null;
+        mediaInp.value = '';
+        updateChanMediaUI();
+
+        if (data.post) {
+          appendChanPost(data.post, true);
+        }
+      } catch (err) {
+        alert('❌ ' + err.message);
+      } finally {
+        pubBtn.disabled = false;
+        pubBtn.textContent = 'Publish';
+      }
+    });
+  }
+
+  async function loadChannelPosts(fresh) {
+    const feed = $('gxcChannelFeed'); if (!feed) return;
+    try {
+      const data = await API.get('/chat/channel/posts?limit=20');
+      chanPosts = data.posts || [];
+      chanHasOlder = !!data.has_older;
+      chanOldestId = chanPosts.length ? chanPosts[chanPosts.length - 1].id : null;
+      renderChannelFeed(chanPosts, fresh);
+
+      if (chanPosts.length > 0) {
+        const maxId = chanPosts[0].id;
+        API.post('/chat/channel/read', { last_post_id: maxId }).catch(() => {});
+        setBadge('gxcChannelBadge', 0); setBadge('gxChannelBadge', 0);
+      }
+    } catch (e) {
+      feed.innerHTML = `<div class="gxc-empty">❌ Failed to load channel posts: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function loadOlderChannelPosts() {
+    if (!chanOldestId) return;
+    try {
+      const data = await API.get(`/chat/channel/posts?limit=20&before_id=${chanOldestId}`);
+      const older = data.posts || [];
+      chanHasOlder = !!data.has_older;
+      if (older.length) {
+        chanOldestId = older[older.length - 1].id;
+        chanPosts = chanPosts.concat(older);
+        renderChannelFeed(chanPosts, false);
+      }
+    } catch (e) { alert('❌ ' + e.message); }
+  }
+
+  function renderChannelFeed(posts, fresh) {
+    const feed = $('gxcChannelFeed'); if (!feed) return;
+    feed.innerHTML = '';
+
+    if (!posts.length) {
+      feed.innerHTML = '<div class="gxc-empty">No announcements published yet.</div>';
+      return;
+    }
+
+    posts.forEach(p => {
+      feed.appendChild(renderChannelCard(p));
+    });
+
+    if (chanHasOlder) {
+      const b = document.createElement('button');
+      b.className = 'btn btn-ghost gxc-older';
+      b.style.alignSelf = 'center';
+      b.style.margin = '14px 0';
+      b.textContent = 'Load older announcements';
+      b.addEventListener('click', loadOlderChannelPosts);
+      feed.appendChild(b);
+    }
+  }
+
+  function renderChannelCard(p) {
+    const card = document.createElement('div');
+    card.className = 'gxc-channel-card';
+    card.dataset.pid = p.id;
+
+    let mediaHtml = '';
+    if (p.media_url) {
+      if (p.media_type === 'video') {
+        mediaHtml = `<div style="margin-top:8px"><video class="gxc-channel-media-vid" src="${esc(p.media_url)}" controls preload="metadata"></video></div>`;
+      } else {
+        mediaHtml = `<div style="margin-top:8px"><img class="gxc-channel-media-img" src="${esc(p.media_url)}" alt="${esc(p.title || 'media')}" onclick="window.open('${esc(p.media_url)}','_blank')"/></div>`;
+      }
+    }
+
+    const titleHtml = p.title ? `<div class="gxc-channel-title">${esc(p.title)}</div>` : '';
+    const bodyHtml = p.body ? `<div class="gxc-channel-body">${esc(p.body)}</div>` : '';
+
+    const actionsHtml = IS_ADMIN ? `
+      <div class="gxc-msg-menu-wrap" style="top:10px;right:10px">
+        <button type="button" class="gxc-msg-menu-btn" title="Options">⋯</button>
+        <div class="gxc-msg-dropdown">
+          <button type="button" class="gxc-menu-item btn-edit-post">✏️ Edit Post</button>
+          <button type="button" class="gxc-menu-item danger btn-del-post">🗑️ Delete Post</button>
+        </div>
+      </div>
+    ` : '';
+
+    card.innerHTML = `
+      <div class="gxc-channel-card-head">
+        <div class="gxc-av" style="width:30px;height:30px;min-width:30px;font-size:13px;background:linear-gradient(135deg,#30ABED,#7F18B3)">📢</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-weight:700;font-size:13px;color:#fff">${esc(p.admin_name)}</span>
+            <span class="gxc-channel-badge">Official</span>
+          </div>
+          <div style="font-size:11px;color:var(--px-dim,#7A83A8);margin-top:1px">${esc(fmtDay(p.created_at))} ${esc(fmtTime(p.created_at))}</div>
+        </div>
+        ${actionsHtml}
+      </div>
+      ${titleHtml}
+      ${bodyHtml}
+      ${mediaHtml}
+    `;
+
+    if (IS_ADMIN) {
+      const menuBtn = card.querySelector('.gxc-msg-menu-btn');
+      const dropdown = card.querySelector('.gxc-msg-dropdown');
+      if (menuBtn && dropdown) {
+        menuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.gxc-msg-dropdown.show').forEach(d => { if (d !== dropdown) d.classList.remove('show'); });
+          dropdown.classList.toggle('show');
+        });
+      }
+
+      const editBtn = card.querySelector('.btn-edit-post');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          dropdown.classList.remove('show');
+          openEditChannelModal(p);
+        });
+      }
+
+      const delBtn = card.querySelector('.btn-del-post');
+      if (delBtn) {
+        delBtn.addEventListener('click', async () => {
+          dropdown.classList.remove('show');
+          if (!confirm('Are you sure you want to delete this official announcement?')) return;
+          try {
+            await API.del(`/chat/channel/posts/${p.id}`);
+            card.remove();
+          } catch (e) { alert('❌ ' + e.message); }
+        });
+      }
+    }
+
+    return card;
+  }
+
+  function openEditChannelModal(p) {
+    const existing = $('gxcEditPostModal');
+    if (existing) existing.remove();
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay show';
+    ov.id = 'gxcEditPostModal';
+    ov.innerHTML = `
+      <div class="modal" style="width:min(480px,96%)">
+        <div class="modal-head">
+          <h3>✏️ Edit Official Announcement</h3>
+          <button class="modal-close">✕</button>
+        </div>
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:10px;padding:16px 20px">
+          <div>
+            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Title (optional)</label>
+            <input type="text" id="gxcEditPostTitle" value="${esc(p.title || '')}" style="width:100%"/>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Message Body (Unicode & flag emojis supported)</label>
+            <textarea id="gxcEditPostBody" rows="5" style="width:100%">${esc(p.body || '')}</textarea>
+          </div>
+        </div>
+        <div class="modal-foot" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px">
+          <button class="btn btn-ghost" id="gxcEditPostCancel">Cancel</button>
+          <button class="btn btn-blue" id="gxcEditPostSave">Save Changes</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.querySelector('.modal-close').addEventListener('click', close);
+    ov.querySelector('#gxcEditPostCancel').addEventListener('click', close);
+    ov.querySelector('#gxcEditPostSave').addEventListener('click', async () => {
+      const title = ov.querySelector('#gxcEditPostTitle').value.trim();
+      const body = ov.querySelector('#gxcEditPostBody').value.trim();
+      if (!body && !p.media_path) { alert('Announcement body cannot be empty.'); return; }
+      try {
+        const res = await API.put(`/chat/channel/posts/${p.id}`, { title, body });
+        close();
+        if (res.post) {
+          const card = $('gxcChannelFeed') && $('gxcChannelFeed').querySelector(`[data-pid="${p.id}"]`);
+          if (card) {
+            const newCard = renderChannelCard(res.post);
+            card.replaceWith(newCard);
+          }
+        }
+      } catch (err) { alert('❌ ' + err.message); }
+    });
+  }
+
+  function onLiveChannelPost(post) {
+    playDing();
+    refreshBadges();
+    if (S.inChannel) {
+      appendChanPost(post, true);
+    }
+  }
+
+  function onLiveChannelPostUpdated(post) {
+    if (S.inChannel) {
+      const feed = $('gxcChannelFeed');
+      const card = feed && feed.querySelector(`[data-pid="${post.id}"]`);
+      if (card) {
+        const newCard = renderChannelCard(post);
+        card.replaceWith(newCard);
+      }
+    }
+  }
+
+  function onLiveChannelPostDeleted(postId) {
+    if (S.inChannel) {
+      const feed = $('gxcChannelFeed');
+      const card = feed && feed.querySelector(`[data-pid="${postId}"]`);
+      if (card) card.remove();
+    }
+  }
+
+  function appendChanPost(post, top) {
+    const feed = $('gxcChannelFeed'); if (!feed) return;
+    const existing = feed.querySelector(`[data-pid="${post.id}"]`);
+    if (existing) return;
+    const empty = feed.querySelector('.gxc-empty');
+    if (empty) empty.remove();
+    const card = renderChannelCard(post);
+    if (top && feed.firstChild) {
+      feed.insertBefore(card, feed.firstChild);
+    } else {
+      feed.appendChild(card);
+    }
+  }
+
   window.GXChat = {
     open(page) {
       if (page === 'chat') {

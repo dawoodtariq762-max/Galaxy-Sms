@@ -79,12 +79,19 @@ function chatLoginLimit(req, res, next) {
   next();
 }
 
+/* ---------- Super Manager helper (server-side check fresh from DB) ---------- */
+function isSuperManager(userId) {
+  if (!userId) return false;
+  const u = getUser(userId);
+  return !!(u && u.role === 'manager' && u.is_super_manager === 1);
+}
+
 /* ---------- permission core (server-side ONLY source of truth) ---------- */
 function canStartChat(user, target) {
   if (!user || !target || user.id === target.id) return false;
   if (!target.active) return false;
+  if (user.role === 'admin' || (user.role === 'manager' && isSuperManager(user.id))) return true;
   switch (user.role) {
-    case 'admin': return true; // admin <-> koi bhi active user
     case 'manager': return (target.role === 'agent' && target.parent_id === user.id) || target.role === 'admin';
     case 'agent':   return (target.role === 'client' && target.parent_id === user.id) || (target.role === 'manager' && target.id === user.parent_id);
     case 'client':  return target.role === 'agent' && target.id === user.parent_id;
@@ -92,10 +99,11 @@ function canStartChat(user, target) {
   }
 }
 
-/* conversation read/reply access: participant ya admin (admin-only global visibility) */
+/* conversation read/reply access: participant, admin, or super manager */
 function convAccess(user, conv) {
   if (!conv) return false;
   if (user.role === 'admin') return true;
+  if (user.role === 'manager' && isSuperManager(user.id)) return true;
   return conv.user_a === user.id || conv.user_b === user.id;
 }
 function pairOf(a, b) { return a < b ? [a, b] : [b, a]; }
@@ -168,7 +176,7 @@ function broadcast(conv, event, obj) {
   const targets = new Set([conv.user_a, conv.user_b]);
   for (const [, set] of sseClients)
     for (const res of set)
-      if (targets.has(res._gxUserId) || res._gxRole === 'admin') sseSend(res, event, obj);
+      if (targets.has(res._gxUserId) || res._gxRole === 'admin' || isSuperManager(res._gxUserId)) sseSend(res, event, obj);
 }
 
 function broadcastSseAll(event, obj) {
@@ -404,6 +412,7 @@ module.exports = function mountChat(app, deps) {
   app.get('/api/chat/admin/accounts', chatAuth, requireRole('admin'), (req, res) => {
     const rows = db.all(`
       SELECT u.id, u.username, u.name, u.role, u.active AS user_active, u.email, u.contact, u.parent_id,
+             u.is_super_manager, u.chat_display_name,
              p.username AS parent_username,
              c.chat_enabled, c.failed_attempts, c.locked_until, c.last_login_at, c.password_set_at,
              CASE WHEN c.chat_password_hash IS NOT NULL AND c.chat_password_hash != '' THEN 1 ELSE 0 END AS has_chat_password
@@ -434,6 +443,41 @@ module.exports = function mountChat(app, deps) {
     }
     logAction(req, 'admin_set_chat_password', 'chat', { target_id: targetId, username: target.username });
     res.json({ ok: true, user_id: targetId, message: `Chat password updated for ${target.username}` });
+  });
+
+  /* ---------- Assign / Revoke Super Manager & Set Custom Chat Display Name ---------- */
+  app.post('/api/chat/admin/super-manager/:userId', chatAuth, requireRole('admin'), (req, res) => {
+    const targetId = intId(req.params.userId);
+    if (!targetId) return res.status(400).json({ error: 'Invalid user ID' });
+    const target = getUser(targetId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.role !== 'manager') {
+      return res.status(400).json({ error: 'Super Manager role can only be assigned to Manager accounts' });
+    }
+
+    const isSuper = (req.body.is_super_manager === 1 || req.body.is_super_manager === true) ? 1 : 0;
+    const displayName = String(req.body.chat_display_name || '').trim();
+
+    if (isSuper && !displayName) {
+      return res.status(400).json({ error: 'A custom Chat display name is required for Super Manager' });
+    }
+
+    db.run("UPDATE users SET is_super_manager=?, chat_display_name=? WHERE id=?",
+      [isSuper, isSuper ? displayName : '', target.id]);
+
+    logAction(req, isSuper ? 'assign_super_manager' : 'revoke_super_manager', 'users', {
+      target_id: target.id,
+      username: target.username,
+      chat_display_name: isSuper ? displayName : ''
+    });
+
+    res.json({
+      ok: true,
+      user_id: target.id,
+      username: target.username,
+      is_super_manager: isSuper,
+      chat_display_name: isSuper ? displayName : ''
+    });
   });
 
   app.post('/api/chat/admin/accounts/:userId/toggle', chatAuth, requireRole('admin'), (req, res) => {
@@ -556,7 +600,8 @@ module.exports = function mountChat(app, deps) {
     const like = `%${q}%`;
 
     if (scope === 'all') {
-      if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden — All Chats is admin-only' });
+      const isSuper = (req.user.role === 'manager' && isSuperManager(req.user.id));
+      if (req.user.role !== 'admin' && !isSuper) return res.status(403).json({ error: 'Forbidden — All Chats is admin and super manager only' });
 
       let whereClauses = [];
       let params = [];
@@ -649,11 +694,11 @@ module.exports = function mountChat(app, deps) {
     const delFilter = `AND m.id NOT IN (SELECT message_id FROM chat_message_deletions WHERE user_id=${req.user.id})`;
 
     if (afterId) {
-      const rows = db.all(`SELECT m.*, u.username, u.name, u.role FROM chat_messages m JOIN users u ON u.id=m.sender_id
+      const rows = db.all(`SELECT m.*, u.username, u.name, u.role, u.is_super_manager, u.chat_display_name FROM chat_messages m JOIN users u ON u.id=m.sender_id
         WHERE m.conversation_id=? AND m.id>? ${delFilter} ORDER BY m.id ASC LIMIT ${PAGE_MAX}`, [conv.id, afterId]);
       return res.json({ messages: rows.map(mapMsg), has_older: false });
     }
-    const rows = db.all(`SELECT m.*, u.username, u.name, u.role FROM chat_messages m JOIN users u ON u.id=m.sender_id
+    const rows = db.all(`SELECT m.*, u.username, u.name, u.role, u.is_super_manager, u.chat_display_name FROM chat_messages m JOIN users u ON u.id=m.sender_id
       WHERE m.conversation_id=? ${beforeId ? 'AND m.id<?' : ''} ${delFilter} ORDER BY m.id DESC LIMIT ${limit + 1}`,
       beforeId ? [conv.id, beforeId] : [conv.id]);
     const hasOlder = rows.length > limit;
@@ -663,12 +708,18 @@ module.exports = function mountChat(app, deps) {
 
   function mapMsg(m) {
     const isDeleted = (m.deleted_for_everyone === 1);
+    const isSuper = (m.is_super_manager === 1);
+    const displayName = (isSuper && m.chat_display_name && String(m.chat_display_name).trim())
+      ? String(m.chat_display_name).trim()
+      : ((m.name && String(m.name).trim()) || m.username);
+    const displayRole = isSuper ? 'Super Manager' : (ROLE_LABEL[m.role] || m.role);
     return {
       id: m.id,
       conversation_id: m.conversation_id,
       sender_id: m.sender_id,
-      sender_name: (m.name && String(m.name).trim()) || m.username,
-      sender_role: ROLE_LABEL[m.role] || m.role,
+      sender_name: displayName,
+      sender_role: displayRole,
+      sender_username: isSuper ? displayName : m.username,
       body: isDeleted ? 'This message was deleted' : m.body,
       attachment_path: isDeleted ? null : (m.attachment_path || null),
       attachment_type: isDeleted ? null : (m.attachment_type || null),
@@ -779,12 +830,18 @@ module.exports = function mountChat(app, deps) {
       [`📎 ${safeOriginalName}`, conv.id]);
 
     const sender = getUser(req.user.id) || req.user;
+    const isSuper = (sender.role === 'manager' && sender.is_super_manager === 1);
+    const senderDisplayName = (isSuper && sender.chat_display_name && String(sender.chat_display_name).trim())
+      ? String(sender.chat_display_name).trim()
+      : ((sender.name && String(sender.name).trim()) || sender.username);
+    const senderRoleLabel = isSuper ? 'Super Manager' : (ROLE_LABEL[req.user.role] || req.user.role);
     const msg = {
       id: Number(info.lastInsertRowid),
       conversation_id: conv.id,
       sender_id: req.user.id,
-      sender_name: (sender.name && String(sender.name).trim()) || sender.username,
-      sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+      sender_name: senderDisplayName,
+      sender_role: senderRoleLabel,
+      sender_username: isSuper ? senderDisplayName : sender.username,
       body: bodyText,
       attachment_path: relPath,
       attachment_type: fileType,
@@ -843,12 +900,18 @@ module.exports = function mountChat(app, deps) {
     );
     if (recent) {
       const sender = getUser(req.user.id) || req.user;
+      const isSuper = (sender.role === 'manager' && sender.is_super_manager === 1);
+      const senderDisplayName = (isSuper && sender.chat_display_name && String(sender.chat_display_name).trim())
+        ? String(sender.chat_display_name).trim()
+        : ((sender.name && String(sender.name).trim()) || sender.username);
+      const senderRoleLabel = isSuper ? 'Super Manager' : (ROLE_LABEL[req.user.role] || req.user.role);
       const msg = {
         id: recent.id,
         conversation_id: recent.conversation_id,
         sender_id: recent.sender_id,
-        sender_name: (sender.name && String(sender.name).trim()) || sender.username,
-        sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+        sender_name: senderDisplayName,
+        sender_role: senderRoleLabel,
+        sender_username: isSuper ? senderDisplayName : sender.username,
         body: recent.body,
         created_at: recent.created_at,
         read_at: recent.read_at,
@@ -861,12 +924,18 @@ module.exports = function mountChat(app, deps) {
     const preview = body.length > 80 ? body.slice(0, 80) + '…' : body;
     db.run(`UPDATE chat_conversations SET last_message_at=datetime('now'), last_message_text=? WHERE id=?`, [preview, conv.id]);
     const sender = getUser(req.user.id) || req.user;
+    const isSuper = (sender.role === 'manager' && sender.is_super_manager === 1);
+    const senderDisplayName = (isSuper && sender.chat_display_name && String(sender.chat_display_name).trim())
+      ? String(sender.chat_display_name).trim()
+      : ((sender.name && String(sender.name).trim()) || sender.username);
+    const senderRoleLabel = isSuper ? 'Super Manager' : (ROLE_LABEL[req.user.role] || req.user.role);
     const msg = {
       id: Number(info.lastInsertRowid),
       conversation_id: conv.id,
       sender_id: req.user.id,
-      sender_name: (sender.name && String(sender.name).trim()) || sender.username,
-      sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+      sender_name: senderDisplayName,
+      sender_role: senderRoleLabel,
+      sender_username: isSuper ? senderDisplayName : sender.username,
       body,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
       read_at: null,
@@ -923,12 +992,18 @@ module.exports = function mountChat(app, deps) {
       [`📎 ${safeOriginalName}`, conv.id]);
 
     const sender = getUser(req.user.id) || req.user;
+    const isSuper = (sender.role === 'manager' && sender.is_super_manager === 1);
+    const senderDisplayName = (isSuper && sender.chat_display_name && String(sender.chat_display_name).trim())
+      ? String(sender.chat_display_name).trim()
+      : ((sender.name && String(sender.name).trim()) || sender.username);
+    const senderRoleLabel = isSuper ? 'Super Manager' : (ROLE_LABEL[req.user.role] || req.user.role);
     const msg = {
       id: Number(info.lastInsertRowid),
       conversation_id: conv.id,
       sender_id: req.user.id,
-      sender_name: (sender.name && String(sender.name).trim()) || sender.username,
-      sender_role: ROLE_LABEL[req.user.role] || req.user.role,
+      sender_name: senderDisplayName,
+      sender_role: senderRoleLabel,
+      sender_username: isSuper ? senderDisplayName : sender.username,
       body: bodyText,
       attachment_path: relPath,
       attachment_type: fileType,
@@ -1001,14 +1076,308 @@ module.exports = function mountChat(app, deps) {
     res.json({ ok: true, marked: info.changes || 0 });
   });
 
-  /* ---------- unread badge (chat) + open complaints badge ---------- */
+  /* ================================================================
+   * FEATURE 2: GALAXY SMS OFFICIAL CHANNEL
+   * ================================================================ */
+  const channelUploadDir = path.join(__dirname, '..', 'data', 'channel_media');
+  if (!fs.existsSync(channelUploadDir)) {
+    fs.mkdirSync(channelUploadDir, { recursive: true });
+  }
+
+  const channelStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, channelUploadDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      cb(null, `chan-${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
+    }
+  });
+
+  const channelFileFilter = (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const allowedImgExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    const allowedVidExts = ['.mp4', '.webm', '.mov', '.m4v'];
+    if (!allowedImgExts.includes(ext) && !allowedVidExts.includes(ext)) {
+      return cb(new Error('Only images (.jpg, .png, .webp, .gif) and videos (.mp4, .webm, .mov) are allowed'));
+    }
+    const mime = (file.mimetype || '').toLowerCase();
+    if (!mime.startsWith('image/') && !mime.startsWith('video/') && mime !== 'application/octet-stream') {
+      return cb(new Error('Invalid media MIME type'));
+    }
+    cb(null, true);
+  };
+
+  const channelUpload = multer({
+    storage: channelStorage,
+    fileFilter: channelFileFilter,
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+  });
+
+  function handleChannelUpload(req, res, next) {
+    channelUpload.single('media')(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File size exceeds maximum limit of 50MB' });
+        }
+        return res.status(400).json({ error: err.message || 'Media upload failed' });
+      }
+      next();
+    });
+  }
+
+  function validateMediaFile(filePath, ext) {
+    try {
+      const fd = fs.openSync(filePath, 'r');
+      const buf = Buffer.alloc(512);
+      const bytesRead = fs.readSync(fd, buf, 0, 512, 0);
+      fs.closeSync(fd);
+      const headStr = buf.subarray(0, bytesRead).toString('latin1');
+      if (headStr.startsWith('\x7fELF') || headStr.startsWith('MZ') || /<script|<\?php|#!\/bin/i.test(headStr)) {
+        return false;
+      }
+      if (['.jpg', '.jpeg'].includes(ext)) {
+        return buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+      }
+      if (ext === '.png') {
+        return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+      }
+      if (ext === '.gif') {
+        return headStr.startsWith('GIF87a') || headStr.startsWith('GIF89a');
+      }
+      if (ext === '.webp') {
+        return headStr.startsWith('RIFF') && headStr.includes('WEBP');
+      }
+      if (['.mp4', '.m4v'].includes(ext)) {
+        return buf.subarray(4, 8).toString('latin1') === 'ftyp' || headStr.includes('isom') || headStr.includes('mp42');
+      }
+      if (ext === '.webm') {
+        return buf[0] === 0x1A && buf[1] === 0x45 && buf[2] === 0xDF && buf[3] === 0xA3;
+      }
+      if (ext === '.mov') {
+        return buf.subarray(4, 8).toString('latin1') === 'ftyp' || buf.subarray(4, 8).toString('latin1') === 'moov';
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function mapChannelPost(p) {
+    const hasMedia = !!p.media_path;
+    const mediaUrl = hasMedia ? `/api/chat/channel/media/${encodeURIComponent(p.media_path)}` : null;
+    return {
+      id: p.id,
+      admin_id: p.admin_id,
+      admin_name: p.admin_name || p.admin_username || 'Galaxy SMS Official',
+      admin_username: p.admin_username || 'admin',
+      title: p.title || '',
+      body: p.body,
+      media_url: mediaUrl,
+      media_path: p.media_path || null,
+      media_type: p.media_type || null,
+      media_name: p.media_name || null,
+      media_size: p.media_size || 0,
+      is_pinned: !!p.is_pinned,
+      created_at: p.created_at,
+      updated_at: p.updated_at
+    };
+  }
+
+  /* GET /api/chat/channel/posts — all authorized chat roles can view (paginated) */
+  app.get('/api/chat/channel/posts', chatAuth, (req, res) => {
+    const beforeId = parseInt(req.query.before_id || '0', 10) || null;
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10) || 20, 1), 50);
+
+    let sql = `SELECT p.*, u.username AS admin_username, u.name AS admin_name
+               FROM channel_posts p JOIN users u ON u.id=p.admin_id`;
+    const params = [];
+    if (beforeId) {
+      sql += ' WHERE p.id < ?';
+      params.push(beforeId);
+    }
+    sql += ` ORDER BY p.id DESC LIMIT ${limit + 1}`;
+
+    const rows = db.all(sql, params);
+    const hasOlder = rows.length > limit;
+    const items = (hasOlder ? rows.slice(0, limit) : rows).map(mapChannelPost);
+
+    const readRow = db.get('SELECT last_read_post_id FROM channel_reads WHERE user_id=?', [req.user.id]);
+    const lastRead = readRow ? (readRow.last_read_post_id || 0) : 0;
+    const unreadCount = db.get('SELECT COUNT(*) AS c FROM channel_posts WHERE id > ?', [lastRead])?.c || 0;
+
+    res.json({ posts: items, has_older: hasOlder, unread_count: unreadCount });
+  });
+
+  /* POST /api/chat/channel/posts — ADMIN ONLY publishing */
+  app.post('/api/chat/channel/posts', chatAuth, requireRole('admin'), handleChannelUpload, (req, res) => {
+    const body = String(req.body && (req.body.body || req.body.caption || req.body.text || '')).trim();
+    const title = String((req.body && req.body.title) || '').trim();
+
+    let mediaPath = '', mediaType = '', mediaName = '', mediaSize = 0;
+    if (req.file) {
+      const ext = path.extname(req.file.originalname || '').toLowerCase();
+      if (!validateMediaFile(req.file.path, ext)) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(400).json({ error: 'File rejected by security validation.' });
+      }
+      mediaPath = path.basename(req.file.path);
+      mediaName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+      mediaSize = req.file.size;
+      mediaType = ['.mp4', '.webm', '.mov', '.m4v'].includes(ext) ? 'video' : 'image';
+    }
+
+    if (!body && !mediaPath) {
+      return res.status(400).json({ error: 'Post must contain text, an image, or a video.' });
+    }
+
+    const info = db.run(
+      `INSERT INTO channel_posts (admin_id, title, body, media_path, media_type, media_name, media_size)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, title, body, mediaPath, mediaType, mediaName, mediaSize]
+    );
+    const postId = Number(info.lastInsertRowid);
+    const post = mapChannelPost({
+      id: postId,
+      admin_id: req.user.id,
+      admin_username: req.user.username,
+      admin_name: (req.user.name && String(req.user.name).trim()) || req.user.username,
+      title,
+      body,
+      media_path: mediaPath,
+      media_type: mediaType,
+      media_name: mediaName,
+      media_size: mediaSize,
+      is_pinned: 0,
+      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    });
+
+    broadcastSseAll('channel_post', { post });
+    logAction(req, 'create_channel_post', 'channel', { post_id: postId, has_media: !!mediaPath });
+    res.json({ ok: true, post });
+  });
+
+  /* PUT /api/chat/channel/posts/:id — ADMIN ONLY editing */
+  app.put('/api/chat/channel/posts/:id', chatAuth, requireRole('admin'), (req, res) => {
+    const postId = intId(req.params.id);
+    if (!postId) return res.status(400).json({ error: 'Invalid post ID' });
+    const existing = db.get('SELECT * FROM channel_posts WHERE id=?', [postId]);
+    if (!existing) return res.status(404).json({ error: 'Channel post not found' });
+
+    const body = String(req.body && (req.body.body || req.body.caption || req.body.text || '')).trim();
+    const title = String((req.body && req.body.title) || '').trim();
+    if (!body && !existing.media_path) {
+      return res.status(400).json({ error: 'Post body cannot be empty' });
+    }
+
+    db.run("UPDATE channel_posts SET title=?, body=?, updated_at=datetime('now') WHERE id=?",
+      [title, body, postId]);
+
+    const updated = db.get(`SELECT p.*, u.username AS admin_username, u.name AS admin_name FROM channel_posts p JOIN users u ON u.id=p.admin_id WHERE p.id=?`, [postId]);
+    const post = mapChannelPost(updated);
+    broadcastSseAll('channel_post_updated', { post });
+    logAction(req, 'update_channel_post', 'channel', { post_id: postId });
+    res.json({ ok: true, post });
+  });
+
+  /* DELETE /api/chat/channel/posts/:id — ADMIN ONLY deleting */
+  app.delete('/api/chat/channel/posts/:id', chatAuth, requireRole('admin'), (req, res) => {
+    const postId = intId(req.params.id);
+    if (!postId) return res.status(400).json({ error: 'Invalid post ID' });
+    const post = db.get('SELECT * FROM channel_posts WHERE id=?', [postId]);
+    if (!post) return res.status(404).json({ error: 'Channel post not found' });
+
+    if (post.media_path) {
+      try {
+        const filePath = path.resolve(channelUploadDir, post.media_path);
+        if (filePath.startsWith(channelUploadDir) && fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (_) {}
+    }
+
+    db.run('DELETE FROM channel_posts WHERE id=?', [postId]);
+    broadcastSseAll('channel_post_deleted', { id: postId });
+    logAction(req, 'delete_channel_post', 'channel', { post_id: postId });
+    res.json({ ok: true, id: postId });
+  });
+
+  /* GET /api/chat/channel/media/:filename — secure media streaming */
+  app.get('/api/chat/channel/media/:filename', chatAuth, (req, res) => {
+    const filename = path.basename(req.params.filename || '');
+    if (!filename) return res.status(400).json({ error: 'Filename required' });
+
+    const filePath = path.resolve(channelUploadDir, filename);
+    if (!filePath.startsWith(channelUploadDir) || !fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Media file not found' });
+    }
+
+    const ext = path.extname(filename).toLowerCase();
+    const mimeMap = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.mov': 'video/quicktime',
+      '.m4v': 'video/x-m4v'
+    };
+
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.sendFile(filePath);
+  });
+
+  /* POST /api/chat/channel/read — update read state for current user */
+  app.post('/api/chat/channel/read', chatAuth, (req, res) => {
+    const lastId = intId(req.body && req.body.last_post_id) || 0;
+    db.run(`
+      INSERT INTO channel_reads (user_id, last_read_post_id, read_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(user_id) DO UPDATE SET last_read_post_id=MAX(last_read_post_id, excluded.last_read_post_id), read_at=datetime('now')
+    `, [req.user.id, lastId]);
+    res.json({ ok: true });
+  });
+
+  /* GET /api/chat/profile — current user identity & Super Manager flags */
+  app.get('/api/chat/profile', chatAuth, (req, res) => {
+    const u = getUser(req.user.id);
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    const isSuper = (u.role === 'manager' && u.is_super_manager === 1);
+    res.json({
+      id: u.id,
+      username: u.username,
+      name: u.name || u.username,
+      role: u.role,
+      is_super_manager: isSuper,
+      chat_display_name: u.chat_display_name || ''
+    });
+  });
+
+  /* ---------- unread badge (chat + complaints + channel) ---------- */
   app.get('/api/chat/unread-count', chatAuth, (req, res) => {
     const chat = db.get(`SELECT COUNT(*) c FROM chat_messages m JOIN chat_conversations c2 ON c2.id=m.conversation_id
       WHERE (c2.user_a=? OR c2.user_b=?) AND m.sender_id<>? AND m.read_at IS NULL`, [req.user.id, req.user.id, req.user.id]).c;
     let complaints = 0;
     if (req.user.role === 'admin') complaints = db.get(`SELECT COUNT(*) c FROM complaints WHERE status<>'Resolved'`).c;
     else complaints = db.get(`SELECT COUNT(*) c FROM complaints WHERE sender_id=? AND status<>'Resolved'`, [req.user.id]).c;
-    res.json({ chat, complaints });
+
+    const readRow = db.get('SELECT last_read_post_id FROM channel_reads WHERE user_id=?', [req.user.id]);
+    const lastRead = readRow ? (readRow.last_read_post_id || 0) : 0;
+    const channel = db.get('SELECT COUNT(*) AS c FROM channel_posts WHERE id > ?', [lastRead])?.c || 0;
+
+    const u = getUser(req.user.id);
+    const isSuper = (u && u.role === 'manager' && u.is_super_manager === 1);
+
+    res.json({
+      chat,
+      complaints,
+      channel,
+      is_super_manager: isSuper,
+      chat_display_name: u?.chat_display_name || ''
+    });
   });
 
   /* ---------- Admin Global Search Endpoint ---------- */

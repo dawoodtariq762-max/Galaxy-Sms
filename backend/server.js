@@ -1122,7 +1122,7 @@ app.get('/api/users/:role', authRequired, (req, res) => {
   const ph = ids.map(() => '?').join(',');
   // for role list we want users of that role whose id is in scope (excluding self)
   const rows = db.all(
-    `SELECT id,username,name,email,whatsapp,contact,skype,active,parent_id,payment_type
+    `SELECT id,username,name,email,whatsapp,contact,skype,active,parent_id,payment_type,is_super_manager,chat_display_name
      FROM users WHERE role=? AND id IN (${ph}) AND id<>? ORDER BY id DESC`,
     [role, ...ids, req.user.id]
   );

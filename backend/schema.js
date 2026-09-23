@@ -463,6 +463,34 @@ function createTables() {
     db.run(`UPDATE numbers SET client_rate = payout WHERE client_id IS NOT NULL AND (client_rate IS NULL OR client_rate = '') AND payout != '' AND payout != '0' AND payout IS NOT NULL`);
   } catch (_) {}
 
+  /* Super Manager Role & Masked Chat Identity */
+  ensureColumn('users', 'is_super_manager', 'INTEGER DEFAULT 0');
+  ensureColumn('users', 'chat_display_name', "TEXT DEFAULT ''");
+
+  /* Galaxy SMS Official Channel */
+  db.run(`CREATE TABLE IF NOT EXISTS channel_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER NOT NULL,
+    title TEXT DEFAULT '',
+    body TEXT NOT NULL,
+    media_path TEXT DEFAULT '',
+    media_type TEXT DEFAULT '',
+    media_name TEXT DEFAULT '',
+    media_size INTEGER DEFAULT 0,
+    is_pinned INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (admin_id) REFERENCES users(id)
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_channel_posts_created ON channel_posts(created_at DESC)`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS channel_reads (
+    user_id INTEGER PRIMARY KEY,
+    last_read_post_id INTEGER DEFAULT 0,
+    read_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )`);
+
   const cs = db.get('SELECT COUNT(*) AS c FROM carrier_settings');
   if (!cs || cs.c === 0) {
     db.run(`INSERT INTO carrier_settings (integration_status,carrier_ip,http_callback_url,notes)
