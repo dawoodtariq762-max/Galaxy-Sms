@@ -422,8 +422,7 @@
         <div class="sub-item" data-page="rangeStats"><span class="dot"></span> Range Stats</div>
         <div class="sub-item" data-page="numberStats"><span class="dot"></span> Number Stats</div>
       </div>
-      <div class="nav-item" data-page="aiKnowledge"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/><path d="M9 17h6"/></svg><span>AI Assistant</span></div>
-    </nav>
+          </nav>
   </aside>
   <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
@@ -442,31 +441,7 @@
     </header>
 
     <div class="content">
-      <!-- ========== AI ASSISTANT KNOWLEDGE (P12) ========== -->
-      <section class="page" id="page-aiKnowledge">
-        <div class="page-head"><div><h2>AI Assistant Knowledge</h2><div class="breadcrumb"><b>Admin</b> › AI Assistant</div></div>
-          <div class="head-actions"><button type="button" class="gx-btn gx-blue" onclick="exportAiKbTxt()" data-tip="Download TXT" title="Download TXT">⬇ Export TXT</button></div></div>
-        <div class="card" style="padding:16px;margin-bottom:16px">
-          <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-            <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="aiPayEnabled" onchange="toggleAiPay(this.checked)"> Payment knowledge enabled</label>
-            <label style="display:flex;gap:8px;align-items:center;font-weight:600">AI Number Allocation Limit
-              <input type="number" id="aiAllocMax" min="1" max="5000" step="1" style="width:90px;padding:7px 9px" title="AI assistant per-range allocation limit (1–5000)">
-              <button type="button" class="gx-btn gx-blue" onclick="saveAiAllocMax()">Save</button>
-            </label>
-            <span class="muted" id="aiKbInfo" style="font-size:12.5px"></span>
-          </div>
-          <div class="hint" style="margin:-6px 0 12px;color:#5c6a86;font-size:11.5px">The AI assistant can allocate at most this many numbers per range request (1–5000). The backend enforces this limit.</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
-            <select id="aiKbCat" style="padding:9px 10px"><option value="general">Category: General</option><option value="payment">Category: Payment</option></select>
-            <input id="aiKbQ" placeholder="Question (e.g. What are payment dates?)" style="padding:9px 10px">
-            <input id="aiKbA" placeholder="Answer (the assistant's reply)" style="padding:9px 10px">
-            <button type="button" class="gx-btn gx-green" onclick="addAiKb()">+ Add Question</button>
-          </div>
-          <div style="overflow-x:auto"><table class="table"><thead><tr><th>On</th><th>Category</th><th>Question</th><th>Answer</th><th style="width:120px">Actions</th></tr></thead><tbody id="aiKbBody"></tbody></table></div>
-        </div>
-      </section>
-
-      <!-- ========== DASHBOARD ========== -->
+            <!-- ========== DASHBOARD ========== -->
       <section class="page active" id="page-dashboard">
       <div class="page-head"><div><h2>SMS Dashboard</h2><div class="breadcrumb"><b>Admin</b> › Dashboard</div></div></div>
       <div class="gx-dash-grid" id="gxDashCards"></div>
@@ -725,6 +700,29 @@
       <div class="form-group"><label>Provider Rate 30/45 <span class="muted" style="font-weight:400">(internal)</span></label><input type="text" id="pr4" placeholder="0.008 or NA" /></div>
     </div>
     <div class="form-group"><label>Memo</label><input type="text" id="rMemo" placeholder="Optional note" /></div>
+    <!-- PART 4: AGENT SELF-ALLOCATION LIMITS (per-range) -->
+    <div style="border-top:1px solid var(--border2);padding-top:14px;margin-top:10px">
+      <h4 style="margin:0 0 10px 0;font-size:13.5px;color:var(--accent,#30abed)">Agent Self-Allocation Settings</h4>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="switch"><input type="checkbox" id="rSelfAllocEnabled" checked/> Enable Agent Self-Allocation</label>
+          <div class="hint">Allow Agents to self-allocate numbers from this range.</div>
+        </div>
+        <div class="form-group">
+          <label>Self-Allocation Limit (numbers)</label>
+          <input type="number" id="rSelfAllocMax" min="1" max="10000" value="100" placeholder="100"/>
+          <div class="hint">Max numbers an Agent can hold in this range via self-allocation.</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Allowed Billing Periods</label>
+        <select id="rSelfAllocPeriods">
+          <option value="weekly,monthly">Weekly &amp; Monthly</option>
+          <option value="weekly">Weekly Only</option>
+          <option value="monthly">Monthly Only</option>
+        </select>
+      </div>
+    </div>
   </div>
   <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('rateModal')">Cancel</button><button class="btn btn-purple" onclick="saveRate()">Save Rate</button></div>
 </div></div>
@@ -767,7 +765,7 @@
 /* auth guard — admin only */
 if(window.API){ API.guard('admin'); }
 window.PX_PANEL_MODE='admin_ops';
-const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','aiKnowledge','payMgmt','chat','chatAccounts','complaints','panelRequests']);
+const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','payMgmt','chat','chatAccounts','complaints','panelRequests']);
 function normalizePanelPage(id){ id=String(id||'dashboard'); return ADMIN_ALLOWED_PAGES.has(id)?id:'dashboard'; }
 function applyPanelSplitUi(){
   if(window.PX_PANEL_MODE!=='admin_light') return;
@@ -918,11 +916,18 @@ function openRateModal(id){editRateId=id;document.getElementById('rateModalTitle
   rName.value=r.name||'';rPrefix.value=r.prefix||'';rTest.value=r.test_numbers||r.test_number||'';rCur.value=r.currency||'USD';r1.value=r.rate_1_1||'';r2.value=r.rate_7_1||'';r3.value=r.rate_7_7||'';r4.value=r.rate_30_45||'';rMemo.value=r.memo||'';
   /* P19k #4: provider rates (admin-internal) */
   pr1.value=(r.provider_rate_1_1&&r.provider_rate_1_1!=='NA')?r.provider_rate_1_1:'';pr2.value=(r.provider_rate_7_1&&r.provider_rate_7_1!=='NA')?r.provider_rate_7_1:'';pr3.value=(r.provider_rate_7_7&&r.provider_rate_7_7!=='NA')?r.provider_rate_7_7:'';pr4.value=(r.provider_rate_30_45&&r.provider_rate_30_45!=='NA')?r.provider_rate_30_45:'';
+  const saEn = document.getElementById('rSelfAllocEnabled'); if(saEn) saEn.checked = r.self_alloc_enabled !== undefined ? !!r.self_alloc_enabled : true;
+  const saMax = document.getElementById('rSelfAllocMax'); if(saMax) saMax.value = r.self_alloc_max != null ? r.self_alloc_max : 100;
+  const saPer = document.getElementById('rSelfAllocPeriods'); if(saPer) saPer.value = r.self_alloc_periods || 'weekly,monthly';
   document.getElementById('rateModal').classList.add('show');}
 async function saveRate(){if(!rName.value.trim()){alert('Range name is required.');return;}
   const body={name:rName.value.trim(),prefix:rPrefix.value.trim(),test_number:rTest.value.trim(),test_numbers:rTest.value.trim(),currency:rCur.value,rate_1_1:r1.value.trim()||'NA',rate_7_1:r2.value.trim()||'NA',rate_7_7:r3.value.trim()||'NA',rate_30_45:r4.value.trim()||'NA',memo:rMemo.value.trim(),
     /* P19k #4 */
-    provider_rate_1_1:pr1.value.trim()||'NA',provider_rate_7_1:pr2.value.trim()||'NA',provider_rate_7_7:pr3.value.trim()||'NA',provider_rate_30_45:pr4.value.trim()||'NA'};
+    provider_rate_1_1:pr1.value.trim()||'NA',provider_rate_7_1:pr2.value.trim()||'NA',provider_rate_7_7:pr3.value.trim()||'NA',provider_rate_30_45:pr4.value.trim()||'NA',
+    self_alloc_enabled: document.getElementById('rSelfAllocEnabled')?.checked ? 1 : 0,
+    self_alloc_max: parseInt(document.getElementById('rSelfAllocMax')?.value, 10) || 100,
+    self_alloc_periods: document.getElementById('rSelfAllocPeriods')?.value || 'weekly,monthly'
+  };
   try{ if(editRateId<0) await API.post('/ranges',body); else await API.put('/ranges/'+editRateId,body); closeModal('rateModal'); loadRates(); }catch(e){ alert('❌ '+e.message); }
 }
 async function delRate(id){
@@ -1083,7 +1088,11 @@ function aaRefreshDefaultRate(){
   const cycle=document.getElementById('aaPayterm')?.value||'weekly_7_1';
   let def=''; let mixed=false;
   if(ranges.length===1){
-    const rd=(typeof allocData!=='undefined'?allocData:[]).find(x=>x.range===ranges[0]);
+    let rd=(typeof allocData!=='undefined'?allocData:[]).find(x=>x.range===ranges[0]);
+    if(!rd && typeof ratesData!=='undefined'){
+      const rr = ratesData.find(x=>x.name===ranges[0]);
+      if(rr) rd = { id: rr.id, range: rr.name, r1: rr.rate_1_1, r2: rr.rate_7_1, r3: rr.rate_7_7, r4: rr.rate_30_45, rate: rr.rate_7_1||rr.rate_1_1||'0' };
+    }
     if(rd){ def=adminCycleRate(rd,cycle); if(def==='0'||def==='NA'||def==='') def=''; }
   } else if(ranges.length>1){ mixed=true; }
   inp.value=def;
@@ -1465,7 +1474,7 @@ function sdFmtDim(d,v){
   const raw=String(v==null?'':v);
   const esc=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   if(!raw) return '<span class="muted">—</span>';
-  if(d==='number'||d==='cli') return `<span class="tag tag-gray mono">${esc}</span>`;
+  if(d==='number'||d==='cli') return `<span class="mono">${esc}</span>`;
   if(d==='range') return `<span class="tag tag-blue">${esc}</span>`;
   if(d==='manager') return `<span class="tag tag-mgr">${esc}</span>`;
   if(d==='agent') return `<span class="tag tag-agt">${esc}</span>`;
@@ -1553,7 +1562,7 @@ async function renderSmsDetail(){
   state.page=data.page||1; state.totalPages=data.totalPages||1;
   sdHead.innerHTML=`<tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSdSort('range')">Range <span class="sort" id="sdSort_range">${gxArr(_sdst,'range')}</span></th><th class="sortable" onclick="gxSdSort('number')">Number <span class="sort" id="sdSort_number">${gxArr(_sdst,'number')}</span></th><th class="sortable" onclick="gxSdSort('cli')">CLI <span class="sort" id="sdSort_cli">${gxArr(_sdst,'cli')}</span></th><th>Currency</th><th class="sortable" onclick="gxSdSort('payout')">Payout Rate <span class="sort" id="sdSort_payout">${gxArr(_sdst,'payout')}</span></th><th>SMS (Message Body)</th></tr>`;
   const rows=data.rows||[];
-  sdBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-mgr">${r.manager_name||'—'}</span></td><td><span class="tag tag-blue">${r.range_name||'—'}</span></td><td><span class="tag tag-gray mono">${r.number||''}</span></td><td class="mono">${r.cli||''}</td><td>${r.range_currency?'<span class="tag tag-green">'+r.range_currency+'</span>':'—'}</td><td class="cell-money payout-rate">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+  sdBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-mgr">${r.manager_name||'—'}</span></td><td><span class="tag tag-blue">${r.range_name||'—'}</span></td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td>${r.range_currency?'<span class="tag tag-green">'+r.range_currency+'</span>':'—'}</td><td class="cell-money payout-rate">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
   sdFoot.innerHTML='';
   sdInfo.textContent=`Showing ${smsShownCount(data.page, data.limit, rows.length, data.total)} of ${data.total||0} rows`; sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`;
   setServerFoot(sdInfo,state,renderSmsDetail);
@@ -3077,8 +3086,7 @@ async function loadAdminPageData(page){
     if(page==='clients') return buildUserPage('client');
     if(page==='import'){ await ensureAdminRates(); await loadImportBatches(); return refreshNumberDbTools(); }
     if(page==='cliLimit'){ await ensureAdminSms(); fillSelect('climCli',cliPool,false); await ensureAdminManagers(); fillSelect('climMgr',(usersData.manager||[]).map(m=>m.username),false); return loadCliLimits(); }
-    if(page==='aiKnowledge') return loadAiKnowledge();
-    if(page==='limitManagement'){ await ensureAdminRates(); return loadLimitManagement(); }
+        if(page==='limitManagement'){ await ensureAdminRates(); return loadLimitManagement(); }
     if(page==='carrierIntegration') return loadCarrierSettings();
     if(page==='systemLogs') return loadSystemLogs();
     if(page==='backupManagement') return loadBackups();
@@ -3159,7 +3167,7 @@ function renderAlloc(){
   let rows=allocData.map((r,i)=>({...r,_i:i})).filter(r=>r.range.toLowerCase().includes(q));
   const pag=API.paginateRows('adminAlloc',rows,len,'allocInfo',renderAlloc);const total=pag.total;rows=pag.rows;
   const targetHtml='<option value="">Select User</option>'+adminAllocTargets().map(u=>`<option value="${u.id}">${u.label}</option>`).join('');
-  body.innerHTML=rows.map(r=>`<tr><td><b>${r.range}</b></td><td><span class="tag tag-green">${r.avail}</span> <span class="muted">/ ${r.total}</span></td><td><span class="tag tag-amber">${r.alloc}</span></td><td class="cell-money">${adminCycleRate(r)}</td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="am${r._i}" style="width:auto;padding:7px 9px">${targetHtml}</select><select id="ap${r._i}" style="width:auto;padding:7px 9px"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select><input type="number" class="allocate-num" placeholder="Qty" id="al${r._i}"/><input type="number" class="allocate-num" placeholder="Rate" id="ar${r._i}" step="0.000001" min="0" value="${adminCycleRate(r)}" title="Rate — default Rate Management (${adminCycleRate(r)})" oninput="this.dataset.dirty='1'"/><button type="button" class="gx-btn gx-green"  onclick="allocRow(${r._i})" data-tip="Allocate" title="Allocate" aria-label="Allocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button></div></td><td><div style="display:flex;gap:6px;align-items:center"><input type="number" class="allocate-num" placeholder="Qty" id="ul${r._i}"/><button type="button" class="gx-btn gx-amber"  onclick="unallocRow(${r._i})" data-tip="Unallocate" title="Unallocate" aria-label="Unallocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button></div></td></tr>`).join('')||`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No ranges found</td></tr>`;
+  body.innerHTML=rows.map(r=>`<tr><td><b>${r.range}</b></td><td><span class="tag tag-green">${r.avail}</span> <span class="muted">/ ${r.total}</span></td><td><span class="tag tag-amber">${r.alloc}</span></td><td class="cell-money">${adminCycleRate(r)}</td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="am${r._i}" style="width:auto;padding:7px 9px">${targetHtml}</select><select id="ap${r._i}" style="width:auto;padding:7px 9px" onchange="const ri=document.getElementById('ar'+${r._i});if(ri&&!ri.dataset.dirty)ri.value=adminCycleRate(allocData[${r._i}],this.value);"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select><input type="number" class="allocate-num" placeholder="Qty" id="al${r._i}"/><input type="number" class="allocate-num" placeholder="Rate" id="ar${r._i}" step="0.000001" min="0" value="${adminCycleRate(r)}" title="Rate — default Rate Management (${adminCycleRate(r)})" oninput="this.dataset.dirty='1'"/><button type="button" class="gx-btn gx-green"  onclick="allocRow(${r._i})" data-tip="Allocate" title="Allocate" aria-label="Allocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button></div></td><td><div style="display:flex;gap:6px;align-items:center"><input type="number" class="allocate-num" placeholder="Qty" id="ul${r._i}"/><button type="button" class="gx-btn gx-amber"  onclick="unallocRow(${r._i})" data-tip="Unallocate" title="Unallocate" aria-label="Unallocate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button></div></td></tr>`).join('')||`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">No ranges found</td></tr>`;
   const info=document.getElementById('allocInfo'); if(info) info.textContent=`Showing ${rows.length} of ${total} ranges`;
 }
 /* P19: toolbar Rate field — selected range + cycle ka Rate Management default. Admin

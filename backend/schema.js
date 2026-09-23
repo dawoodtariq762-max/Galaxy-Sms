@@ -448,11 +448,15 @@ function createTables() {
   ensureColumn('ranges', 'provider_rate_7_1', "TEXT DEFAULT 'NA'");
   ensureColumn('ranges', 'provider_rate_7_7', "TEXT DEFAULT 'NA'");
   ensureColumn('ranges', 'provider_rate_30_45', "TEXT DEFAULT 'NA'");
+  ensureColumn('ranges', 'self_alloc_enabled', "INTEGER DEFAULT 1");
+  ensureColumn('ranges', 'self_alloc_max', "INTEGER DEFAULT 100");
+  ensureColumn('ranges', 'self_alloc_periods', "TEXT DEFAULT 'weekly,monthly'");
 
   /* Hierarchy Tier Allocation Rates: Admin -> Manager -> Agent -> Client */
   ensureColumn('numbers', 'manager_rate', "TEXT DEFAULT ''");
   ensureColumn('numbers', 'agent_rate', "TEXT DEFAULT ''");
   ensureColumn('numbers', 'client_rate', "TEXT DEFAULT ''");
+  ensureColumn('numbers', 'alloc_source', "TEXT DEFAULT 'manual'");
   try {
     db.run(`UPDATE numbers SET manager_rate = rate WHERE manager_id IS NOT NULL AND (manager_rate IS NULL OR manager_rate = '') AND rate != '' AND rate IS NOT NULL`);
     db.run(`UPDATE numbers SET agent_rate = rate WHERE agent_id IS NOT NULL AND manager_id IS NULL AND (agent_rate IS NULL OR agent_rate = '') AND rate != '' AND rate IS NOT NULL`);
@@ -765,6 +769,9 @@ function createTables() {
     WHERE manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_numbers_unallocated_number ON numbers(number)
     WHERE manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_numbers_mgr_avail ON numbers(manager_id, range_id, id)
+    WHERE agent_id IS NULL AND client_id IS NULL`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_numbers_agent_alloc_source ON numbers(agent_id, range_id, alloc_source)`);
 
   // 5) Version counters for cache invalidation (numbers_ver / sms_ver / users_ver)
   /* ===== P19e: INTERNAL CHAT + COMPLAINTS (isolated, reversible feature) =====

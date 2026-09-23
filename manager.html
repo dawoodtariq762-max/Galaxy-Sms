@@ -659,9 +659,9 @@
   <div class="modal-head"><h3>Allocate Selected Numbers</h3><button class="modal-close" onclick="closeModal('allocAllModal')">×</button></div>
   <div class="modal-body">
     <div class="form-group"><label>Select Agent / Client <span class="req">*</span></label><select id="aaAgent"><option value="">Please Select</option></select></div>
-    <div class="form-group"><label>Payterm</label><select id="aaPayterm"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
+    <div class="form-group"><label>Payterm</label><select id="aaPayterm" onchange="aaRefreshDefaultRate()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
     <div class="form-group"><label>Allocation Rate <span class="muted" style="font-weight:400;font-size:11.5px">(leave blank to use Rate Management default)</span></label>
-      <input type="number" id="aaRate" step="0.000001" min="0" placeholder="0.010"/>
+      <input type="number" id="aaRate" step="0.000001" min="0" placeholder="0.010" oninput="this.dataset.dirty='1'"/>
       <div class="hint" id="aaRateHint" style="font-size:11.5px;margin-top:4px">Sets the effective rate for the recipient. Your own rate remains unchanged.</div>
     </div>
     <div class="form-group" style="display:none"><label>Payout ($) Locked</label><input type="number" id="aaPayout" step="0.001" value="0" placeholder="0" disabled/></div>
@@ -807,13 +807,33 @@ async function unallocSel(){const ids=selIds();if(!ids.length){alert('Select num
 async function openAllocAll(){const ids=selIds();if(!ids.length){alert('Please select numbers first (checkbox).');return;}
   if(!agentsData.length)agentsData=await API.get('/users/agent');
   try{ if(!clientsData.length) clientsData=await API.get('/users/client'); }catch(e){}
+  try{ if(!rateCard.length) await loadRateCard(); }catch(e){}
   const agtOpts = agentsData.map(a=>`<option value="${a.id}">Agent: ${a.username}</option>`).join('');
   const cliOpts = (clientsData||[]).map(c=>`<option value="${c.id}">Client: ${c.username}</option>`).join('');
   document.getElementById('aaAgent').innerHTML='<option value="">Please Select</option>'+agtOpts+cliOpts;
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
-  const rInp = document.getElementById('aaRate'); if(rInp) rInp.value='';
+  const rInp = document.getElementById('aaRate'); if(rInp) { rInp.value=''; rInp.dataset.dirty=''; }
+  aaRefreshDefaultRate();
   document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the recipient.`;
   document.getElementById('allocAllModal').classList.add('show');}
+
+function aaRefreshDefaultRate(){
+  const inp=document.getElementById('aaRate'); const hint=document.getElementById('aaRateHint'); if(!inp) return;
+  if(inp.dataset.dirty==='1') return;
+  const ids=selIds();
+  const rows=(numData||[]).filter(r=>ids.includes(r.id));
+  const ranges=[...new Set(rows.map(r=>r.range).filter(Boolean))];
+  const cycle=document.getElementById('aaPayterm')?.value||'weekly_7_1';
+  let def=''; let mixed=false;
+  if(ranges.length===1){
+    const rd=(typeof rateCard!=='undefined'?rateCard:[]).find(x=>x.range===ranges[0]);
+    if(rd){ def=cycleRate(rd,cycle); if(def==='0'||def==='NA'||def==='') def=''; }
+  } else if(ranges.length>1){ mixed=true; }
+  inp.value=def;
+  if(hint){ hint.textContent = mixed
+    ? 'The selected numbers span multiple ranges — enter the default rate manually (check Rate Card).'
+    : 'The default rate comes from Rate Management. Changing the value here only overrides the rate for THIS allocation — it does not change the global Rate Card / Agent rate.'; }
+}
 async function confirmAllocAll(){const ids=selIds();const a=document.getElementById('aaAgent').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;if(!a){alert('Select an agent or client.');return;}
   const rv = (document.getElementById('aaRate')?.value || '').trim();
   const body = {ids, target_id:+a, payterm:pt, payout:rv||po};
@@ -1038,7 +1058,7 @@ function sdFmtDim(d,v){
   const raw=String(v==null?'':v);
   const esc=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   if(!raw) return '<span class="muted">—</span>';
-  if(d==='number'||d==='cli') return `<span class="tag tag-gray mono">${esc}</span>`;
+  if(d==='number'||d==='cli') return `<span class="mono">${esc}</span>`;
   if(d==='range') return `<span class="tag tag-blue">${esc}</span>`;
   if(d==='agent') return `<span class="tag tag-agt">${esc}</span>`;
   if(d==='client') return `<span class="tag tag-cli">${esc}</span>`;

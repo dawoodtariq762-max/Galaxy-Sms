@@ -318,3 +318,32 @@ body:not(.gx-light) .gx-dash-grid .stat-card,body:not(.gx-light) .stats-grid .st
   .topbar,.tb1,.headerbar{flex-wrap:wrap;row-gap:6px;padding-top:8px!important;padding-bottom:8px!important;height:auto!important;min-height:54px}
   .tb-date{order:9;flex:1 1 100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;margin:0;min-height:0}
 }
+
+/* ============ PART 1: SMS CDR / REPORT READABILITY ============ */
+.mono, td.mono, th.mono, .cell-mono, .gx-num-val, .gx-cli-val {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.035em !important;
+  line-height: 1.4 !important;
+  color: #ffffff !important;
+  white-space: nowrap !important;
+  -webkit-font-smoothing: antialiased !important;
+  text-rendering: optimizeLegibility !important;
+}
+
+body.light-mode .mono,
+body.ms-light-mode .mono,
+body.light-theme .mono,
+body:not(.ms-dark-mode):not([data-theme="dark"]) .mono,
+body.light-mode td.mono,
+body:not(.ms-dark-mode):not([data-theme="dark"]) td.mono {
+  color: #0f172a !important;
+}
+
+@media (max-width: 768px) {
+  .mono, td.mono, th.mono, .cell-mono {
+    font-size: 13px !important;
+    letter-spacing: 0.02em !important;
+  }
+}

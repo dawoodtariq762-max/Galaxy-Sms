@@ -160,61 +160,27 @@ function openDb() {
   await sleep(300);
 
   /* =========================================================================
-   * FIX #1 — AI allocation limit: default 100, configurable, backend enforced
+   * PART 2 & PART 3 — AI Assistant Completely Removed & Self-Allocation Active
    * ====================================================================== */
-  console.log('\n--- FIX #1: AI allocation limit ---');
+  console.log('\n--- PART 2: AI assistant removed (all endpoints 404) ---');
   let kb = await api('/api/assistant/knowledge', 'GET', null, adm);
-  t('F1-1 default alloc_max = 100', kb.j.settings && kb.j.settings.alloc_max === '100', JSON.stringify(kb.j.settings || {}));
-
-  const ai = async (text, tok) => (await api('/api/assistant/message', 'POST', { text }, tok)).j;
-  // flow with default limit (agent A1)
-  let rep = await ai('i need numbers', a1Tok);
-  t('F1-2a intent starts', /range/i.test(rep.reply || ''), (rep.reply || '').slice(0, 60));
-  rep = await ai('P19R1', a1Tok);
-  t('F1-2b qty step mentions max 100', /max 100/i.test(rep.reply || ''), (rep.reply || '').slice(0, 80));
-  rep = await ai('150', a1Tok);
-  t('F1-3 qty 150 refused (default 100)', /maximum i can provide is 100/i.test(rep.reply || ''), (rep.reply || '').slice(0, 80));
-  rep = await ai('100', a1Tok);
-  t('F1-4 qty 100 passes limit check (availability may still refuse)', !/maximum i can provide/i.test(rep.reply || ''), (rep.reply || '').slice(0, 80));
-
-  // admin changes limit
+  t('F1-1 AI knowledge returns 404', kb.status === 404);
+  let st = await api('/api/assistant/status', 'GET', null, adm);
+  t('F1-2 AI status returns 404', st.status === 404);
+  let msg = await api('/api/assistant/message', 'POST', { text: 'hi' }, a1Tok);
+  t('F1-3 AI message returns 404', msg.status === 404);
   let put = await api('/api/assistant/knowledge-settings', 'PUT', { alloc_max: 50 }, adm);
-  t('F1-5 admin sets alloc_max=50', put.status === 200 && put.j.settings.alloc_max === '50', JSON.stringify(put.j.settings || {}));
-  rep = await ai('i need numbers', a2Tok); rep = await ai('P19R2', a2Tok); rep = await ai('60', a2Tok);
-  t('F1-6 qty 60 refused under limit 50', /maximum i can provide is 50/i.test(rep.reply || ''), (rep.reply || '').slice(0, 80));
+  t('F1-4 AI settings returns 404', put.status === 404);
 
-  // invalid values rejected
-  for (const bad of ['abc', 0, -5, 5001, 2.5]) {
-    put = await api('/api/assistant/knowledge-settings', 'PUT', { alloc_max: bad }, adm);
-    t(`F1-7 invalid alloc_max=${JSON.stringify(bad)} rejected`, put.status === 400, 'status ' + put.status);
-  }
-  // non-admin cannot change
-  put = await api('/api/assistant/knowledge-settings', 'PUT', { alloc_max: 999 }, m1Tok);
-  t('F1-8 manager PUT rejected 403', put.status === 403, 'status ' + put.status);
-  put = await api('/api/assistant/knowledge-settings', 'PUT', { alloc_max: 999 }, a1Tok);
-  t('F1-8b agent PUT rejected 403', put.status === 403, 'status ' + put.status);
+  // Self-allocation to A2 (3 numbers from R2) for downstream tests
+  const a2User = dbo.prepare("SELECT id FROM users WHERE username='p19a2'").get();
+  const saRes = await api('/api/agent/self-allocate', 'POST', { range_id: R2.id, quantity: 3, billing_period: 'weekly' }, a2Tok);
+  t('F1-11 Agent self-allocation allocates 3 numbers', saRes.status === 200 && saRes.j.allocated === 3);
 
-  // configurable examples from the requirement
-  for (const good of [100, 200, 500, 1000]) {
-    put = await api('/api/assistant/knowledge-settings', 'PUT', { alloc_max: good }, adm);
-    t(`F1-9 alloc_max=${good} accepted`, put.status === 200 && put.j.settings.alloc_max === String(good));
-  }
-
-  // execution enforcement: limit 5, ask 3 -> allocated; ask 6 -> refused
-  await api('/api/assistant/knowledge-settings', 'PUT', { alloc_max: 5 }, adm);
-  rep = await ai('i need numbers', a2Tok); rep = await ai('P19R2', a2Tok); rep = await ai('3', a2Tok); rep = await ai('daily', a2Tok);
-  t('F1-10 confirm step reached', /confirm/i.test(rep.reply || ''), (rep.reply || '').slice(0, 90));
-  const beforeAi = dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE agent_id=(SELECT id FROM users WHERE username='p19a2')").get().c;
-  rep = await ai('yes', a2Tok);
-  const afterAi = dbo.prepare("SELECT COUNT(*) c FROM numbers WHERE agent_id=(SELECT id FROM users WHERE username='p19a2')").get().c;
-  t('F1-11 AI allocates 3 numbers (limit 5)', /Done:/i.test(rep.reply || '') && afterAi === beforeAi + 3, `before=${beforeAi} after=${afterAi} reply=${(rep.reply || '').slice(0, 60)}`);
-  rep = await ai('i need numbers', a2Tok); rep = await ai('P19R2', a2Tok); rep = await ai('6', a2Tok);
-  t('F1-12 qty 6 refused under limit 5', /maximum i can provide is 5/i.test(rep.reply || ''), (rep.reply || '').slice(0, 80));
-
-  // normal admin allocation NOT limited by AI limit
+  // normal admin allocation
   const bigIds = (await Promise.all(numsR1.slice(0, 8).map(idOf))).filter(Boolean);
-  const allocBig = await api('/api/numbers/allocate', 'POST', { ids: bigIds, target_id: R2 ? dbo.prepare("SELECT id FROM users WHERE username='p19a2'").get().id : 0, payterm: 'weekly_7_1' }, adm);
-  t('F1-13 normal panel allocation unaffected (8 > AI limit 5)', allocBig.status === 200 && allocBig.j.allocated === 8, JSON.stringify(allocBig.j).slice(0, 80));
+  const allocBig = await api('/api/numbers/allocate', 'POST', { ids: bigIds, target_id: a2User.id, payterm: 'weekly_7_1' }, adm);
+  t('F1-13 normal panel allocation unaffected', allocBig.status === 200 && allocBig.j.allocated === 8);
 
   /* =========================================================================
    * FIX #4 — admin allocation rate override (TEST A..H)
@@ -541,12 +507,13 @@ function openDb() {
   await startServer();
   dbo = openDb();
 
-  kb = await api('/api/assistant/knowledge', 'GET', null, adm2 = await login('vibepk', 'vibepk123'));
-  t('P2-1 alloc_max=5 survives restart', kb.j.settings && kb.j.settings.alloc_max === '5', JSON.stringify(kb.j.settings || {}));
+  adm2 = await login('vibepk', 'vibepk123');
+  kb = await api('/api/assistant/knowledge', 'GET', null, adm2);
+  t('P2-1 AI assistant routes remain 404 after restart', kb.status === 404);
   t('P2-2 allocation rates survive restart', Number(dbo.prepare('SELECT rate FROM numbers WHERE id=?').get(g1[0]).rate) === 0.010, 'rate=' + dbo.prepare('SELECT rate FROM numbers WHERE id=?').get(g1[0]).rate);
   const a1Tok2 = await login('p19a1', 'Test123!');
-  rep = await ai('i need numbers', a1Tok2); rep = await ai('P19R1', a1Tok2); rep = await ai('9', a1Tok2);
-  t('P2-3 limit enforced after restart (9 > 5 refused)', /maximum i can provide is 5/i.test(rep.reply || ''), (rep.reply || '').slice(0, 80));
+  const saCheck = await api('/api/agent/self-allocate/ranges', 'GET', null, a1Tok2);
+  t('P2-3 self-allocation endpoints functional after restart', saCheck.status === 200 && saCheck.j.ok === true);
   dash = await api('/api/dashboard?_nocache=1', 'GET', null, adm2);
   const p2Today = expectedToday - 3 + 5; // -3 n0 deleted; +666,+777,+121,+131,+141 ingested after baseline
   t('P2-4 dashboard consistent after restart', dash.j.sms_today === p2Today, `got ${dash.j.sms_today} want ${p2Today}`);

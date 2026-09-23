@@ -1468,7 +1468,7 @@ app.get('/api/ranges', authRequired, (req, res) => cachedJson(req, res, 5000, ()
     });
   };
   if (!includeTests) {
-    return stripProviderRates(db.all(`SELECT r.id,r.name,r.prefix,r.currency,r.rate_1_1,r.rate_7_1,r.rate_7_7,r.rate_30_45,r.memo,r.payment_type,r.created_at,r.deleted_at,r.country,r.provider,r.currency_rate,r.cli_limit,r.range_start,r.range_end,r.status,r.provider_rate_1_1,r.provider_rate_7_1,r.provider_rate_7_7,r.provider_rate_30_45,'' AS test_number,'' AS test_numbers
+    return stripProviderRates(db.all(`SELECT r.id,r.name,r.prefix,r.currency,r.rate_1_1,r.rate_7_1,r.rate_7_7,r.rate_30_45,r.memo,r.payment_type,r.created_at,r.deleted_at,r.country,r.provider,r.currency_rate,r.cli_limit,r.range_start,r.range_end,r.status,r.provider_rate_1_1,r.provider_rate_7_1,r.provider_rate_7_7,r.provider_rate_30_45,r.self_alloc_enabled,r.self_alloc_max,r.self_alloc_periods,'' AS test_number,'' AS test_numbers
       FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`)
       .filter(r => !scopeIds || scopeIds.has(r.id)));
   }
@@ -1498,17 +1498,20 @@ app.post('/api/ranges', authRequired, requireRole('admin'), (req, res) => {
   const b = req.body || {};
   if (!b.name) return res.status(400).json({ error: 'Range name required' });
   /* P19k #4: provider_rate_* (admin-internal, 'NA' default — ranges.rate_* convention) */
-  const ins = db.run(`INSERT INTO ranges (name,prefix,test_number,currency,rate_1_1,rate_7_1,rate_7_7,rate_30_45,memo,payment_type,country,provider,currency_rate,cli_limit,range_start,range_end,status,provider_rate_1_1,provider_rate_7_1,provider_rate_7_7,provider_rate_30_45)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  const saEnabled = b.self_alloc_enabled !== undefined ? (b.self_alloc_enabled ? 1 : 0) : 1;
+  const saMax = b.self_alloc_max !== undefined ? (parseInt(b.self_alloc_max, 10) || 100) : 100;
+  const saPeriods = b.self_alloc_periods || 'weekly,monthly';
+  const ins = db.run(`INSERT INTO ranges (name,prefix,test_number,currency,rate_1_1,rate_7_1,rate_7_7,rate_30_45,memo,payment_type,country,provider,currency_rate,cli_limit,range_start,range_end,status,provider_rate_1_1,provider_rate_7_1,provider_rate_7_7,provider_rate_30_45,self_alloc_enabled,self_alloc_max,self_alloc_periods)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [b.name, b.prefix || '', '', b.currency || 'USD',
      b.rate_1_1 || 'NA', b.rate_7_1 || 'NA', b.rate_7_7 || 'NA', b.rate_30_45 || 'NA', b.memo || '', normalizePaymentType(b.payment_type || b.payterm || 'weekly'),
      b.country || '', b.provider || '', b.currency_rate || '', b.cli_limit || '', b.range_start || '', b.range_end || '', b.status || 'Active',
-     b.provider_rate_1_1 || 'NA', b.provider_rate_7_1 || 'NA', b.provider_rate_7_7 || 'NA', b.provider_rate_30_45 || 'NA']);
+     b.provider_rate_1_1 || 'NA', b.provider_rate_7_1 || 'NA', b.provider_rate_7_7 || 'NA', b.provider_rate_30_45 || 'NA',
+     saEnabled, saMax, saPeriods]);
   const newRange = db.get('SELECT id FROM ranges WHERE name=? ORDER BY id DESC LIMIT 1', [b.name]);
   syncRangeTestNumbers(newRange ? newRange.id : ins.lastInsertRowid, b.test_numbers || b.test_number || '');
   logAction(req,'create_range','ranges',b.name);
-    try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
-  res.json({ ok: true });
+      res.json({ ok: true });
 });
 
 function parseBulkRangeNames(value) {
@@ -1564,8 +1567,7 @@ app.post('/api/ranges/bulk-create', authRequired, requireRole('admin'), (req, re
   }
   clearApiReadCache();
   logAction(req, 'bulk_create_ranges', 'ranges', { inserted, restored, skipped, total: names.length });
-    try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
-  res.json({ ok: true, inserted, restored, skipped, total: names.length, created, existing });
+      res.json({ ok: true, inserted, restored, skipped, total: names.length, created, existing });
 });
 
 function normalizeRangeImportRow(row) {
@@ -1735,15 +1737,18 @@ app.post('/api/ranges/import', authRequired, requireRole('admin'), (req,res)=>{
 app.put('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => {
   const b = req.body || {};
   /* P19k #4: provider_rate_* bhi admin hi set kar sakta hai (route admin-only hai) */
-  db.run(`UPDATE ranges SET name=?,prefix=?,currency=?,rate_1_1=?,rate_7_1=?,rate_7_7=?,rate_30_45=?,memo=?,payment_type=?,country=?,provider=?,currency_rate=?,cli_limit=?,range_start=?,range_end=?,status=?,provider_rate_1_1=?,provider_rate_7_1=?,provider_rate_7_7=?,provider_rate_30_45=? WHERE id=?`,
+  const saEnabled = b.self_alloc_enabled !== undefined ? (b.self_alloc_enabled ? 1 : 0) : 1;
+  const saMax = b.self_alloc_max !== undefined ? (parseInt(b.self_alloc_max, 10) || 100) : 100;
+  const saPeriods = b.self_alloc_periods || 'weekly,monthly';
+  db.run(`UPDATE ranges SET name=?,prefix=?,currency=?,rate_1_1=?,rate_7_1=?,rate_7_7=?,rate_30_45=?,memo=?,payment_type=?,country=?,provider=?,currency_rate=?,cli_limit=?,range_start=?,range_end=?,status=?,provider_rate_1_1=?,provider_rate_7_1=?,provider_rate_7_7=?,provider_rate_30_45=?,self_alloc_enabled=?,self_alloc_max=?,self_alloc_periods=? WHERE id=?`,
     [b.name, b.prefix || '', b.currency || 'USD',
      b.rate_1_1 || 'NA', b.rate_7_1 || 'NA', b.rate_7_7 || 'NA', b.rate_30_45 || 'NA', b.memo || '', normalizePaymentType(b.payment_type || 'weekly'),
      b.country || '', b.provider || '', b.currency_rate || '', b.cli_limit || '', b.range_start || '', b.range_end || '', b.status || 'Active',
-     b.provider_rate_1_1 || 'NA', b.provider_rate_7_1 || 'NA', b.provider_rate_7_7 || 'NA', b.provider_rate_30_45 || 'NA', +req.params.id]);
+     b.provider_rate_1_1 || 'NA', b.provider_rate_7_1 || 'NA', b.provider_rate_7_7 || 'NA', b.provider_rate_30_45 || 'NA',
+     saEnabled, saMax, saPeriods, +req.params.id]);
   syncRangeTestNumbers(+req.params.id, b.test_numbers || b.test_number || '');
   logAction(req,'update_range','ranges',{id:+req.params.id});
-  try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
-  res.json({ ok: true });
+    res.json({ ok: true });
 });
 app.delete('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => {
   const rangeId = +req.params.id;
@@ -1773,8 +1778,7 @@ app.delete('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => 
   // Soft-delete the range so historical SMS reports can still show the old range name via joins.
   db.run("UPDATE ranges SET deleted_at=datetime('now') WHERE id=?", [rangeId]);
   logAction(req,'delete_range','ranges',{id:rangeId,range:range.name,deleteSms,numberResult,rangeSmsDeleted,rangeSmsPreserved});
-  try { require('./assistant').refreshRanges(); } catch (e) { console.warn('[ASSISTANT] refresh failed:', e.message); }
-  res.json({ ok: true, deleted_range: 1, deleted_numbers: numberResult.deleted || 0, deleted_sms: (numberResult.deleted_sms || 0) + rangeSmsDeleted, preserved_sms: (numberResult.preserved_sms || 0) + rangeSmsPreserved });
+    res.json({ ok: true, deleted_range: 1, deleted_numbers: numberResult.deleted || 0, deleted_sms: (numberResult.deleted_sms || 0) + rangeSmsDeleted, preserved_sms: (numberResult.preserved_sms || 0) + rangeSmsPreserved });
 });
 
 app.get('/api/test-numbers', authRequired, (req, res) => cachedJson(req, res, 3000, () => {
@@ -2449,6 +2453,306 @@ function handleAllocate(req, res) {
 
 // unallocate selected numbers (clear the caller's ownership level downward, without changing old SMS snapshots)
 app.post('/api/numbers/allocate', authRequired, (req, res) => { handleAllocate(req, res); });
+
+/* =========================================================================
+ * PART 3 - 13: AGENT SELF-ALLOCATION API (ATOMIC & LIMIT-ENFORCED)
+ * ========================================================================= */
+
+// GET /api/agent/self-allocate/ranges
+app.get("/api/agent/self-allocate/ranges", authRequired, requireRole("agent"), (req, res) => {
+  try {
+    const agentId = req.user.id;
+    const agentUser = db.get("SELECT id, username, parent_id FROM users WHERE id=?", [agentId]);
+    if (!agentUser) return res.status(404).json({ error: "Agent account not found" });
+
+    let manager = null;
+    if (agentUser.parent_id) {
+      const p = db.get("SELECT id, username, email, whatsapp, contact, role FROM users WHERE id=?", [agentUser.parent_id]);
+      if (p && p.role === "manager") manager = p;
+    }
+    const managerContact = manager ? (manager.whatsapp || manager.contact || manager.email || manager.username) : "Admin Support";
+    const managerName = manager ? manager.username : "Admin";
+
+    const ranges = db.all(`
+      SELECT id, name, prefix, currency, rate_1_1, rate_7_1, rate_7_7, rate_30_45,
+             self_alloc_enabled, self_alloc_max, self_alloc_periods
+      FROM ranges
+      WHERE (deleted_at IS NULL OR COALESCE(deleted_at, '') = '') AND (status IS NULL OR status = 'Active')
+      ORDER BY name ASC
+    `);
+
+    const results = ranges.map(r => {
+      const agentCount = db.get(
+        "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND agent_id=?",
+        [r.id, agentId]
+      )?.c || 0;
+
+      let availMgr = 0;
+      if (manager) {
+        availMgr = db.get(
+          "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND manager_id=? AND agent_id IS NULL AND client_id IS NULL",
+          [r.id, manager.id]
+        )?.c || 0;
+      }
+      const availAdmin = db.get(
+        "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL",
+        [r.id]
+      )?.c || 0;
+      const totalAvail = availMgr + availAdmin;
+
+      const maxLimit = r.self_alloc_max != null ? Number(r.self_alloc_max) : 100;
+      const remainingLimit = Math.max(0, maxLimit - agentCount);
+      const periods = (r.self_alloc_periods || "weekly,monthly").split(",").map(s => s.trim().toLowerCase());
+
+      const weeklyRate = (r.rate_7_1 && r.rate_7_1 !== "NA") ? r.rate_7_1 : ((r.rate_7_7 && r.rate_7_7 !== "NA") ? r.rate_7_7 : "0");
+      const monthlyRate = (r.rate_30_45 && r.rate_30_45 !== "NA") ? r.rate_30_45 : "0";
+      const dailyRate = (r.rate_1_1 && r.rate_1_1 !== "NA") ? r.rate_1_1 : "0";
+
+      return {
+        id: r.id,
+        name: r.name,
+        prefix: r.prefix || "",
+        currency: r.currency || "USD",
+        rates: {
+          weekly: weeklyRate,
+          monthly: monthlyRate,
+          daily: dailyRate
+        },
+        self_alloc_enabled: r.self_alloc_enabled !== 0,
+        self_alloc_max: maxLimit,
+        allowed_periods: periods,
+        agent_current_count: agentCount,
+        remaining_limit: remainingLimit,
+        available_in_pool: totalAvail,
+        manager_name: managerName,
+        manager_contact: managerContact
+      };
+    });
+
+    res.json({
+      ok: true,
+      manager_name: managerName,
+      manager_contact: managerContact,
+      ranges: results
+    });
+  } catch (err) {
+    console.error("[SELF-ALLOCATE] GET ranges failed:", err);
+    res.status(500).json({ error: "Failed to load self-allocation ranges: " + err.message });
+  }
+});
+
+// POST /api/agent/self-allocate
+app.post("/api/agent/self-allocate", authRequired, requireRole("agent"), (req, res) => {
+  const agentId = req.user.id;
+  const b = req.body || {};
+  const rangeId = parseInt(b.range_id, 10);
+  const qty = parseInt(b.quantity, 10);
+  const period = String(b.billing_period || "weekly").trim().toLowerCase();
+
+  if (!rangeId || isNaN(rangeId)) return res.status(400).json({ error: "Valid range ID required" });
+  if (!qty || isNaN(qty) || qty <= 0) return res.status(400).json({ error: "Quantity must be a positive integer" });
+
+  const agentUser = db.get("SELECT id, username, parent_id FROM users WHERE id=?", [agentId]);
+  if (!agentUser) return res.status(404).json({ error: "Agent not found" });
+
+  let manager = null;
+  if (agentUser.parent_id) {
+    const p = db.get("SELECT id, username, email, whatsapp, contact, role FROM users WHERE id=?", [agentUser.parent_id]);
+    if (p && p.role === "manager") manager = p;
+  }
+  const managerContact = manager ? (manager.whatsapp || manager.contact || manager.email || manager.username) : "Admin Support";
+  const managerName = manager ? manager.username : "Admin";
+
+  const range = db.get("SELECT * FROM ranges WHERE id=? AND (deleted_at IS NULL OR deleted_at = '')", [rangeId]);
+  if (!range) return res.status(404).json({ error: "Range not found" });
+  if (range.status && range.status !== "Active") {
+    return res.status(403).json({ error: "This range is currently inactive." });
+  }
+
+  if (range.self_alloc_enabled === 0) {
+    const contactMsg = manager
+      ? `Please contact your Manager: ${managerName} (${managerContact}).`
+      : `Please contact Admin.`;
+    return res.status(403).json({
+      error: `Self-allocation is currently disabled for this range. ${contactMsg}`
+    });
+  }
+
+  const allowedPeriods = (range.self_alloc_periods || "weekly,monthly").split(",").map(s => s.trim().toLowerCase());
+  if (!allowedPeriods.includes(period)) {
+    return res.status(400).json({
+      error: `Billing period "${period}" is not enabled for self-allocation in this range. Allowed: ${allowedPeriods.join(", ")}`
+    });
+  }
+
+  let effectiveRate = "0";
+  let payterm = "weekly_7_1";
+  if (period === "monthly") {
+    effectiveRate = (range.rate_30_45 && range.rate_30_45 !== "NA") ? range.rate_30_45 : "0";
+    payterm = "monthly_30x45";
+  } else if (period === "daily") {
+    effectiveRate = (range.rate_1_1 && range.rate_1_1 !== "NA") ? range.rate_1_1 : "0";
+    payterm = "daily";
+  } else {
+    effectiveRate = (range.rate_7_1 && range.rate_7_1 !== "NA") ? range.rate_7_1 : ((range.rate_7_7 && range.rate_7_7 !== "NA") ? range.rate_7_7 : "0");
+    payterm = "weekly_7_1";
+  }
+
+  const maxLimit = range.self_alloc_max != null ? Number(range.self_alloc_max) : 100;
+  let allocatedNumbers = [];
+
+  try {
+    if (!db.inTransaction()) db.exec("BEGIN IMMEDIATE");
+
+    const currentCount = db.get(
+      "SELECT COUNT(*) AS c FROM numbers WHERE range_id=? AND agent_id=?",
+      [rangeId, agentId]
+    )?.c || 0;
+
+    if (currentCount + qty > maxLimit) {
+      const remaining = Math.max(0, maxLimit - currentCount);
+      if (db.inTransaction()) db.exec("ROLLBACK");
+      return res.status(400).json({
+        error: `Self-allocation limit exceeded: you currently hold ${currentCount} numbers in this range (limit: ${maxLimit}). You can allocate at most ${remaining} more.`
+      });
+    }
+
+    let selectedIds = [];
+    if (manager) {
+      const mgrNumbers = db.all(
+        "SELECT id FROM numbers WHERE range_id=? AND manager_id=? AND agent_id IS NULL AND client_id IS NULL ORDER BY id ASC LIMIT ?",
+        [rangeId, manager.id, qty]
+      );
+      selectedIds = mgrNumbers.map(n => n.id);
+    }
+
+    const needed = qty - selectedIds.length;
+    let adminNumberIds = [];
+    if (needed > 0) {
+      const adminNumbers = db.all(
+        "SELECT id FROM numbers WHERE range_id=? AND manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL ORDER BY id ASC LIMIT ?",
+        [rangeId, needed]
+      );
+      adminNumberIds = adminNumbers.map(n => n.id);
+      selectedIds = selectedIds.concat(adminNumberIds);
+    }
+
+    if (selectedIds.length < qty) {
+      if (db.inTransaction()) db.exec("ROLLBACK");
+      const contactMsg = manager
+        ? `Please contact your Manager: ${managerName} (${managerContact}) to request an allocation.`
+        : `Please contact Admin to request an allocation.`;
+      return res.status(409).json({
+        error: `No numbers are currently available for this range. ${contactMsg}`
+      });
+    }
+
+    if (adminNumberIds.length > 0) {
+      const mgrDefaultRate = effectiveRate;
+      const mgrId = manager ? manager.id : null;
+      for (const numId of adminNumberIds) {
+        db.runNoSave(
+          `UPDATE numbers
+           SET manager_id = COALESCE(?, manager_id),
+               manager_rate = CASE WHEN ? IS NOT NULL AND (manager_rate IS NULL OR COALESCE(manager_rate, '') = '') THEN ? ELSE manager_rate END,
+               agent_id = ?,
+               agent_rate = ?,
+               rate = ?,
+               payterm = ?,
+               alloc_source = 'self_allocate'
+           WHERE id = ?`,
+          [mgrId, mgrId, mgrDefaultRate, agentId, effectiveRate, effectiveRate, payterm, numId]
+        );
+      }
+    }
+
+    const mgrOnlyIds = selectedIds.filter(id => !adminNumberIds.includes(id));
+    if (mgrOnlyIds.length > 0) {
+      for (const numId of mgrOnlyIds) {
+        db.runNoSave(
+          `UPDATE numbers
+           SET agent_id = ?,
+               agent_rate = ?,
+               rate = ?,
+               payterm = ?,
+               alloc_source = 'self_allocate'
+           WHERE id = ?`,
+          [agentId, effectiveRate, effectiveRate, payterm, numId]
+        );
+      }
+    }
+
+    const inClause = selectedIds.map(() => "?").join(",");
+    const numRows = db.all(`SELECT id, number, range_id, manager_id, agent_id, client_id FROM numbers WHERE id IN (${inClause})`, selectedIds);
+    allocatedNumbers = numRows.map(r => r.number);
+
+    for (const nr of numRows) {
+      try {
+        logNumberHistory(req, nr, "allocated", "", agentUser.username, {
+          target_role: "agent",
+          source: "self_allocate",
+          range: range.name,
+          rate: effectiveRate,
+          payterm
+        });
+      } catch (_) {}
+    }
+
+    db.runNoSave(
+      `INSERT INTO audit_logs (user_id, username, role, action, module, details, ip)
+       VALUES (?, ?, 'agent', 'agent_self_allocate', 'self_allocate', ?, ?)`,
+      [
+        agentId,
+        agentUser.username,
+        JSON.stringify({
+          agent_id: agentId,
+          agent: agentUser.username,
+          manager_id: manager ? manager.id : null,
+          manager: managerName,
+          range_id: rangeId,
+          range: range.name,
+          quantity: qty,
+          billing_period: period,
+          payterm: payterm,
+          effective_rate: effectiveRate,
+          numbers: allocatedNumbers
+        }),
+        req.ip || ""
+      ]
+    );
+
+    if (db.inTransaction()) db.exec("COMMIT");
+  } catch (err) {
+    try { if (db.inTransaction()) db.exec("ROLLBACK"); } catch (_) {}
+    console.error("[SELF-ALLOCATE] Transaction error:", err);
+    return res.status(500).json({ error: "Self-allocation failed: " + err.message });
+  }
+
+  bumpNumbersVer();
+  clearApiReadCache();
+  if (app.broadcastSseAll) {
+    try {
+      app.broadcastSseAll("allocation_update", {
+        action: "self_allocate",
+        count: qty,
+        role: "agent",
+        agent_id: agentId,
+        timestamp: Date.now()
+      });
+    } catch (_) {}
+  }
+
+  return res.json({
+    ok: true,
+    allocated: qty,
+    range: range.name,
+    billing_period: period,
+    payterm: payterm,
+    effective_rate: effectiveRate,
+    numbers: allocatedNumbers
+  });
+});
+
 app.post('/api/numbers/unallocate', authRequired, (req, res) => {
   const { ids } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids[] required' });
@@ -5171,8 +5475,7 @@ const PORT = process.env.PORT || 4000;
   }
   console.log('• API Integration poller disabled (HTTP incoming only)');
   /* P12: AI Assistant (independent limits, ASSISTANT_ENABLED kill-switch) */
-  try { require('./assistant').register(app, { allocate: handleAllocate }); console.log('• AI Assistant registered (agent panel)'); } catch (e) { console.error('[ASSISTANT] register failed:', e.message); }
-  app.listen(PORT, () => console.log(`\n✅ Galaxy SMS backend running: http://localhost:${PORT}\n`));
+    app.listen(PORT, () => console.log(`\n✅ Galaxy SMS backend running: http://localhost:${PORT}\n`));
 
   /* ===== P19k #5: one-time startup stats reconciliation =====
      Owner report: purane deletes (pre-fix code) ke baad dashboard (SMS This Month /
