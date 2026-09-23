@@ -2134,7 +2134,7 @@ async function loadDashboard(){
   }catch(e){ console.warn(e); }
 }
 function rebuildAllocData(){
-  allocData=(ratesData||[]).map(r=>{const nums=(numbersData||[]).filter(n=>n.range_id===r.id);const alloc=nums.filter(n=>n.manager_id).length;return {id:r.id,range:r.name,total:nums.length,alloc,avail:nums.length-alloc,rate:r.rate_30_45||r.rate_7_1||'NA'};});
+  allocData=(ratesData||[]).map(r=>{const nums=(numbersData||[]).filter(n=>n.range_id===r.id);const alloc=nums.filter(n=>n.manager_id).length;const cleanR=(r.rate_7_1&&r.rate_7_1!=='NA')?r.rate_7_1:((r.rate_7_7&&r.rate_7_7!=='NA')?r.rate_7_7:((r.rate_30_45&&r.rate_30_45!=='NA')?r.rate_30_45:((r.rate_1_1&&r.rate_1_1!=='NA')?r.rate_1_1:'NA')));return {id:r.id,range:r.name,total:nums.length,alloc,avail:nums.length-alloc,rate:cleanR};});
 }
 async function loadRates(){ try{ ratesData=await API.get('/ranges?include_tests=1'); }catch(e){ ratesData=[]; }
   const liveRanges=(ratesData||[]).map(r=>r.name);

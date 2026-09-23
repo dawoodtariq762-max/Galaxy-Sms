@@ -1062,7 +1062,17 @@ async function runSmartDivide(){const range_ids=[...document.querySelectorAll('.
   try{const r=await API.post('/numbers/smart-divide',{range_ids,target_ids,qty});closeModal('smartModal');alert(`✅ Smart divide complete!\nTotal: ${r.total}`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
 
 /* BULK ALLOC */
-function cycleRate(r,cycle){cycle=cycle||document.getElementById('baPayterm')?.value||'weekly_7_1';if(cycle==='daily')return r.r1||r.rate_1_1||r.rate||'0';if(cycle==='weekly_7_7')return r.r3||r.rate_7_7||r.r2||r.rate_7_1||r.rate||'0';if(cycle==='monthly_30x45')return r.r4||r.rate_30_45||r.rate||'0';return r.r2||r.rate_7_1||r.r3||r.rate_7_7||r.rate||'0';}
+function cycleRate(r,cycle){
+  if(!r) return '0';
+  function clean(v){ if(v===null||v===undefined) return null; const s=String(v).trim(); if(s===''||/^(na|n\/a|null|undefined)$/i.test(s)) return null; const n=parseFloat(s); return (isFinite(n)&&n>0)?s:null; }
+  cycle=cycle||document.getElementById('baPayterm')?.value||'weekly_7_1';
+  let val=null;
+  if(cycle==='daily') val=clean(r.r1)||clean(r.rate_1_1);
+  else if(cycle==='weekly_7_7') val=clean(r.r3)||clean(r.rate_7_7);
+  else if(cycle==='monthly_30x45') val=clean(r.r4)||clean(r.rate_30_45);
+  else val=clean(r.r2)||clean(r.rate_7_1);
+  return val||clean(r.r2)||clean(r.rate_7_1)||clean(r.r3)||clean(r.rate_7_7)||clean(r.r4)||clean(r.rate_30_45)||clean(r.r1)||clean(r.rate_1_1)||clean(r.rate)||'0';
+}
 function renderBulk(){document.getElementById('baBody').innerHTML=baData.map((r,i)=>`<tr>
   <td><b>${r.range}</b></td><td><span class="tag tag-green">${r.avail}</span> <span class="muted">/ ${r.total}</span></td>
   <td><span class="tag tag-amber">${r.alloc}</span></td><td class="cell-money">${cycleRate(r)}</td>

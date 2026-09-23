@@ -2144,7 +2144,7 @@ app.get('/api/numbers/summary', authRequired, (req, res) => cachedJson(req, res,
       COUNT(n.id) AS total,
       SUM(CASE WHEN n.id IS NOT NULL AND NOT (${ownerExpr}) THEN 1 ELSE 0 END) AS available,
       SUM(CASE WHEN n.id IS NOT NULL AND ${ownerExpr} THEN 1 ELSE 0 END) AS allocated,
-      COALESCE(NULLIF(r.rate_7_1,''), NULLIF(r.rate_7_7,''), NULLIF(r.rate_30_45,''), NULLIF(r.rate_1_1,''), '0') AS rate
+      COALESCE(NULLIF(NULLIF(r.rate_7_1,'NA'),''), NULLIF(NULLIF(r.rate_7_7,'NA'),''), NULLIF(NULLIF(r.rate_30_45,'NA'),''), NULLIF(NULLIF(r.rate_1_1,'NA'),''), '0') AS rate
     FROM ranges r
     LEFT JOIN numbers n ON n.range_id=r.id AND ${scope.where}
     WHERE COALESCE(r.deleted_at,'')=''
@@ -2504,9 +2504,10 @@ app.get("/api/agent/self-allocate/ranges", authRequired, requireRole("agent"), (
       const remainingLimit = Math.max(0, maxLimit - agentCount);
       const periods = (r.self_alloc_periods || "weekly,monthly").split(",").map(s => s.trim().toLowerCase());
 
-      const weeklyRate = (r.rate_7_1 && r.rate_7_1 !== "NA") ? r.rate_7_1 : ((r.rate_7_7 && r.rate_7_7 !== "NA") ? r.rate_7_7 : "0");
-      const monthlyRate = (r.rate_30_45 && r.rate_30_45 !== "NA") ? r.rate_30_45 : "0";
-      const dailyRate = (r.rate_1_1 && r.rate_1_1 !== "NA") ? r.rate_1_1 : "0";
+      const baseConfiguredRate = (r.rate_7_1 && r.rate_7_1 !== "NA") ? r.rate_7_1 : ((r.rate_7_7 && r.rate_7_7 !== "NA") ? r.rate_7_7 : ((r.rate_30_45 && r.rate_30_45 !== "NA") ? r.rate_30_45 : ((r.rate_1_1 && r.rate_1_1 !== "NA") ? r.rate_1_1 : "0")));
+      const weeklyRate = (r.rate_7_1 && r.rate_7_1 !== "NA") ? r.rate_7_1 : ((r.rate_7_7 && r.rate_7_7 !== "NA") ? r.rate_7_7 : baseConfiguredRate);
+      const monthlyRate = (r.rate_30_45 && r.rate_30_45 !== "NA") ? r.rate_30_45 : baseConfiguredRate;
+      const dailyRate = (r.rate_1_1 && r.rate_1_1 !== "NA") ? r.rate_1_1 : baseConfiguredRate;
 
       return {
         id: r.id,
@@ -2585,16 +2586,17 @@ app.post("/api/agent/self-allocate", authRequired, requireRole("agent"), (req, r
     });
   }
 
+  const baseConfiguredRate = (range.rate_7_1 && range.rate_7_1 !== "NA") ? range.rate_7_1 : ((range.rate_7_7 && range.rate_7_7 !== "NA") ? range.rate_7_7 : ((range.rate_30_45 && range.rate_30_45 !== "NA") ? range.rate_30_45 : ((range.rate_1_1 && range.rate_1_1 !== "NA") ? range.rate_1_1 : "0")));
   let effectiveRate = "0";
   let payterm = "weekly_7_1";
   if (period === "monthly") {
-    effectiveRate = (range.rate_30_45 && range.rate_30_45 !== "NA") ? range.rate_30_45 : "0";
+    effectiveRate = (range.rate_30_45 && range.rate_30_45 !== "NA") ? range.rate_30_45 : baseConfiguredRate;
     payterm = "monthly_30x45";
   } else if (period === "daily") {
-    effectiveRate = (range.rate_1_1 && range.rate_1_1 !== "NA") ? range.rate_1_1 : "0";
+    effectiveRate = (range.rate_1_1 && range.rate_1_1 !== "NA") ? range.rate_1_1 : baseConfiguredRate;
     payterm = "daily";
   } else {
-    effectiveRate = (range.rate_7_1 && range.rate_7_1 !== "NA") ? range.rate_7_1 : ((range.rate_7_7 && range.rate_7_7 !== "NA") ? range.rate_7_7 : "0");
+    effectiveRate = (range.rate_7_1 && range.rate_7_1 !== "NA") ? range.rate_7_1 : ((range.rate_7_7 && range.rate_7_7 !== "NA") ? range.rate_7_7 : baseConfiguredRate);
     payterm = "weekly_7_1";
   }
 
@@ -3941,10 +3943,10 @@ function parseImportLineTokens(line) {
 function getOrCreateRange(range_id, range_name, prefix, firstNumber){
   if(range_id) return +range_id;
   if(!range_name) throw new Error('range_id or range_name is required');
-  const existing=db.get('SELECT id FROM ranges WHERE name=?',[range_name]);
+  const existing=db.get(`SELECT id FROM ranges WHERE name=? AND (deleted_at IS NULL OR COALESCE(deleted_at,'')='') ORDER BY id DESC LIMIT 1`,[range_name]);
   if(existing) return existing.id;
   db.run(`INSERT INTO ranges (name,prefix,test_number,currency) VALUES (?,?,?,?)`,[range_name,prefix||'', '', 'USD']);
-  return db.get('SELECT id FROM ranges WHERE name=? ORDER BY id DESC LIMIT 1',[range_name]).id;
+  return db.get(`SELECT id FROM ranges WHERE name=? AND (deleted_at IS NULL OR COALESCE(deleted_at,'')='') ORDER BY id DESC LIMIT 1`,[range_name]).id;
 }
 async function processNumberImportJob(jobId, payload, user){
   console.log('[IMPORT] started', { jobId, total: (payload.numbers||[]).length, range_name: payload.range_name || '', file_name: payload.file_name || '' });

@@ -320,13 +320,13 @@ body:not(.gx-light) .gx-dash-grid .stat-card,body:not(.gx-light) .stats-grid .st
 }
 
 /* ============ PART 1: SMS CDR / REPORT READABILITY ============ */
-.mono, td.mono, th.mono, .cell-mono, .gx-num-val, .gx-cli-val {
+.mono, td.mono, th.mono, .cell-mono, .gx-num-val, .gx-cli-val, td span.mono {
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace !important;
   font-size: 14.5px !important;
   font-weight: 700 !important;
   letter-spacing: 0.035em !important;
   line-height: 1.4 !important;
-  color: #ffffff !important;
+  color: #f8fafc !important;
   white-space: nowrap !important;
   -webkit-font-smoothing: antialiased !important;
   text-rendering: optimizeLegibility !important;
@@ -335,14 +335,18 @@ body:not(.gx-light) .gx-dash-grid .stat-card,body:not(.gx-light) .stats-grid .st
 body.light-mode .mono,
 body.ms-light-mode .mono,
 body.light-theme .mono,
-body:not(.ms-dark-mode):not([data-theme="dark"]) .mono,
+body[data-theme="light"] .mono,
 body.light-mode td.mono,
-body:not(.ms-dark-mode):not([data-theme="dark"]) td.mono {
+body.ms-light-mode td.mono,
+body.light-theme td.mono,
+body[data-theme="light"] td.mono,
+body.light-mode td span.mono,
+body.ms-light-mode td span.mono {
   color: #0f172a !important;
 }
 
 @media (max-width: 768px) {
-  .mono, td.mono, th.mono, .cell-mono {
+  .mono, td.mono, th.mono, .cell-mono, td span.mono {
     font-size: 13px !important;
     letter-spacing: 0.02em !important;
   }

@@ -983,6 +983,24 @@ function createTables() {
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_cmd_user ON chat_message_deletions(user_id, message_id)`);
+
+  /* ============ MIGRATION: RE-LINK NUMBERS FROM DELETED RANGES TO ACTIVE RANGES ============ */
+  try {
+    const pairMap = [
+      { delId: 44, actName: 'Central African Republic Galaxy NX 01' },
+      { delId: 45, actName: 'Central African Republic Galaxy NX 02' },
+      { delId: 46, actName: 'Central African Republic Galaxy NX 03' },
+      { delId: 47, actName: 'Central African Republic Galaxy NX 04' }
+    ];
+    for (const p of pairMap) {
+      const activeRange = db.get(`SELECT id FROM ranges WHERE name=? AND (deleted_at IS NULL OR COALESCE(deleted_at,'')='') ORDER BY id DESC LIMIT 1`, [p.actName]);
+      if (activeRange && activeRange.id !== p.delId) {
+        db.run(`UPDATE numbers SET range_id=? WHERE range_id=?`, [activeRange.id, p.delId]);
+        db.run(`UPDATE sms_records SET range_id=? WHERE range_id=?`, [activeRange.id, p.delId]);
+        db.run(`UPDATE number_import_batches SET range_id=? WHERE range_id=?`, [activeRange.id, p.delId]);
+      }
+    }
+  } catch (e) { console.warn('Central Africa migration:', e.message); }
 }
 
 module.exports = { createTables };

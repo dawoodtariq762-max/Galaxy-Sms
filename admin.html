@@ -251,7 +251,7 @@
   table{font-size:13.5px!important;line-height:1.6!important;border-collapse:separate!important;border-spacing:0 3px!important} thead th{font-weight:600!important;color:#334155!important;letter-spacing:.25px!important;background:#F8FAFC!important} table td{font-weight:500!important;color:#111827!important;background:#fff!important} tbody tr:nth-child(even) td{background:#F8FAFC!important} tbody tr:hover td{background:#EEF2F7!important}
   .page-head h2{font-weight:600!important;color:#0f172a!important}.card-head h3{font-weight:600!important;color:#0f172a!important}
   .tag,.tag-mgr,.tag-agt,.tag-cli,.tag-client,.tag-blue,.tag-green,.tag-amber,.tag-red,.tag-gray{background:#E2E8F0!important;color:#1E293B!important;border:1px solid #CBD5E1!important;border-radius:8px!important;padding:5px 10px!important;font-weight:600!important;font-size:12px!important;line-height:1.15!important;letter-spacing:0!important;box-shadow:none!important;display:inline-flex;align-items:center;gap:4px}
-  .cell-money{color:#065F46!important;font-weight:700!important}.payout-rate,.rate-cell{color:#1E40AF!important;font-weight:700!important}.msg-body{color:#1f2937!important;line-height:1.6!important}.mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace!important;color:#0f172a!important;font-weight:600!important}.muted{color:#64748b!important}.table-wrap{border-color:#e2e8f0!important}.filter-row label{font-weight:600;color:#334155;font-size:13px}
+  .cell-money{color:#065F46!important;font-weight:700!important}.payout-rate,.rate-cell{color:#1E40AF!important;font-weight:700!important}.msg-body{color:#1f2937!important;line-height:1.6!important}body.light-mode .mono,body.ms-light-mode .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace!important;color:#0f172a!important;font-weight:600!important}.muted{color:#64748b!important}.table-wrap{border-color:#e2e8f0!important}.filter-row label{font-weight:600;color:#334155;font-size:13px}
 
 
 
@@ -1965,7 +1965,7 @@ async function loadDashboard(){
   }catch(e){ console.warn(e); }
 }
 function rebuildAllocData(){
-  allocData=(ratesData||[]).map(r=>{const nums=(numbersData||[]).filter(n=>n.range_id===r.id);const alloc=nums.filter(n=>n.manager_id).length;return {id:r.id,range:r.name,total:nums.length,alloc,avail:nums.length-alloc,rate:r.rate_30_45||r.rate_7_1||'NA'};});
+  allocData=(ratesData||[]).map(r=>{const nums=(numbersData||[]).filter(n=>n.range_id===r.id);const alloc=nums.filter(n=>n.manager_id).length;return {id:r.id,range:r.name,total:nums.length,alloc,avail:nums.length-alloc,rate:adminCycleRate(r, r.payment_type)};});
 }
 async function loadRates(){ try{ ratesData=await API.get('/ranges'); }catch(e){ ratesData=[]; }
   const liveRanges=(ratesData||[]).map(r=>r.name);
@@ -3149,7 +3149,17 @@ function fillAdminAllocationTargets(){
   const main=document.getElementById('allocManager'); if(main) main.innerHTML=html;
   document.querySelectorAll('select[id^="am"]').forEach(sel=>{ const cur=sel.value; sel.innerHTML=html; if(cur) sel.value=cur; });
 }
-function adminCycleRate(r,cycle){cycle=cycle||document.getElementById('allocPayterm')?.value||'weekly_7_1';if(cycle==='daily')return r.r1||r.rate_1_1||r.rate||'0';if(cycle==='weekly_7_7')return r.r3||r.rate_7_7||r.r2||r.rate_7_1||r.rate||'0';if(cycle==='monthly_30x45')return r.r4||r.rate_30_45||r.rate||'0';return r.r2||r.rate_7_1||r.r3||r.rate_7_7||r.rate||'0';}
+function adminCycleRate(r,cycle){
+  if(!r) return '0';
+  function clean(v){ if(v===null||v===undefined) return null; const s=String(v).trim(); if(s===''||/^(na|n\/a|null|undefined)$/i.test(s)) return null; const n=parseFloat(s); return (isFinite(n)&&n>0)?s:null; }
+  cycle=cycle||document.getElementById('allocPayterm')?.value||'weekly_7_1';
+  let val=null;
+  if(cycle==='daily') val=clean(r.r1)||clean(r.rate_1_1);
+  else if(cycle==='weekly_7_7') val=clean(r.r3)||clean(r.rate_7_7);
+  else if(cycle==='monthly_30x45') val=clean(r.r4)||clean(r.rate_30_45);
+  else val=clean(r.r2)||clean(r.rate_7_1);
+  return val||clean(r.r2)||clean(r.rate_7_1)||clean(r.r3)||clean(r.rate_7_7)||clean(r.r4)||clean(r.rate_30_45)||clean(r.r1)||clean(r.rate_1_1)||clean(r.rate)||'0';
+}
 async function loadNumberSummary(){
   try{
     const rows=await API.get('/numbers/summary');
