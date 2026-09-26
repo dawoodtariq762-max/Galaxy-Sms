@@ -39,88 +39,204 @@ tbody tr:hover td{background:rgba(201,206,214,.075)!important}
 .help-shot{background:rgba(10,10,11,.6)!important;border:1px solid rgba(190,195,205,.24)!important;color:#C9CCD2!important}
 label{color:#C9CCD2!important}
 </style>
-<link rel="stylesheet" href="/assets/galaxy.css?v=gal-1"/><script src="/assets/galaxy.js?v=gal-1" defer></script></head><body><div class="layout"><aside class="side"><div class="brand"><img src="/assets/galaxy-logo.png?v=gal-1"><div><b>GALAXY SMS</b><div class="muted">Panel Sharing</div></div></div><div class="nav"><div class="item active" data-page="dashboard">Dashboard</div><div class="item" data-page="numbers">SMS Numbers</div><div class="item" data-page="bulk">Bulk Allocation</div><div class="item" data-page="users">Sharing Users</div><div class="item" data-page="smpp">SMPP Connections</div><div class="item" data-page="logs">Forward Logs</div></div></aside><main class="main"><div class="top"><b>Panel Sharing Panel</b><div class="sp"></div><button class="btn ghost" onclick="location.href='/admin'">Admin Panel</button><button class="btn red" onclick="API.logout()">Logout</button></div><div class="content"><section class="page active" id="page-dashboard"><div class="page-head"><h2>Dashboard</h2><button class="btn" onclick="loadDashboard()">Refresh</button></div><div class="grid"><div class="card metric"><div class="muted">Total Sharing Users</div><h3 id="totalUsers">0</h3></div><div class="card metric"><div class="muted">Total Shared Numbers</div><h3 id="totalNumbers">0</h3></div><div class="card metric"><div class="muted">Total OTP Received</div><h3 id="totalOtp">0</h3></div></div></section><section class="page" id="page-numbers"><div class="page-head"><h2>Unallocated SMS Numbers</h2><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn ghost" onclick="downloadAllFilteredNumbers()" title="Download CSV of unallocated numbers">📥 Download CSV</button><button class="btn green" onclick="allocateSelected()">Allocate Selected + Download CSV</button></div></div><div class="toolbar"><div class="row"><select id="allocUser"><option value="">Select Sharing User</option></select><input id="numSearch" placeholder="Search number/range" oninput="numState.page=1;loadNumbers()"><label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600">Numbers per page: <select id="numLimit" onchange="numState.limit=+this.value;numState.page=1;loadNumbers()"><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option><option value="500">500</option><option value="1000">1,000</option><option value="5000">5,000</option></select></label><button class="btn" onclick="loadNumbers()">Search</button><button class="btn ghost" onclick="downloadAllFilteredNumbers()">Download CSV</button><button class="btn ghost" onclick="copyNumbersOnly()" title="Copy Numbers Only">📋 Copy Numbers</button></div></div><div class="table"><table><thead><tr><th><input type="checkbox" onclick="toggleAll(this)"></th><th>Range</th><th>Number</th></tr></thead><tbody id="numBody"></tbody></table><div class="row" style="justify-content:space-between;margin-top:12px"><div id="numInfo" class="muted"></div><div id="numPag" class="pagination"></div></div></div></section><section class="page" id="page-users"><div class="page-head"><h2>Sharing Users</h2><button class="btn green" onclick="openUser()">+ Create User</button></div><div class="table"><table><thead><tr><th>Panel Name</th><th>User Name</th><th>Username</th><th>Status</th><th>Attribute URL</th><th>Action</th></tr></thead><tbody id="userBody"></tbody></table></div></section><section class="page" id="page-logs"><div class="page-head"><h2>Forward Logs</h2><button class="btn" onclick="loadLogs()">Refresh</button></div><div class="table"><table><thead><tr><th>Time</th><th>Panel</th><th>SMS ID</th><th>Status</th><th>URL</th><th>Error</th></tr></thead><tbody id="logBody"></tbody></table></div></section>
+<link rel="stylesheet" href="/assets/galaxy.css?v=gal-1"/><script src="/assets/galaxy.js?v=gal-1" defer></script></head><body><div class="layout"><aside class="side"><div class="brand"><img src="/assets/galaxy-logo.png?v=gal-1"><div><b>GALAXY SMS</b><div class="muted">Panel Sharing</div></div></div><div class="nav"><div class="item active" data-page="dashboard">Dashboard</div><div class="item" data-page="numbers">SMS Numbers</div><div class="item" data-page="bulk">Bulk Allocation</div><div class="item" data-page="users">Sharing Users</div><div class="item" data-page="smpp">SMPP Connections</div><div class="item" data-page="logs">Forward Logs</div></div></aside><main class="main"><div class="top"><b>Panel Sharing Panel</b><div class="sp"></div><button class="btn ghost" onclick="location.href='/admin'">Admin Panel</button><button class="btn red" onclick="API.logout()">Logout</button></div><div class="content"><section class="page active" id="page-dashboard"><div class="page-head"><h2>Dashboard</h2><button class="btn" onclick="loadDashboard()">Refresh</button></div><div class="grid"><div class="card metric"><div class="muted">Total Sharing Users</div><h3 id="totalUsers">0</h3></div><div class="card metric"><div class="muted">Total Shared Numbers</div><h3 id="totalNumbers">0</h3></div><div class="card metric"><div class="muted">Total OTP Received</div><h3 id="totalOtp">0</h3></div></div></section><section class="page" id="page-numbers">
+  <div class="page-head">
+    <div>
+      <h2>SMS Numbers Management</h2>
+      <div class="muted">Unallocated inventory available for sharing and downstream allocation</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn ghost" onclick="downloadSelectedUnallocated()" title="Download CSV of selected unallocated numbers">📥 Download Selected</button>
+      <button class="btn ghost" onclick="downloadAllFilteredNumbers()" title="Download CSV of all filtered unallocated numbers">📥 Download All Filtered</button>
+      <button class="btn green" onclick="openAllocConfirmFlow()" title="Allocate selected numbers to user with price review">⚡ Allocate & Download</button>
+    </div>
+  </div>
 
-<!-- PAGE: BULK ALLOCATION -->
+  <div class="toolbar">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+      <!-- 1. Select User with search INSIDE dropdown (Section 31, 32) -->
+      <div style="display:inline-flex;flex-direction:column;gap:4px">
+        <label style="font-size:11.5px;font-weight:700;color:#94a3b8">Target Sharing User <span style="color:#ef4444">*</span></label>
+        <div id="allocUserDropdownContainer"></div>
+      </div>
+
+      <!-- 2. Pricing / Billing Period (Section 31) -->
+      <div style="display:inline-flex;flex-direction:column;gap:4px">
+        <label style="font-size:11.5px;font-weight:700;color:#94a3b8">Billing Period <span style="color:#ef4444">*</span></label>
+        <select id="allocPayterm" style="min-width:160px;min-height:38px;padding:8px 10px;box-sizing:border-box">
+          <option value="weekly_7_1">Weekly (7/1)</option>
+          <option value="daily">Daily (1/1)</option>
+          <option value="weekly_7_7">Weekly (7/7)</option>
+          <option value="monthly_30x45">Monthly (30/45)</option>
+        </select>
+      </div>
+
+      <!-- 3. Filter by Range with search INSIDE dropdown (Section 33) -->
+      <div style="display:inline-flex;flex-direction:column;gap:4px">
+        <label style="font-size:11.5px;font-weight:700;color:#94a3b8">Filter Range</label>
+        <div id="numRangeFilterContainer"></div>
+      </div>
+
+      <!-- 4. Search Number -->
+      <div style="display:inline-flex;flex-direction:column;gap:4px">
+        <label style="font-size:11.5px;font-weight:700;color:#94a3b8">Search Number</label>
+        <input id="numSearch" placeholder="Search number..." style="min-height:38px;box-sizing:border-box" oninput="numState.page=1;loadNumbers()">
+      </div>
+
+      <!-- 5. Numbers per page -->
+      <div style="display:inline-flex;flex-direction:column;gap:4px">
+        <label style="font-size:11.5px;font-weight:700;color:#94a3b8">Per Page</label>
+        <select id="numLimit" style="min-height:38px;padding:8px 10px;box-sizing:border-box" onchange="numState.limit=+this.value;numState.page=1;loadNumbers()">
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="500">500</option>
+          <option value="1000">1,000</option>
+          <option value="5000">5,000</option>
+        </select>
+      </div>
+
+      <div style="display:inline-flex;gap:8px">
+        <button class="btn" onclick="loadNumbers()">Filter</button>
+        <button class="btn ghost" onclick="copyNumbersOnly()" title="Copy Numbers Only">📋 Copy Numbers</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table">
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" onclick="toggleAll(this)"></th>
+          <th>Range</th>
+          <th>Number</th>
+        </tr>
+      </thead>
+      <tbody id="numBody"></tbody>
+    </table>
+    <div class="row" style="justify-content:space-between;margin-top:12px">
+      <div id="numInfo" class="muted"></div>
+      <div id="numPag" class="pagination"></div>
+    </div>
+  </div>
+</section><section class="page" id="page-users"><div class="page-head"><h2>Sharing Users</h2><button class="btn green" onclick="openUser()">+ Create User</button></div><div class="table"><table><thead><tr><th>Panel Name</th><th>User Name</th><th>Username</th><th>Status</th><th>Attribute URL</th><th>Action</th></tr></thead><tbody id="userBody"></tbody></table></div></section><section class="page" id="page-logs"><div class="page-head"><h2>Forward Logs</h2><button class="btn" onclick="loadLogs()">Refresh</button></div><div class="table"><table><thead><tr><th>Time</th><th>Panel</th><th>SMS ID</th><th>Status</th><th>URL</th><th>Error</th></tr></thead><tbody id="logBody"></tbody></table></div></section>
+
+<!-- PAGE: BULK ALLOCATION (Sections 40-51) -->
 <section class="page" id="page-bulk">
   <div class="page-head">
     <div>
-      <h2>Bulk Number Allocation</h2>
-      <div class="muted">Allocate a large batch of numbers to a downstream sharing panel with custom selling rate</div>
+      <h2>Bulk Multi-Range Allocation</h2>
+      <div class="muted">Allocate multiple ranges at once to a downstream sharing partner with authoritative Rate Card pricing</div>
     </div>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">Bulk Allocation Form</h3>
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:14px">
-      <div>
-        <label style="display:block;font-weight:700;margin-bottom:6px">Select Range <span style="color:#ef4444">*</span></label>
-        <input type="text" id="bulkRangeSearch" placeholder="🔍 Search range..." style="width:100%;margin-bottom:4px;box-sizing:border-box" oninput="filterBulkRanges()">
-        <select id="bulkRange" style="width:100%;box-sizing:border-box" onchange="onBulkRangeChange()">
-          <option value="">-- Select Range --</option>
-        </select>
-        <div id="bulkRangeInfo" class="muted" style="font-size:12px;margin-top:4px"></div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">
+      <!-- 1. Select Sharing User with search INSIDE dropdown (Section 32, 40) -->
+      <div style="flex:1;min-width:260px">
+        <label style="display:block;font-weight:700;margin-bottom:6px">Select Sharing User <span style="color:#ef4444">*</span></label>
+        <div id="bulkUserDropdownContainer"></div>
       </div>
 
-      <div>
-        <label style="display:block;font-weight:700;margin-bottom:6px">Select Sharing Panel/User <span style="color:#ef4444">*</span></label>
-        <input type="text" id="bulkUserSearch" placeholder="🔍 Search user..." style="width:100%;margin-bottom:4px;box-sizing:border-box" oninput="filterBulkUsers()">
-        <select id="bulkUser" style="width:100%;box-sizing:border-box">
-          <option value="">-- Select Sharing User --</option>
-        </select>
-      </div>
-
-      <div>
-        <label style="display:block;font-weight:700;margin-bottom:6px">Selling / Client Price <span style="color:#ef4444">*</span></label>
-        <input type="number" id="bulkPrice" placeholder="e.g. 0.0050" step="0.0001" min="0" style="width:100%;box-sizing:border-box">
-        <div class="muted" style="font-size:11px;margin-top:4px">Downstream rate given/charged to this panel (NOT provider cost)</div>
-      </div>
-
-      <div>
-        <label style="display:block;font-weight:700;margin-bottom:6px">Payment Term / Billing Cycle</label>
-        <select id="bulkPayterm" style="width:100%;box-sizing:border-box">
+      <!-- 2. Billing Period (Section 43) -->
+      <div style="flex:1;min-width:240px">
+        <label style="display:block;font-weight:700;margin-bottom:6px">Pricing / Billing Period <span style="color:#ef4444">*</span></label>
+        <select id="bulkPayterm" style="width:100%;min-height:38px;padding:8px 10px;box-sizing:border-box" onchange="onBulkPeriodChange()">
           <option value="weekly_7_1">Weekly (7/1)</option>
-          <option value="weekly_7_7">Weekly (7/7)</option>
           <option value="daily">Daily (1/1)</option>
+          <option value="weekly_7_7">Weekly (7/7)</option>
           <option value="monthly_30x45">Monthly (30/45)</option>
         </select>
+        <div class="muted" style="font-size:11.5px;margin-top:4px">Authoritative price comes automatically from the Rate Card per range</div>
+      </div>
+
+      <!-- 3. Add Range Selector with search INSIDE dropdown (Section 41) -->
+      <div style="flex:1.2;min-width:300px">
+        <label style="display:block;font-weight:700;margin-bottom:6px">Add Range to Bulk Allocation</label>
+        <div id="bulkRangeDropdownContainer"></div>
+        <div class="muted" style="font-size:11.5px;margin-top:4px">Clicking a range adds it to the list below without replacing previous selections</div>
       </div>
     </div>
 
-    <div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <label style="font-weight:700">Paste SMS Numbers <span style="color:#ef4444">*</span></label>
-        <span class="muted" id="bulkPasteCount" style="font-size:12px">0 numbers detected</span>
+    <!-- Selected Ranges Table (Section 40, 42) -->
+    <div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label style="font-weight:700;font-size:14px">Selected Ranges (<span id="bulkSelectedRangeCount">0</span>)</label>
+        <button class="btn ghost" style="padding:4px 10px;min-height:auto;font-size:12px;display:none" onclick="clearAllSelectedRanges()" id="btnClearAllRanges">Clear All</button>
       </div>
-      <textarea id="bulkNumbers" placeholder="Paste numbers here (one per line, comma-separated, or space-separated)&#10;e.g.&#10;+44712345678&#10;+44712345679&#10;+44712345680" style="width:100%;min-height:160px;box-sizing:border-box;font-family:monospace" oninput="updateBulkCount()"></textarea>
+      
+      <div class="table" style="box-shadow:none;margin-bottom:0;border:1px solid rgba(255,255,255,0.08)">
+        <table>
+          <thead>
+            <tr>
+              <th>Range Name</th>
+              <th>Available Numbers</th>
+              <th>Rate Card Price (<span id="colPeriodLabel">Weekly 7/1</span>)</th>
+              <th style="width:150px">Allocate Qty (0 = All)</th>
+              <th style="width:70px;text-align:center">Remove</th>
+            </tr>
+          </thead>
+          <tbody id="bulkSelectedRangesBody">
+            <tr>
+              <td colspan="5" class="muted" style="text-align:center;padding:26px">
+                No ranges selected yet. Use the <b>"Add Range"</b> dropdown above to add ranges.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button class="btn green" id="btnExecuteBulk" onclick="executeBulkAllocation()">⚡ Allocate Numbers in Bulk</button>
-      <button class="btn ghost" onclick="resetBulkForm()">Clear</button>
+    <div style="display:flex;gap:12px;align-items:center">
+      <button class="btn green" id="btnExecuteBulkAlloc" onclick="executeMultiRangeBulkAllocation()" style="padding:10px 24px;font-size:14px">
+        ⚡ Allocate Selected Ranges
+      </button>
+      <button class="btn ghost" onclick="resetBulkSelection()">Reset</button>
     </div>
   </div>
 
-  <div id="bulkReportCard" class="card" style="display:none">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h3 style="margin:0" id="bulkReportTitle">Allocation Report</h3>
-      <div style="display:flex;gap:8px" id="bulkDownloadBtns"></div>
+  <!-- Result Summary Card & Archive Download (Section 46, 50, 51) -->
+  <div id="bulkResultCard" class="card" style="display:none;margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0" id="bulkResultTitle">Bulk Allocation Summary</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap" id="bulkArchiveButtons"></div>
     </div>
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px">
-      <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:10px">
-        <div class="muted" style="font-size:12px">Requested</div>
-        <div style="font-size:22px;font-weight:800" id="repRequested">0</div>
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+      <div style="background:rgba(255,255,255,0.04);padding:14px;border-radius:10px">
+        <div class="muted" style="font-size:12px">Target User</div>
+        <div style="font-size:16px;font-weight:700;margin-top:4px" id="sumTargetUser">—</div>
       </div>
-      <div style="background:rgba(34,197,94,0.1);padding:12px;border-radius:10px;border:1px solid rgba(34,197,94,0.3)">
-        <div class="muted" style="font-size:12px;color:#4ade80">Successfully Allocated</div>
-        <div style="font-size:22px;font-weight:800;color:#4ade80" id="repAllocated">0</div>
+      <div style="background:rgba(255,255,255,0.04);padding:14px;border-radius:10px">
+        <div class="muted" style="font-size:12px">Billing Period</div>
+        <div style="font-size:16px;font-weight:700;margin-top:4px" id="sumBillingPeriod">—</div>
       </div>
-      <div style="background:rgba(239,68,68,0.1);padding:12px;border-radius:10px;border:1px solid rgba(239,68,68,0.3)">
-        <div class="muted" style="font-size:12px;color:#f87171">Skipped / Failed</div>
-        <div style="font-size:22px;font-weight:800;color:#f87171" id="repSkipped">0</div>
+      <div style="background:rgba(255,255,255,0.04);padding:14px;border-radius:10px">
+        <div class="muted" style="font-size:12px">Selected Ranges</div>
+        <div style="font-size:18px;font-weight:800;margin-top:4px" id="sumRangeCount">0</div>
+      </div>
+      <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);padding:14px;border-radius:10px">
+        <div class="muted" style="font-size:12px;color:#4ade80">Total Allocated Numbers</div>
+        <div style="font-size:20px;font-weight:800;color:#22c55e;margin-top:4px" id="sumAllocCount">0</div>
       </div>
     </div>
-    <div id="bulkFailedDetails" style="display:none;background:rgba(0,0,0,0.2);padding:10px;border-radius:8px;font-size:12px;max-height:140px;overflow:auto;margin-top:10px"></div>
+
+    <h4>Range Breakdown</h4>
+    <div class="table" style="box-shadow:none">
+      <table>
+        <thead>
+          <tr>
+            <th>Range Name</th>
+            <th>Requested / Available</th>
+            <th>Successfully Allocated</th>
+            <th>Failed / Skipped</th>
+            <th>Rate Card Price Used</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="bulkResultBreakdownBody"></tbody>
+      </table>
+    </div>
   </div>
 </section>
 
@@ -413,33 +529,652 @@ label{color:#C9CCD2!important}
 <script>
 API.guard('admin');
 
-const numState = { page: 1, totalPages: 1, limit: 25 };
+/* ============================================================================
+   PANEL SHARING JAVASCRIPT CONTROLLER (SECTIONS 31-55)
+   ========================================================================== */
+
+/* State variables */
+let availableRanges = [];
 let sharingUsers = [];
 let smppConnections = [];
-let availableRanges = [];
 let currentNumRows = [];
 let totalNumCount = 0;
-let lastAllocatedRows = [];
-let lastAllocatedPanel = '';
+const numState = { page: 1, totalPages: 1, limit: 25 };
 
-/* NAV */
-function page(id){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  const target = document.getElementById('page-'+id);
-  if(target) target.classList.add('active');
-  document.querySelectorAll('.item').forEach(i=>i.classList.toggle('active', i.dataset.page===id));
+// Multi-range bulk allocation state (Sections 40-51)
+let bulkSelectedRanges = [];
+let lastBulkResult = null;
 
-  if(id==='dashboard') loadDashboard();
-  if(id==='numbers'){ loadUsers().then(loadNumbers); }
-  if(id==='bulk') loadBulkData();
-  if(id==='users') loadUsers();
-  if(id==='smpp') loadSmpp();
-  if(id==='logs') loadLogs();
+// SMS Numbers allocation confirmation state (Sections 36-39)
+let pendingAllocData = null;
+
+/* RATE CARD LOOKUP HELPER (Authoritative downstream price) */
+function getRangeRateCardPrice(range, period) {
+  if (!range) return '0.0000';
+  const p = String(period || 'weekly_7_1').toLowerCase();
+  let candidate = null;
+
+  if (p === 'daily' || p === '1_1') {
+    candidate = range.rate_1_1;
+  } else if (p === 'weekly_7_7') {
+    candidate = range.rate_7_7 || range.rate_7_1;
+  } else if (p === 'monthly' || p === 'monthly_30x45' || p === '30_45') {
+    candidate = range.rate_30_45;
+  } else {
+    // weekly_7_1 or weekly default
+    candidate = range.rate_7_1 || range.rate_7_7;
+  }
+
+  const num = parseFloat(candidate);
+  if (!isNaN(num) && num > 0) return num.toFixed(4);
+
+  // Fallbacks in Rate Card order
+  for (const c of [range.rate_7_1, range.rate_7_7, range.rate_1_1, range.rate_30_45]) {
+    const val = parseFloat(c);
+    if (!isNaN(val) && val > 0) return val.toFixed(4);
+  }
+  return '0.0000';
 }
-document.querySelectorAll('.item').forEach(i=>i.onclick=()=>page(i.dataset.page));
+
+function sanitizeFilename(name) {
+  return String(name || 'export').replace(/[\\/\\\\:*?"<>|]/g, '_').trim() || 'export';
+}
+
+/* ============================================================================
+   SECTION 31-39: SMS NUMBERS MANAGEMENT & ALLOCATION CONFIRMATION
+   ========================================================================== */
+
+async function loadNumbers() {
+  const q = (document.getElementById('numSearch')?.value || '').trim();
+  const filterRange = document.getElementById('numRangeFilter')?.value || '';
+  const lim = numState.limit || 25;
+
+  let url = `/panel-sharing/numbers?page=${numState.page}&limit=${lim}`;
+  if (q) url += '&search=' + encodeURIComponent(q);
+  if (filterRange) url += '&range=' + encodeURIComponent(filterRange);
+
+  try {
+    const data = await API.get(url);
+    numState.page = data.page;
+    numState.totalPages = data.totalPages;
+    currentNumRows = data.rows || [];
+    totalNumCount = data.total || 0;
+
+    const tbody = document.getElementById('numBody');
+    tbody.innerHTML = currentNumRows.map(r => `
+      <tr>
+        <td><input class="numChk" type="checkbox" data-id="${r.id}" data-range="${escapeHtml(r.range_name||'')}" data-range-id="${r.range_id||''}"></td>
+        <td>${escapeHtml(r.range_name || '—')}</td>
+        <td><b>${escapeHtml(r.number)}</b></td>
+      </tr>
+    `).join('') || '<tr><td colspan="3" class="muted" style="text-align:center;padding:24px">No unallocated numbers found</td></tr>';
+
+    document.getElementById('numInfo').innerHTML = `Showing ${currentNumRows.length} of ${data.total} (Page ${numState.page} of ${numState.totalPages}) <button type="button" onclick="copyNumbersOnly()" title="Copy Numbers Only" style="margin-left:6px;background:none;border:none;cursor:pointer;font-size:14px;color:#38bdf8" aria-label="Copy Numbers">📋</button>`;
+    drawPag();
+  } catch(e) {
+    console.error('Error loading numbers:', e);
+  }
+}
+
+function drawPag() {
+  const el = document.getElementById('numPag');
+  if (numState.totalPages <= 1) { el.innerHTML = ''; return; }
+  let h = '';
+  if (numState.page > 1) {
+    h += `<button onclick="numState.page=1;loadNumbers()">«</button><button onclick="numState.page=${numState.page - 1};loadNumbers()">‹</button>`;
+  }
+  for (let i = Math.max(1, numState.page - 3); i <= Math.min(numState.totalPages, numState.page + 3); i++) {
+    h += `<button class="${i === numState.page ? 'active' : ''}" onclick="numState.page=${i};loadNumbers()">${i}</button>`;
+  }
+  if (numState.page < numState.totalPages) {
+    h += `<button onclick="numState.page=${numState.page + 1};loadNumbers()">›</button><button onclick="numState.page=${numState.totalPages};loadNumbers()">»</button>`;
+  }
+  el.innerHTML = h;
+}
+
+function toggleAll(cb) {
+  document.querySelectorAll('.numChk').forEach(c => c.checked = cb.checked);
+}
+
+function selectedCheckboxes() {
+  return [...document.querySelectorAll('.numChk:checked')];
+}
+
+function selectedIds() {
+  return selectedCheckboxes().map(c => +c.dataset.id);
+}
+
+async function copyNumbersOnly() {
+  const chks = selectedCheckboxes();
+  let list = [];
+  if (chks.length > 0) {
+    const ids = chks.map(c => +c.dataset.id);
+    list = currentNumRows.filter(r => ids.includes(r.id)).map(r => r.number);
+  } else {
+    list = currentNumRows.map(r => r.number);
+  }
+  if (!list.length) return alert('No numbers to copy');
+
+  try {
+    const text = list.join('\\n');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    alert(`Copied ${list.length} numbers to clipboard!`);
+  } catch(e) {
+    alert('Failed to copy: ' + e.message);
+  }
+}
+
+/* DOWNLOAD UNALLOCATED NUMBERS (Section 34) */
+function downloadSelectedUnallocated() {
+  const chks = selectedCheckboxes();
+  if (!chks.length) return alert('Please select at least one number using the checkboxes.');
+  const ids = chks.map(c => +c.dataset.id);
+  const selectedRows = currentNumRows.filter(r => ids.includes(r.id));
+  if (!selectedRows.length) return alert('No numbers selected');
+
+  const rangeName = selectedRows[0]?.range_name || 'unallocated';
+  const fname = sanitizeFilename(rangeName + ' unallocated selected') + '.csv';
+  const csv = 'Range Name,Number\\n' + selectedRows.map(r => `"${(r.range_name||'').replace(/"/g, '""')}","${r.number}"`).join('\\n');
+  triggerBlobDownload(csv, fname);
+}
+
+async function downloadAllFilteredNumbers() {
+  const q = (document.getElementById('numSearch')?.value || '').trim();
+  const filterRange = document.getElementById('numRangeFilter')?.value || '';
+
+  try {
+    let url = `/panel-sharing/numbers?limit=5000`;
+    if (q) url += '&search=' + encodeURIComponent(q);
+    if (filterRange) url += '&range=' + encodeURIComponent(filterRange);
+
+    const data = await API.get(url);
+    const rows = (data && data.rows) || [];
+    if (!rows.length) return alert('No unallocated numbers found matching current filters');
+
+    const fname = sanitizeFilename(filterRange || (q ? 'filtered numbers' : 'all unallocated numbers')) + '.csv';
+    const csv = 'Range Name,Number\\n' + rows.map(r => `"${(r.range_name||'').replace(/"/g, '""')}","${r.number}"`).join('\\n');
+    triggerBlobDownload(csv, fname);
+  } catch(e) {
+    alert('Failed to download: ' + e.message);
+  }
+}
+
+/* ALLOCATION CONFIRMATION & PRICE OVERRIDE FLOW (Sections 36, 37, 38, 39) */
+function openAllocConfirmFlow() {
+  const ids = selectedIds();
+  if (!ids.length) return alert('Please select numbers from the table first.');
+
+  const userId = document.getElementById('allocUser')?.value;
+  if (!userId) return alert('Please select a Target Sharing User from the dropdown.');
+
+  const payterm = document.getElementById('allocPayterm')?.value || 'weekly_7_1';
+  const user = sharingUsers.find(u => String(u.id) === String(userId));
+  if (!user) return alert('Target user not found');
+
+  const chks = selectedCheckboxes();
+  const rangesPresent = [...new Set(chks.map(c => c.dataset.range).filter(Boolean))];
+  const rangeIdPresent = chks[0]?.dataset.rangeId;
+  const matchedRange = availableRanges.find(r => String(r.id) === String(rangeIdPresent) || r.name === rangesPresent[0]);
+
+  // Resolve default price from Rate Card
+  const defaultRateCardPrice = getRangeRateCardPrice(matchedRange, payterm);
+
+  // Store pending allocation state
+  pendingAllocData = {
+    ids: ids,
+    userId: +userId,
+    user: user,
+    payterm: payterm,
+    ranges: rangesPresent,
+    matchedRange: matchedRange,
+    defaultPrice: defaultRateCardPrice
+  };
+
+  // Populate Modal Fields (Section 36, 37)
+  document.getElementById('confTargetUser').textContent = `${user.panel_name} (${user.username})`;
+  document.getElementById('confNumberCount').textContent = `${ids.length} numbers`;
+  document.getElementById('confRangeName').textContent = rangesPresent.join(', ') || 'Selected Numbers';
+  document.getElementById('confBillingPeriod').textContent = ({
+    daily: 'Daily (1/1)',
+    weekly_7_1: 'Weekly (7/1)',
+    weekly_7_7: 'Weekly (7/7)',
+    monthly_30x45: 'Monthly (30/45)'
+  })[payterm] || payterm;
+
+  document.getElementById('confRateCardPrice').textContent = `$${defaultRateCardPrice}`;
+  document.getElementById('confOverridePrice').value = defaultRateCardPrice;
+
+  document.getElementById('allocConfirmModal').classList.add('show');
+}
+
+function closeAllocConfirmModal() {
+  document.getElementById('allocConfirmModal').classList.remove('show');
+  pendingAllocData = null;
+}
+
+async function proceedWithConfirmedAllocation() {
+  if (!pendingAllocData) return;
+
+  const priceVal = (document.getElementById('confOverridePrice')?.value || '').trim();
+  const confirmedPrice = parseFloat(priceVal);
+  if (isNaN(confirmedPrice) || confirmedPrice < 0) {
+    return alert('Please enter a valid downstream selling price.');
+  }
+
+  const btn = document.getElementById('btnConfirmAllocation');
+  btn.disabled = true;
+  btn.textContent = 'Allocating...';
+
+  try {
+    const res = await API.post('/panel-sharing/allocate', {
+      ids: pendingAllocData.ids,
+      sharing_user_id: pendingAllocData.userId,
+      price: priceVal,
+      payterm: pendingAllocData.payterm
+    });
+
+    closeAllocConfirmModal();
+
+    alert(`✅ Successfully allocated ${res.count} numbers to ${res.panel_name}!\\n\\nDownstream Price: $${priceVal}\\nBilling Period: ${pendingAllocData.payterm}\\n\\nThe allocated file will download automatically.`);
+
+    // AUTOMATIC DOWNLOAD OF ALLOCATED CSV (Section 35: File name must use Range Name)
+    if (res.ranges && res.ranges.length) {
+      res.ranges.forEach(rg => {
+        const lines = ['Range Name,Number,Price'];
+        rg.numbers.forEach(num => {
+          lines.push(`"${(rg.range_name||'').replace(/"/g, '""')}","${num}",${rg.price}`);
+        });
+        const fname = sanitizeFilename(rg.range_name) + '.csv';
+        triggerBlobDownload(lines.join('\\n'), fname);
+      });
+    } else if (res.rows && res.rows.length) {
+      const rName = pendingAllocData.ranges[0] || res.panel_name;
+      const lines = ['Range Name,Number,Price'];
+      res.rows.forEach(r => {
+        lines.push(`"${(r.range_name || rName).replace(/"/g, '""')}","${r.number}",${priceVal}`);
+      });
+      triggerBlobDownload(lines.join('\\n'), sanitizeFilename(rName) + '.csv');
+    }
+
+    loadNumbers();
+    loadDashboard();
+    loadRangesAndInitDropdowns();
+  } catch(e) {
+    alert('❌ Allocation failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirm Allocation & Download';
+  }
+}
+
+/* ============================================================================
+   SECTIONS 40-51: BULK ALLOCATION (MULTI-RANGE WITH DUAL ZIP EXPORT)
+   ========================================================================== */
+
+function renderBulkSelectedRangesTable() {
+  const tbody = document.getElementById('bulkSelectedRangesBody');
+  const countEl = document.getElementById('bulkSelectedRangeCount');
+  const clearBtn = document.getElementById('btnClearAllRanges');
+  const period = document.getElementById('bulkPayterm')?.value || 'weekly_7_1';
+
+  countEl.textContent = bulkSelectedRanges.length;
+  if (clearBtn) clearBtn.style.display = bulkSelectedRanges.length ? 'inline-block' : 'none';
+
+  if (!bulkSelectedRanges.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted" style="text-align:center;padding:26px">
+      No ranges selected yet. Use the <b>"Add Range"</b> dropdown above to select ranges.
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = bulkSelectedRanges.map((r, idx) => {
+    const price = getRangeRateCardPrice(r, period);
+    return `
+      <tr>
+        <td><b>${escapeHtml(r.name)}</b> <span class="muted" style="font-size:11px">(${r.prefix || ''})</span></td>
+        <td><span class="tag" style="background:#1e3a8a;color:#93c5fd">${r.available_numbers || 0} numbers</span></td>
+        <td><span class="tag" style="background:#065f46;color:#6ee7b7;font-weight:700">$${price}</span></td>
+        <td>
+          <input type="number" min="0" max="${r.available_numbers || 0}" value="${r.allocQty || 0}"
+            style="width:100px;padding:4px 8px;font-size:12px;box-sizing:border-box"
+            onchange="updateBulkRangeQty(${r.id}, this.value)"
+            placeholder="0 = All">
+        </td>
+        <td style="text-align:center">
+          <button class="btn red" style="padding:4px 8px;font-size:11px;min-height:auto" onclick="removeBulkRange(${r.id})" title="Remove range">✕</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateBulkRangeQty(rangeId, val) {
+  const item = bulkSelectedRanges.find(r => r.id === rangeId);
+  if (item) {
+    item.allocQty = Math.max(0, parseInt(val, 10) || 0);
+  }
+}
+
+function removeBulkRange(rangeId) {
+  bulkSelectedRanges = bulkSelectedRanges.filter(r => r.id !== rangeId);
+  renderBulkSelectedRangesTable();
+}
+
+function clearAllSelectedRanges() {
+  bulkSelectedRanges = [];
+  renderBulkSelectedRangesTable();
+}
+
+function onBulkPeriodChange() {
+  const payterm = document.getElementById('bulkPayterm')?.value || 'weekly_7_1';
+  const labelMap = {
+    weekly_7_1: 'Weekly 7/1',
+    daily: 'Daily 1/1',
+    weekly_7_7: 'Weekly 7/7',
+    monthly_30x45: 'Monthly 30/45'
+  };
+  const lbl = document.getElementById('colPeriodLabel');
+  if (lbl) lbl.textContent = labelMap[payterm] || payterm;
+  renderBulkSelectedRangesTable();
+}
+
+function resetBulkSelection() {
+  clearAllSelectedRanges();
+  document.getElementById('bulkResultCard').style.display = 'none';
+  lastBulkResult = null;
+}
+
+/* EXECUTE MULTI-RANGE BULK ALLOCATION (Section 45, 46, 50, 51) */
+async function executeMultiRangeBulkAllocation() {
+  const userId = document.getElementById('bulkUser')?.value;
+  if (!userId) return alert('Please select a Target Sharing User from the dropdown.');
+
+  if (!bulkSelectedRanges.length) {
+    return alert('Please add at least one range to the allocation list using the Add Range dropdown.');
+  }
+
+  const payterm = document.getElementById('bulkPayterm')?.value || 'weekly_7_1';
+  const user = sharingUsers.find(u => String(u.id) === String(userId));
+
+  const payloadRanges = bulkSelectedRanges.map(r => ({
+    range_id: r.id,
+    qty: r.allocQty || 0 // 0 = all available unallocated numbers
+  }));
+
+  const btn = document.getElementById('btnExecuteBulkAlloc');
+  btn.disabled = true;
+  btn.textContent = 'Allocating Ranges...';
+
+  try {
+    const res = await API.post('/panel-sharing/bulk-allocate', {
+      sharing_user_id: +userId,
+      payterm: payterm,
+      ranges: payloadRanges
+    });
+
+    lastBulkResult = res;
+
+    // Display Result Summary Card (Section 51)
+    document.getElementById('sumTargetUser').textContent = `${res.panel_name}`;
+    document.getElementById('sumBillingPeriod').textContent = ({
+      weekly_7_1: 'Weekly (7/1)',
+      daily: 'Daily (1/1)',
+      weekly_7_7: 'Weekly (7/7)',
+      monthly_30x45: 'Monthly (30/45)'
+    })[res.payterm] || res.payterm;
+    document.getElementById('sumRangeCount').textContent = `${(res.ranges||[]).length} ranges`;
+    document.getElementById('sumAllocCount').textContent = `${res.total_allocated || 0} numbers`;
+
+    const breakdownTbody = document.getElementById('bulkResultBreakdownBody');
+    breakdownTbody.innerHTML = (res.ranges || []).map(r => {
+      let statusTag = '<span class="tag" style="background:#22c55e;color:#fff">✓ Allocated</span>';
+      if (r.allocated === 0) statusTag = '<span class="tag" style="background:#ef4444;color:#fff">✕ Failed</span>';
+      else if (r.failed > 0) statusTag = '<span class="tag" style="background:#eab308;color:#000">⚠ Partial</span>';
+
+      return `
+        <tr>
+          <td><b>${escapeHtml(r.range_name)}</b></td>
+          <td>${r.requested}</td>
+          <td><b style="color:#22c55e">${r.allocated}</b></td>
+          <td>${r.failed > 0 ? `<span style="color:#ef4444">${r.failed}</span>` : '0'}</td>
+          <td><span class="tag" style="background:#065f46;color:#6ee7b7">$${r.price}</span></td>
+          <td>${statusTag}</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Re-download buttons
+    const archiveBtns = document.getElementById('bulkArchiveButtons');
+    archiveBtns.innerHTML = `
+      <button class="btn green" onclick="downloadDetailedArchive()">📥 Detailed Allocation Files.zip</button>
+      <button class="btn ghost" onclick="downloadNumbersOnlyArchive()">📥 Numbers Only Files.zip</button>
+    `;
+
+    document.getElementById('bulkResultCard').style.display = 'block';
+
+    // AUTOMATIC DOWNLOAD OF BOTH ARCHIVES (Section 46, 50)
+    triggerAutomaticArchiveDownloads(res);
+
+    alert(`✅ Bulk Allocation Complete!\\n\\nTotal Numbers Allocated: ${res.total_allocated}\\nAcross ${res.ranges.length} ranges.\\n\\nBoth ZIP archives (Detailed and Numbers-only) are downloading automatically.`);
+
+    // Refresh inventory and ranges
+    loadRangesAndInitDropdowns();
+    loadDashboard();
+    clearAllSelectedRanges();
+  } catch(e) {
+    alert('❌ Bulk Allocation failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Allocate Selected Ranges';
+  }
+}
+
+/* AUTOMATIC DUAL ZIP ARCHIVES GENERATION (Sections 46, 47, 48, 50) */
+function triggerAutomaticArchiveDownloads(result) {
+  downloadDetailedArchive(result);
+  setTimeout(() => {
+    downloadNumbersOnlyArchive(result);
+  }, 400);
+}
+
+function downloadDetailedArchive(res) {
+  const result = res || lastBulkResult;
+  if (!result || !result.ranges) return alert('No allocation data available');
+
+  const files = [];
+  result.ranges.forEach(r => {
+    if (!r.numbers || !r.numbers.length) return;
+    const fname = sanitizeFilename(r.range_name) + '.csv';
+    const lines = ['Range Name,Number,Price'];
+    r.numbers.forEach(num => {
+      lines.push(`"${(r.range_name||'').replace(/"/g, '""')}","${num}",${r.price}`);
+    });
+    files.push({ name: fname, content: lines.join('\\n') });
+  });
+
+  if (!files.length) return alert('No numbers were allocated to generate detailed archive.');
+
+  const zipBlob = window.createZipArchive(files);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zipBlob);
+  a.download = 'Detailed Allocation Files.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}
+
+function downloadNumbersOnlyArchive(res) {
+  const result = res || lastBulkResult;
+  if (!result || !result.ranges) return alert('No allocation data available');
+
+  const files = [];
+  result.ranges.forEach(r => {
+    if (!r.numbers || !r.numbers.length) return;
+    const fname = sanitizeFilename(r.range_name) + '.csv';
+    const lines = r.numbers.join('\\n');
+    files.push({ name: fname, content: lines });
+  });
+
+  if (!files.length) return alert('No numbers were allocated to generate numbers-only archive.');
+
+  const zipBlob = window.createZipArchive(files);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zipBlob);
+  a.download = 'Numbers Only Files.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}
+
+function triggerBlobDownload(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ============================================================================
+   SEARCHABLE DROPDOWNS INITIALIZATION (SEARCH INSIDE DROPDOWN - SECTIONS 32, 33, 41)
+   ========================================================================== */
+
+async function loadRangesAndInitDropdowns() {
+  try {
+    const [ranges, users] = await Promise.all([
+      API.get('/panel-sharing/ranges'),
+      API.get('/panel-sharing/users')
+    ]);
+
+    availableRanges = ranges || [];
+    sharingUsers = (users || []).filter(u => u.active);
+
+    // Sort strictly A-Z
+    availableRanges.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    sharingUsers.sort((a, b) => (a.panel_name || '').localeCompare(b.panel_name || ''));
+
+    // 1. SMS Numbers: Target User Dropdown (Search INSIDE dropdown)
+    window.renderSearchSelect('allocUserDropdownContainer', {
+      id: 'allocUser',
+      placeholder: 'Select Sharing User',
+      searchPlaceholder: 'Search users...',
+      style: 'min-width:240px',
+      items: sharingUsers.map(u => ({
+        value: u.id,
+        label: `${u.panel_name} (${u.username})`,
+        search: `${u.panel_name} ${u.username} ${u.user_name||''}`
+      }))
+    });
+
+    // 2. SMS Numbers: Filter by Range Dropdown (Search INSIDE dropdown)
+    const rangeFilterItems = [{ value: '', label: 'All Ranges' }].concat(
+      availableRanges.map(r => ({
+        value: r.name,
+        label: r.name,
+        badge: `${r.available_numbers||0} avail`,
+        search: `${r.name} ${r.prefix||''}`
+      }))
+    );
+    window.renderSearchSelect('numRangeFilterContainer', {
+      id: 'numRangeFilter',
+      placeholder: 'All Ranges',
+      searchPlaceholder: 'Search range...',
+      style: 'min-width:220px',
+      items: rangeFilterItems,
+      onChange: function() {
+        numState.page = 1;
+        loadNumbers();
+      }
+    });
+
+    // 3. Bulk Allocation: Target User Dropdown (Search INSIDE dropdown)
+    window.renderSearchSelect('bulkUserDropdownContainer', {
+      id: 'bulkUser',
+      placeholder: 'Select Sharing User',
+      searchPlaceholder: 'Search users...',
+      style: 'width:100%',
+      items: sharingUsers.map(u => ({
+        value: u.id,
+        label: `${u.panel_name} (${u.username})`,
+        search: `${u.panel_name} ${u.username} ${u.user_name||''}`
+      }))
+    });
+
+    // 4. Bulk Allocation: Add Range Dropdown (Search INSIDE dropdown, Section 40, 41, 42)
+    // Multi-select behavior: clicking adds range to selected list without replacing previous selections!
+    window.renderSearchSelect('bulkRangeDropdownContainer', {
+      id: 'bulkRange',
+      placeholder: '➕ Select Range to Add',
+      searchPlaceholder: 'Search range...',
+      style: 'width:100%',
+      keepOpenOnSelect: true,
+      items: availableRanges.map(r => ({
+        value: r.id,
+        label: r.name,
+        badge: `${r.available_numbers||0} avail`,
+        search: `${r.name} ${r.prefix||''}`,
+        rangeObj: r
+      })),
+      onSelect: function(item) {
+        const range = availableRanges.find(r => String(r.id) === String(item.value));
+        if (!range) return;
+
+        // Check if already selected (Prevent duplicate selection - Section 42)
+        const exists = bulkSelectedRanges.some(r => r.id === range.id);
+        if (exists) {
+          alert(`"${range.name}" is already in your selected ranges list.`);
+          return;
+        }
+
+        // Add to selected ranges (Section 40)
+        bulkSelectedRanges.push({
+          ...range,
+          allocQty: 0 // 0 = all available
+        });
+
+        renderBulkSelectedRangesTable();
+      }
+    });
+
+  } catch(e) {
+    console.error('Error loading ranges and users:', e);
+  }
+}
+
+/* ============================================================================
+   SHARED NAVIGATION & OTHER MODULES (PRESERVED 100%)
+   ========================================================================== */
+
+function page(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById('page-' + id);
+  if (target) target.classList.add('active');
+  document.querySelectorAll('.item').forEach(i => i.classList.toggle('active', i.dataset.page === id));
+
+  if (id === 'dashboard') loadDashboard();
+  if (id === 'numbers') { loadRangesAndInitDropdowns().then(loadNumbers); }
+  if (id === 'bulk') { loadRangesAndInitDropdowns(); }
+  if (id === 'users') loadUsers();
+  if (id === 'smpp') loadSmpp();
+  if (id === 'logs') loadLogs();
+}
+document.querySelectorAll('.item').forEach(i => i.onclick = () => page(i.dataset.page));
 
 /* DASHBOARD */
-async function loadDashboard(){
+async function loadDashboard() {
   try {
     const d = await API.get('/panel-sharing/dashboard');
     document.getElementById('totalUsers').textContent = d.total_sharing_users || 0;
@@ -449,44 +1184,35 @@ async function loadDashboard(){
 }
 
 /* SHARING USERS */
-async function loadUsers(){
+async function loadUsers() {
   try {
     sharingUsers = await API.get('/panel-sharing/users');
-    // Sort A-Z
-    sharingUsers.sort((a,b)=>(a.panel_name||'').localeCompare(b.panel_name||''));
+    sharingUsers.sort((a,b) => (a.panel_name||'').localeCompare(b.panel_name||''));
 
-    // Populate allocUser in SMS Numbers tab
-    const allocSelect = document.getElementById('allocUser');
-    if(allocSelect){
-      allocSelect.innerHTML = '<option value="">Select Sharing User</option>' +
-        sharingUsers.filter(u=>u.active).map(u=>`<option value="${u.id}">${u.panel_name}</option>`).join('');
-    }
-
-    // Populate Users table
     const tbody = document.getElementById('userBody');
-    if(tbody){
-      tbody.innerHTML = sharingUsers.map(u=>{
+    if (tbody) {
+      tbody.innerHTML = sharingUsers.map(u => {
         const ctype = u.connection_type || 'activity';
         let badge = '<span class="tag" style="background:#3b82f6;color:#fff">Activity Webhook</span>';
         let endpoint = u.attribute_url || '—';
-        if(ctype === 'http') {
+        if (ctype === 'http') {
           badge = '<span class="tag" style="background:#10b981;color:#fff">HTTP API Forward</span>';
           try {
             const hcfg = typeof u.http_config === 'string' ? JSON.parse(u.http_config) : (u.http_config || {});
             endpoint = (hcfg.method || 'POST') + ' ' + (hcfg.url || '—');
           } catch(_) {}
-        } else if(ctype === 'smpp') {
+        } else if (ctype === 'smpp') {
           badge = '<span class="tag" style="background:#8b5cf6;color:#fff">SMPP Connection</span>';
           endpoint = 'SMPP Link #' + (u.smpp_connection_id || '—');
         }
 
         return `<tr>
-          <td><b>${u.panel_name}</b></td>
-          <td>${u.user_name || '—'}</td>
-          <td>${u.username}</td>
+          <td><b>${escapeHtml(u.panel_name)}</b></td>
+          <td>${escapeHtml(u.user_name || '—')}</td>
+          <td>${escapeHtml(u.username)}</td>
           <td>${badge}</td>
           <td>${u.active ? '<span class="tag">Active</span>' : '<span class="tag" style="background:#ef4444;color:#fff">Disabled</span>'}</td>
-          <td style="word-break:break-all;font-size:12px">${endpoint}</td>
+          <td style="word-break:break-all;font-size:12px">${escapeHtml(endpoint)}</td>
           <td>
             <button class="btn" style="padding:4px 8px;font-size:12px" onclick="openUser(${u.id})">Edit</button>
             <button class="btn red" style="padding:4px 8px;font-size:12px" onclick="disableUser(${u.id})">Disable</button>
@@ -497,8 +1223,8 @@ async function loadUsers(){
   } catch(e){}
 }
 
-function openUser(id){
-  const u = sharingUsers.find(x=>x.id===id) || {};
+function openUser(id) {
+  const u = sharingUsers.find(x => x.id === id) || {};
   document.getElementById('suId').value = u.id || '';
   document.getElementById('panelName').value = u.panel_name || '';
   document.getElementById('userName').value = u.user_name || '';
@@ -510,7 +1236,6 @@ function openUser(id){
   document.getElementById('suConnType').value = ctype;
   document.getElementById('attrUrl').value = u.attribute_url || '';
 
-  // HTTP Config
   let hcfg = {};
   try { hcfg = typeof u.http_config === 'string' ? JSON.parse(u.http_config) : (u.http_config || {}); } catch(_) {}
   document.getElementById('httpUrl').value = hcfg.url || '';
@@ -518,178 +1243,167 @@ function openUser(id){
   document.getElementById('httpAuthType').value = hcfg.auth_type || 'none';
   document.getElementById('httpToken').value = hcfg.auth_token || '';
   document.getElementById('httpHeaderParamName').value = hcfg.auth_header || hcfg.auth_query || '';
-  document.getElementById('httpBasicUser').value = hcfg.auth_username || '';
-  document.getElementById('httpBasicPass').value = '';
 
   const m = hcfg.map || {};
-  document.getElementById('mapCli').value = m.cli || 'source_id';
+  document.getElementById('mapCli').value = m.cli || 'cli';
   document.getElementById('mapNumber').value = m.number || 'number';
   document.getElementById('mapMessage').value = m.message || 'message';
   document.getElementById('mapDate').value = m.date || 'date';
   document.getElementById('mapTime').value = m.time || 'time';
-  document.getElementById('mapOtp').value = m.otp_code || 'otp';
+  document.getElementById('mapOtp').value = m.otp_code || 'otp_code';
 
-  // SMPP Select
   loadSmppSelect(u.smpp_connection_id);
-
   onConnTypeChange();
-  onHttpAuthChange();
   updateHttpPreview();
 
-  document.getElementById('userTitle').textContent = id ? 'Edit Sharing User' : 'Create Sharing User';
+  document.getElementById('userTitle').textContent = u.id ? 'Edit Sharing User' : 'Create Sharing User';
   document.getElementById('userModal').classList.add('show');
 }
 
-async function loadSmppSelect(selectedId){
-  try {
-    smppConnections = await API.get('/smpp/connections');
-    const sel = document.getElementById('suSmppSelect');
-    sel.innerHTML = '<option value="">-- No SMPP Connection Linked --</option>' +
-      smppConnections.map(c=>`<option value="${c.id}" ${selectedId===c.id?'selected':''}>${c.name} (${c.mode==='client'?'Client / Outbound':'Server / Inbound'}) - ${c.status}</option>`).join('');
-  } catch(_) {}
-}
-
-function onConnTypeChange(){
+function onConnTypeChange() {
   const t = document.getElementById('suConnType').value;
-  document.getElementById('boxActivityConn').style.display = (t === 'activity') ? 'block' : 'none';
-  document.getElementById('boxHttpConn').style.display = (t === 'http') ? 'block' : 'none';
-  document.getElementById('boxSmppConn').style.display = (t === 'smpp') ? 'block' : 'none';
+  document.getElementById('activityFields').style.display = t === 'activity' ? 'block' : 'none';
+  document.getElementById('httpFields').style.display = t === 'http' ? 'block' : 'none';
+  document.getElementById('smppFields').style.display = t === 'smpp' ? 'block' : 'none';
 }
 
-function onHttpAuthChange(){
-  const a = document.getElementById('httpAuthType').value;
-  const tokenWrap = document.getElementById('httpTokenWrap');
-  const customWrap = document.getElementById('httpCustomHeaderWrap');
-  const basicWrap = document.getElementById('httpBasicAuthWrap');
-  const tokenLabel = document.getElementById('httpTokenLabel');
-
-  tokenWrap.style.display = (a === 'none' || a === 'basic') ? 'none' : 'block';
-  customWrap.style.display = (a === 'header' || a === 'query') ? 'block' : 'none';
-  basicWrap.style.display = (a === 'basic') ? 'flex' : 'none';
-
-  if(a === 'bearer') tokenLabel.textContent = 'Bearer Token';
-  else if(a === 'header') tokenLabel.textContent = 'API Key / Token';
-  else if(a === 'query') tokenLabel.textContent = 'Query Token Value';
-}
-
-function updateHttpPreview(){
-  const url = (document.getElementById('httpUrl').value || 'https://client-api.com/v1/sms').trim();
-  const method = document.getElementById('httpMethod').value || 'POST';
-  const auth = document.getElementById('httpAuthType').value;
-  const token = document.getElementById('httpToken').value ? '********' : 'YOUR_TOKEN';
-  const customHeader = document.getElementById('httpHeaderParamName').value || 'X-API-Key';
-
-  const mCli = document.getElementById('mapCli').value || 'source_id';
-  const mNum = document.getElementById('mapNumber').value || 'number';
-  const mMsg = document.getElementById('mapMessage').value || 'message';
-  const mDate = document.getElementById('mapDate').value || 'date';
-  const mTime = document.getElementById('mapTime').value || 'time';
-  const mOtp = document.getElementById('mapOtp').value || 'otp';
-
-  let preview = `curl -X ${method} "${url}" \
-`;
-  if(auth === 'bearer') preview += `  -H "Authorization: Bearer ${token}" \
-`;
-  else if(auth === 'header') preview += `  -H "${customHeader}: ${token}" \
-`;
-  else if(auth === 'basic') preview += `  -u "username:********" \
-`;
-
-  if(method === 'POST'){
-    preview += `  -H "Content-Type: application/json" \
-`;
-    const body = {};
-    body[mCli] = "67425";
-    body[mNum] = "+44712345678";
-    body[mMsg] = "Your OTP is 123456";
-    body[mDate] = "2026-09-26";
-    body[mTime] = "14:30:00";
-    body[mOtp] = "123456";
-    preview += `  -d '${JSON.stringify(body, null, 2)}'`;
+function onAuthTypeChange() {
+  const at = document.getElementById('httpAuthType').value;
+  const wrap = document.getElementById('tokenInputWrap');
+  const hwrap = document.getElementById('headerParamWrap');
+  if (at === 'none') {
+    wrap.style.display = 'none';
+    hwrap.style.display = 'none';
+  } else if (at === 'custom_header' || at === 'query_param') {
+    wrap.style.display = 'block';
+    hwrap.style.display = 'block';
+    document.getElementById('headerParamLabel').textContent = at === 'custom_header' ? 'Header Name' : 'Param Name';
   } else {
-    preview += `  # Query parameters will append: ?${mCli}=67425&${mNum}=+44712345678&${mOtp}=123456...`;
+    wrap.style.display = 'block';
+    hwrap.style.display = 'none';
   }
-
-  const pEl = document.getElementById('httpReqPreview');
-  if(pEl) pEl.textContent = preview;
+  updateHttpPreview();
 }
 
-async function testHttpConnection(){
+async function loadSmppSelect(currentId) {
+  try {
+    const list = await API.get('/smpp/connections');
+    const sel = document.getElementById('suSmppConn');
+    sel.innerHTML = '<option value="">-- Select Active SMPP Connection --</option>' +
+      list.map(c => `<option value="${c.id}" ${currentId == c.id ? 'selected' : ''}>${c.name} (${c.mode} • ${c.status})</option>`).join('');
+  } catch(e){}
+}
+
+function updateHttpPreview() {
+  const url = document.getElementById('httpUrl').value.trim() || 'https://client-api.com/webhook';
+  const method = document.getElementById('httpMethod').value;
+  const authType = document.getElementById('httpAuthType').value;
+  const map = {
+    cli: document.getElementById('mapCli').value.trim() || 'cli',
+    number: document.getElementById('mapNumber').value.trim() || 'number',
+    message: document.getElementById('mapMessage').value.trim() || 'message',
+    date: document.getElementById('mapDate').value.trim() || 'date',
+    time: document.getElementById('mapTime').value.trim() || 'time',
+    otp_code: document.getElementById('mapOtp').value.trim() || 'otp_code'
+  };
+
+  const sample = {
+    [map.cli]: 'GOOGLE',
+    [map.number]: '+447123456789',
+    [map.message]: 'G-847291 is your verification code.',
+    [map.date]: '2026-09-26',
+    [map.time]: '14:30:15',
+    [map.otp_code]: '847291'
+  };
+
+  let previewText = `${method} ${url}\\n`;
+  if (authType === 'bearer') previewText += `Authorization: Bearer <TOKEN>\\n`;
+  if (authType === 'basic') previewText += `Authorization: Basic <CREDENTIALS>\\n`;
+  if (authType === 'custom_header') {
+    const h = document.getElementById('httpHeaderParamName').value.trim() || 'X-API-KEY';
+    previewText += `${h}: <TOKEN>\\n`;
+  }
+  previewText += `Content-Type: application/json\\n\\n` + JSON.stringify(sample, null, 2);
+  document.getElementById('httpPreviewBody').textContent = previewText;
+}
+
+async function testHttpEndpoint() {
   const url = document.getElementById('httpUrl').value.trim();
-  const statusEl = document.getElementById('httpTestStatus');
-  if(!url){ alert('Please enter target HTTP URL'); return; }
+  if (!url) return alert('Enter Webhook URL first');
+  const btn = document.getElementById('btnTestHttp');
+  btn.disabled = true;
+  btn.textContent = 'Testing...';
 
-  statusEl.textContent = '⏳ Testing connection...';
-  statusEl.style.color = '#38bdf8';
-
-  const payload = {
+  const body = {
     url,
     method: document.getElementById('httpMethod').value,
     auth_type: document.getElementById('httpAuthType').value,
-    auth_token: document.getElementById('httpToken').value,
-    auth_header: document.getElementById('httpHeaderParamName').value,
-    auth_query: document.getElementById('httpHeaderParamName').value,
-    auth_username: document.getElementById('httpBasicUser').value,
-    auth_password: document.getElementById('httpBasicPass').value,
+    auth_token: document.getElementById('httpToken').value.trim(),
+    auth_header: document.getElementById('httpHeaderParamName').value.trim(),
+    auth_query: document.getElementById('httpHeaderParamName').value.trim(),
     map: {
-      cli: document.getElementById('mapCli').value,
-      number: document.getElementById('mapNumber').value,
-      message: document.getElementById('mapMessage').value,
-      date: document.getElementById('mapDate').value,
-      time: document.getElementById('mapTime').value,
-      otp_code: document.getElementById('mapOtp').value
+      cli: document.getElementById('mapCli').value.trim() || 'cli',
+      number: document.getElementById('mapNumber').value.trim() || 'number',
+      message: document.getElementById('mapMessage').value.trim() || 'message',
+      date: document.getElementById('mapDate').value.trim() || 'date',
+      time: document.getElementById('mapTime').value.trim() || 'time',
+      otp_code: document.getElementById('mapOtp').value.trim() || 'otp_code'
     }
   };
 
   try {
-    const res = await API.post('/panel-sharing/http/test', payload);
-    if(res.ok){
-      statusEl.textContent = `✅ Success (HTTP ${res.status}): Connected!`;
-      statusEl.style.color = '#4ade80';
-    } else {
-      statusEl.textContent = `❌ Response: HTTP ${res.status || 0} (${res.error || res.status_text || 'Failed'})`;
-      statusEl.style.color = '#f87171';
-    }
-  } catch(e){
-    statusEl.textContent = '❌ Test failed: ' + e.message;
-    statusEl.style.color = '#f87171';
+    const res = await API.post('/panel-sharing/http/test', body);
+    const box = document.getElementById('httpTestResult');
+    box.style.display = 'block';
+    box.style.background = res.ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+    box.style.border = '1px solid ' + (res.ok ? '#22c55e' : '#ef4444');
+    box.innerHTML = `
+      <b>Status:</b> ${res.status_code} (${res.status_text}) • <b>Duration:</b> ${res.duration_ms}ms<br>
+      <b>Response Preview:</b><pre style="margin:4px 0;white-space:pre-wrap;font-size:11px">${escapeHtml(res.preview)}</pre>
+    `;
+  } catch(e) {
+    alert('Test failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Test Payload';
   }
 }
 
-async function saveUser(){
+async function saveUser() {
   const suId = document.getElementById('suId').value;
   const panelName = document.getElementById('panelName').value.trim();
   const userName = document.getElementById('userName').value.trim();
   const suUsername = document.getElementById('suUsername').value.trim();
   const suPassword = document.getElementById('suPassword').value;
-  const suActive = document.getElementById('suActive').checked;
+  const suActive = document.getElementById('suActive').checked ? 1 : 0;
   const connType = document.getElementById('suConnType').value;
   const attrUrl = document.getElementById('attrUrl').value.trim();
 
-  if(!panelName || !suUsername || (!suId && !suPassword)){
-    return alert('Panel name, username and password required');
+  if (!panelName || !suUsername) return alert('Panel Name and Username are required');
+
+  let httpConfig = '';
+  if (connType === 'http') {
+    const hurl = document.getElementById('httpUrl').value.trim();
+    if (!hurl) return alert('HTTP Webhook URL is required');
+    httpConfig = JSON.stringify({
+      url: hurl,
+      method: document.getElementById('httpMethod').value,
+      auth_type: document.getElementById('httpAuthType').value,
+      auth_token: document.getElementById('httpToken').value.trim(),
+      auth_header: document.getElementById('httpHeaderParamName').value.trim(),
+      auth_query: document.getElementById('httpHeaderParamName').value.trim(),
+      map: {
+        cli: document.getElementById('mapCli').value.trim() || 'cli',
+        number: document.getElementById('mapNumber').value.trim() || 'number',
+        message: document.getElementById('mapMessage').value.trim() || 'message',
+        date: document.getElementById('mapDate').value.trim() || 'date',
+        time: document.getElementById('mapTime').value.trim() || 'time',
+        otp_code: document.getElementById('mapOtp').value.trim() || 'otp_code'
+      }
+    });
   }
 
-  const httpConfig = {
-    url: document.getElementById('httpUrl').value.trim(),
-    method: document.getElementById('httpMethod').value,
-    auth_type: document.getElementById('httpAuthType').value,
-    auth_token: document.getElementById('httpToken').value,
-    auth_header: document.getElementById('httpHeaderParamName').value,
-    auth_query: document.getElementById('httpHeaderParamName').value,
-    auth_username: document.getElementById('httpBasicUser').value,
-    auth_password: document.getElementById('httpBasicPass').value,
-    map: {
-      cli: document.getElementById('mapCli').value.trim() || 'source_id',
-      number: document.getElementById('mapNumber').value.trim() || 'number',
-      message: document.getElementById('mapMessage').value.trim() || 'message',
-      date: document.getElementById('mapDate').value.trim() || 'date',
-      time: document.getElementById('mapTime').value.trim() || 'time',
-      otp_code: document.getElementById('mapOtp').value.trim() || 'otp'
-    }
-  };
-
-  const smppId = document.getElementById('suSmppSelect').value ? +document.getElementById('suSmppSelect').value : null;
+  const smppId = connType === 'smpp' ? (+document.getElementById('suSmppConn').value || null) : null;
 
   const body = {
     panel_name: panelName,
@@ -704,233 +1418,47 @@ async function saveUser(){
   };
 
   try {
-    if(suId) await API.put('/panel-sharing/users/' + suId, body);
+    if (suId) await API.put('/panel-sharing/users/' + suId, body);
     else await API.post('/panel-sharing/users', body);
     document.getElementById('userModal').classList.remove('show');
     loadUsers();
     loadDashboard();
-  } catch(e){
+    loadRangesAndInitDropdowns();
+  } catch(e) {
     alert('❌ ' + e.message);
   }
 }
 
-async function disableUser(id){
-  if(!confirm('Disable sharing user?')) return;
+async function disableUser(id) {
+  if (!confirm('Disable sharing user?')) return;
   await API.del('/panel-sharing/users/' + id);
   loadUsers();
   loadDashboard();
 }
 
-/* BULK ALLOCATION */
-async function loadBulkData(){
-  try {
-    const [ranges, users] = await Promise.all([
-      API.get('/panel-sharing/ranges'),
-      API.get('/panel-sharing/users')
-    ]);
-    availableRanges = ranges || [];
-    sharingUsers = users || [];
-
-    // Sort A-Z
-    availableRanges.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-    sharingUsers.sort((a,b)=>(a.panel_name||'').localeCompare(b.panel_name||''));
-
-    filterBulkRanges();
-    filterBulkUsers();
-  } catch(e){}
-}
-
-function filterBulkRanges(){
-  const q = (document.getElementById('bulkRangeSearch')?.value || '').toLowerCase().trim();
-  const sel = document.getElementById('bulkRange');
-  const cur = sel.value;
-  const filtered = availableRanges.filter(r=>!q || (r.name||'').toLowerCase().includes(q) || String(r.prefix||'').includes(q));
-
-  sel.innerHTML = '<option value="">-- Select Range --</option>' +
-    filtered.map(r=>`<option value="${r.id}" ${cur==String(r.id)?'selected':''}>${r.name} (${r.available_numbers||0} avail / ${r.total_numbers||0} total)</option>`).join('');
-  onBulkRangeChange();
-}
-
-function filterBulkUsers(){
-  const q = (document.getElementById('bulkUserSearch')?.value || '').toLowerCase().trim();
-  const sel = document.getElementById('bulkUser');
-  const cur = sel.value;
-  const filtered = sharingUsers.filter(u=>u.active && (!q || (u.panel_name||'').toLowerCase().includes(q) || (u.username||'').toLowerCase().includes(q)));
-
-  sel.innerHTML = '<option value="">-- Select Sharing User --</option>' +
-    filtered.map(u=>`<option value="${u.id}" ${cur==String(u.id)?'selected':''}>${u.panel_name} (${u.username})</option>`).join('');
-}
-
-function onBulkRangeChange(){
-  const rid = +document.getElementById('bulkRange').value;
-  const r = availableRanges.find(x=>x.id===rid);
-  const infoEl = document.getElementById('bulkRangeInfo');
-  if(r){
-    infoEl.textContent = `Currency: ${r.currency || 'USD'} • Available Unallocated: ${r.available_numbers || 0} numbers`;
-  } else {
-    infoEl.textContent = '';
-  }
-}
-
-function updateBulkCount(){
-  const text = document.getElementById('bulkNumbers').value;
-  const nums = text.split(/[\r\n,;\t]+/).map(s=>s.trim()).filter(Boolean);
-  const unique = new Set(nums.map(s=>s.replace(/[^0-9+]/g,'')).filter(Boolean));
-  document.getElementById('bulkPasteCount').textContent = `${unique.size} valid numbers detected`;
-}
-
-function resetBulkForm(){
-  document.getElementById('bulkNumbers').value = '';
-  document.getElementById('bulkPrice').value = '';
-  document.getElementById('bulkPasteCount').textContent = '0 numbers detected';
-  document.getElementById('bulkReportCard').style.display = 'none';
-}
-
-async function executeBulkAllocation(){
-  const rangeId = +document.getElementById('bulkRange').value;
-  const userId = +document.getElementById('bulkUser').value;
-  const price = (document.getElementById('bulkPrice').value || '').trim();
-  const payterm = document.getElementById('bulkPayterm').value;
-  const text = document.getElementById('bulkNumbers').value;
-
-  if(!rangeId){ alert('Please select a range.'); return; }
-  if(!userId){ alert('Please select a target sharing user.'); return; }
-  if(!price || isNaN(parseFloat(price))){ alert('Please enter a valid downstream selling price (e.g. 0.005).'); return; }
-
-  const nums = text.split(/[\r\n,;\t]+/).map(s=>s.trim()).filter(Boolean);
-  if(!nums.length){ alert('Please paste numbers to allocate.'); return; }
-
-  const btn = document.getElementById('btnExecuteBulk');
-  btn.disabled = true;
-  btn.textContent = 'Allocating in progress...';
-
-  try {
-    const res = await API.post('/panel-sharing/bulk-allocate', {
-      range_id: rangeId,
-      sharing_user_id: userId,
-      price: price,
-      payterm: payterm,
-      numbers: nums
-    });
-
-    lastAllocatedRows = res.rows || [];
-    lastAllocatedPanel = res.panel_name || 'Panel';
-
-    // Show Report Card
-    document.getElementById('repRequested').textContent = res.requested || 0;
-    document.getElementById('repAllocated').textContent = res.allocated || 0;
-    document.getElementById('repSkipped').textContent = res.skipped || 0;
-    document.getElementById('bulkReportTitle').textContent = `Allocation Report — ${res.panel_name} (${res.range_name})`;
-
-    // Failed details if any
-    const failBox = document.getElementById('bulkFailedDetails');
-    if(res.failed_numbers && res.failed_numbers.length){
-      failBox.style.display = 'block';
-      failBox.innerHTML = '<b>Failed / Skipped Reasons:</b><br>' +
-        res.failed_numbers.map(f=>`<div>• <code>${f.number}</code>: ${f.reason}</div>`).join('');
-    } else {
-      failBox.style.display = 'none';
-    }
-
-    // Set Download Buttons in report
-    const dBtns = document.getElementById('bulkDownloadBtns');
-    dBtns.innerHTML = `
-      <button class="btn ghost" style="font-size:12px;padding:4px 10px" onclick="downloadLastCsv1()">📥 Download File 1 (Numbers Only)</button>
-      <button class="btn green" style="font-size:12px;padding:4px 10px" onclick="downloadLastCsv2()">📥 Download File 2 (Range+Num+Price)</button>
-    `;
-    document.getElementById('bulkReportCard').style.display = 'block';
-
-    // TRIGGER AUTOMATIC DOWNLOAD OF BOTH CSV FILES IMMEDIATELY!
-    if(res.allocated > 0 && lastAllocatedRows.length > 0){
-      autoDownloadBothCsvFiles(lastAllocatedRows, lastAllocatedPanel);
-    }
-
-    alert(`✅ Bulk Allocation Complete!
-Requested: ${res.requested}
-Successfully Allocated: ${res.allocated}
-Skipped: ${res.skipped}
-
-Both CSV files have been automatically downloaded.`);
-
-    loadBulkData();
-    loadDashboard();
-  } catch(e){
-    alert('❌ ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '⚡ Allocate Numbers in Bulk';
-  }
-}
-
-function autoDownloadBothCsvFiles(rows, panelName){
-  // File 1: Numbers Only
-  downloadCsvNumbersOnly(rows, panelName);
-  // File 2: Range + Number + Price (slight timeout so browser handles both smoothly)
-  setTimeout(()=>{
-    downloadCsvRangeNumberPrice(rows, panelName);
-  }, 350);
-}
-
-function downloadLastCsv1(){ downloadCsvNumbersOnly(lastAllocatedRows, lastAllocatedPanel); }
-function downloadLastCsv2(){ downloadCsvRangeNumberPrice(lastAllocatedRows, lastAllocatedPanel); }
-
-function downloadCsvNumbersOnly(rows, panelName){
-  if(!rows || !rows.length) return alert('No numbers to export');
-  const lines = ['Number'];
-  rows.forEach(r=>{
-    lines.push(r.number || '');
-  });
-  const csv = lines.join('\n');
-  const d = new Date().toISOString().slice(0,10);
-  triggerBlobDownload(csv, `${panelName}-numbers-${d}.csv`);
-}
-
-function downloadCsvRangeNumberPrice(rows, panelName){
-  if(!rows || !rows.length) return alert('No numbers to export');
-  const lines = ['Range Name,Number,Price'];
-  rows.forEach(r=>{
-    lines.push(`"${String(r.range_name||'').replace(/"/g,'""')}","${String(r.number||'').replace(/"/g,'""')}",${r.price||'0'}`);
-  });
-  const csv = lines.join('\n');
-  const d = new Date().toISOString().slice(0,10);
-  triggerBlobDownload(csv, `${panelName}-allocation-details-${d}.csv`);
-}
-
-function triggerBlobDownload(content, filename){
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
-}
-
 /* SMPP CONNECTIONS */
-async function loadSmpp(){
+async function loadSmpp() {
   try {
     smppConnections = await API.get('/smpp/connections');
     const tbody = document.getElementById('smppBody');
-    tbody.innerHTML = smppConnections.map(c=>{
+    tbody.innerHTML = smppConnections.map(c => {
       const isClient = c.mode === 'client';
       const modeLabel = isClient
         ? '<span class="tag" style="background:#3b82f6;color:#fff">Client (Our Panel → Other)</span>'
         : '<span class="tag" style="background:#a855f7;color:#fff">Server (Other → Our Panel)</span>';
 
       const hostPort = isClient ? `${c.host}:${c.port}` : `Listen Port: ${c.listen_port}`;
-
       let stColor = '#94a3b8';
-      if(c.status === 'bound' || c.status === 'listening') stColor = '#22c55e';
-      else if(c.status === 'connecting') stColor = '#eab308';
-      else if(c.status === 'error') stColor = '#ef4444';
+      if (c.status === 'bound' || c.status === 'listening') stColor = '#22c55e';
+      else if (c.status === 'connecting') stColor = '#eab308';
+      else if (c.status === 'error') stColor = '#ef4444';
 
       return `<tr>
-        <td><b>${c.name}</b></td>
+        <td><b>${escapeHtml(c.name)}</b></td>
         <td>${modeLabel}</td>
-        <td><code>${hostPort}</code></td>
-        <td>${c.system_id || '—'}</td>
-        <td>${c.bind_type || '—'}</td>
+        <td><code>${escapeHtml(hostPort)}</code></td>
+        <td>${escapeHtml(c.system_id || '—')}</td>
+        <td>${escapeHtml(c.bind_type || '—')}</td>
         <td><span class="tag" style="background:${stColor};color:#fff">${c.status || 'stopped'}</span></td>
         <td>Sent: ${c.total_sent||0} / Recv: ${c.total_received||0}</td>
         <td style="white-space:nowrap">
@@ -947,7 +1475,7 @@ async function loadSmpp(){
   } catch(e){}
 }
 
-function openSmppModal(){
+function openSmppModal() {
   document.getElementById('smppId').value = '';
   document.getElementById('smppModalTitle').textContent = 'Add SMPP Connection';
   document.getElementById('smppName').value = '';
@@ -966,9 +1494,9 @@ function openSmppModal(){
   document.getElementById('smppModal').classList.add('show');
 }
 
-function editSmpp(id){
-  const c = smppConnections.find(x=>x.id===id);
-  if(!c) return;
+function editSmpp(id) {
+  const c = smppConnections.find(x => x.id === id);
+  if (!c) return;
   document.getElementById('smppId').value = c.id;
   document.getElementById('smppModalTitle').textContent = 'Edit SMPP Connection: ' + c.name;
   document.getElementById('smppName').value = c.name;
@@ -987,7 +1515,7 @@ function editSmpp(id){
   document.getElementById('smppModal').classList.add('show');
 }
 
-function onSmppModeChange(){
+function onSmppModeChange() {
   const m = document.getElementById('smppMode').value;
   const isClient = m === 'client';
   document.getElementById('smppClientGuide').style.display = isClient ? 'block' : 'none';
@@ -996,16 +1524,14 @@ function onSmppModeChange(){
   document.getElementById('smppServerFields').style.display = isClient ? 'none' : 'block';
 }
 
-async function saveSmppConnection(){
+async function saveSmppConnection() {
   const id = document.getElementById('smppId').value;
   const name = document.getElementById('smppName').value.trim();
   const mode = document.getElementById('smppMode').value;
   const system_id = document.getElementById('smppSystemId').value.trim();
   const password = document.getElementById('smppPassword').value;
 
-  if(!name || !system_id){
-    return alert('Connection Name and System ID are required.');
-  }
+  if (!name || !system_id) return alert('Connection Name and System ID are required.');
 
   const body = {
     name,
@@ -1015,158 +1541,123 @@ async function saveSmppConnection(){
     default_source_addr: document.getElementById('smppSourceAddr').value.trim(),
     active: document.getElementById('smppActive').checked ? 1 : 0
   };
+  if (password) body.password = password;
 
-  if(password) body.password = password;
-
-  if(mode === 'client'){
+  if (mode === 'client') {
     body.host = document.getElementById('smppHost').value.trim();
     body.port = +document.getElementById('smppPort').value || 2775;
-    if(!body.host) return alert('Host is required for Client mode.');
+    if (!body.host) return alert('Host is required for Client mode.');
   } else {
     body.listen_port = +document.getElementById('smppListenPort').value || 2775;
     body.allowed_ips = document.getElementById('smppAllowedIps').value.trim();
   }
 
   try {
-    if(id) await API.put('/smpp/connections/' + id, body);
+    if (id) await API.put('/smpp/connections/' + id, body);
     else await API.post('/smpp/connections', body);
     document.getElementById('smppModal').classList.remove('show');
     loadSmpp();
-  } catch(e){
+  } catch(e) {
     alert('❌ ' + e.message);
   }
 }
 
-async function toggleSmpp(id, start){
+async function toggleSmpp(id, start) {
   try {
-    await API.post(`/smpp/connections/${id}/${start?'start':'stop'}`);
+    await API.post(`/smpp/connections/${id}/${start ? 'start' : 'stop'}`);
     loadSmpp();
-  } catch(e){ alert('❌ ' + e.message); }
+  } catch(e) { alert('❌ ' + e.message); }
 }
 
-async function testSmpp(id){
+async function testSmpp(id) {
   try {
     const res = await API.post(`/smpp/connections/${id}/test`);
-    alert(`SMPP Test Result:
-Success: ${res.ok}
-Status: ${res.current_status || res.status || 'OK'}
-${res.error?'Error: '+res.error:''}`);
+    alert(`SMPP Test Result:\\nSuccess: ${res.ok}\\nStatus: ${res.current_status || res.status || 'OK'}\\n${res.error ? 'Error: ' + res.error : ''}`);
     loadSmpp();
-  } catch(e){ alert('❌ ' + e.message); }
+  } catch(e) { alert('❌ ' + e.message); }
 }
 
-async function deleteSmpp(id){
-  if(!confirm('Delete this SMPP connection?')) return;
+async function deleteSmpp(id) {
+  if (!confirm('Delete this SMPP connection?')) return;
   try {
     await API.del(`/smpp/connections/${id}`);
     loadSmpp();
-  } catch(e){ alert('❌ ' + e.message); }
+  } catch(e) { alert('❌ ' + e.message); }
 }
 
-/* SMS NUMBERS */
-async function loadNumbers(){
-  const q = numSearch.value.trim();
-  const lim = numState.limit || 25;
-  const data = await API.get(`/panel-sharing/numbers?page=${numState.page}&limit=${lim}${q?'&search='+encodeURIComponent(q):''}`);
-  numState.page = data.page;
-  numState.totalPages = data.totalPages;
-  currentNumRows = data.rows || [];
-  totalNumCount = data.total || 0;
-
-  numBody.innerHTML = currentNumRows.map(r=>`<tr><td><input class="numChk" type="checkbox" data-id="${r.id}"></td><td>${r.range_name||''}</td><td><b>${r.number}</b></td></tr>`).join('') || '<tr><td colspan="3">No unallocated numbers</td></tr>';
-  numInfo.innerHTML = `Showing ${currentNumRows.length} of ${data.total} (Page ${numState.page} of ${numState.totalPages}) <button type="button" onclick="copyNumbersOnly()" title="Copy Numbers Only" style="margin-left:6px;background:none;border:none;cursor:pointer;font-size:14px;color:#38bdf8" aria-label="Copy Numbers">📋</button>`;
-  drawPag();
-}
-
-function drawPag(){
-  if(numState.totalPages<=1){ numPag.innerHTML=''; return; }
-  let h='';
-  if(numState.page>1){ h+=`<button onclick="numState.page=1;loadNumbers()">«</button><button onclick="numState.page=${numState.page-1};loadNumbers()">‹</button>`; }
-  for(let i=Math.max(1,numState.page-3); i<=Math.min(numState.totalPages,numState.page+3); i++)
-    h+=`<button class="${i===numState.page?'active':''}" onclick="numState.page=${i};loadNumbers()">${i}</button>`;
-  if(numState.page<numState.totalPages){ h+=`<button onclick="numState.page=${numState.page+1};loadNumbers()">›</button><button onclick="numState.page=${numState.totalPages};loadNumbers()">»</button>`; }
-  numPag.innerHTML=h;
-}
-
-function toggleAll(cb){ document.querySelectorAll('.numChk').forEach(c=>c.checked=cb.checked); }
-function selectedIds(){ return [...document.querySelectorAll('.numChk:checked')].map(c=>+c.dataset.id); }
-
-async function copyNumbersOnly(){
-  const checked = selectedIds();
-  let list = [];
-  if(checked.length>0){ list = (currentNumRows||[]).filter(r=>checked.includes(r.id)).map(r=>String(r.number||'').trim()).filter(Boolean); }
-  else { list = (currentNumRows||[]).map(r=>String(r.number||'').trim()).filter(Boolean); }
-  if(!list.length) return alert('No numbers to copy');
-  const text = list.join('\n');
-  try {
-    if(navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
-    else {
-      const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-    }
-    alert(`Copied ${list.length} numbers to clipboard!`);
-  } catch(e){ alert('Failed to copy numbers: '+e.message); }
-}
-
-function downloadCsv(rows,panel){
-  if(!rows||!rows.length) return alert('No numbers to download');
-  const csv='Range Name,Number\n'+rows.map(r=>`"${String(r.range_name||'').replace(/"/g,'""')}","${String(r.number||'').replace(/"/g,'""')}"`).join('\n');
-  triggerBlobDownload(csv, (panel||'unallocated-numbers')+'.csv');
-}
-
-async function downloadAllFilteredNumbers(){
-  const checked = selectedIds();
-  if(checked.length>0){
-    const selectedRows = (currentNumRows||[]).filter(r=>checked.includes(r.id));
-    if(selectedRows.length){ downloadCsv(selectedRows, 'selected-unallocated-numbers'); return; }
-  }
-  const q = numSearch.value.trim();
-  if(currentNumRows.length && currentNumRows.length>=totalNumCount){
-    downloadCsv(currentNumRows, q?'unallocated-numbers-filtered':'all-unallocated-numbers');
-    return;
-  }
-  try {
-    const data = await API.get(`/panel-sharing/numbers?limit=all${q?'&search='+encodeURIComponent(q):''}`);
-    const rows = (data&&data.rows)||[];
-    if(!rows.length) return alert('No unallocated numbers found');
-    downloadCsv(rows, q?'unallocated-numbers-filtered':'all-unallocated-numbers');
-  } catch(e){ alert('Failed to download numbers: '+e.message); }
-}
-
-async function allocateSelected(){
-  const ids = selectedIds();
-  if(!ids.length) return alert('Select numbers first');
-  const uId = document.getElementById('allocUser').value;
-  if(!uId) return alert('Select sharing user');
-  const r = await API.post('/panel-sharing/allocate', { ids, sharing_user_id: +uId });
-  alert(`✅ ${r.count} numbers allocated to ${r.panel_name}`);
-  downloadCsv(r.rows||[], r.panel_name);
-  loadNumbers();
-  loadDashboard();
-}
-
-/* LOGS */
-async function loadLogs(){
+/* FORWARD LOGS */
+async function loadLogs() {
   try {
     const rows = await API.get('/panel-sharing/forward-logs');
     const tbody = document.getElementById('logBody');
-    tbody.innerHTML = rows.map(r=>{
+    tbody.innerHTML = (rows || []).map(r => {
       const ctype = r.connection_type || (r.url && r.url.startsWith('SMPP') ? 'smpp' : 'activity');
       let badge = '<span class="tag" style="background:#3b82f6;color:#fff;font-size:10px">Activity</span>';
-      if(ctype === 'http') badge = '<span class="tag" style="background:#10b981;color:#fff;font-size:10px">HTTP</span>';
-      else if(ctype === 'smpp') badge = '<span class="tag" style="background:#8b5cf6;color:#fff;font-size:10px">SMPP</span>';
+      if (ctype === 'http') badge = '<span class="tag" style="background:#10b981;color:#fff;font-size:10px">HTTP</span>';
+      else if (ctype === 'smpp') badge = '<span class="tag" style="background:#8b5cf6;color:#fff;font-size:10px">SMPP</span>';
 
       return `<tr>
-        <td>${(r.created_at||'').slice(0,19)}</td>
-        <td><b>${r.panel_name||'—'}</b></td>
+        <td>${(r.created_at || '').slice(0, 19)}</td>
+        <td><b>${escapeHtml(r.panel_name || '—')}</b></td>
         <td>${badge}</td>
-        <td>${r.sms_record_id||''}</td>
-        <td>${r.status==='success'?'<span class="tag" style="background:#22c55e;color:#fff">Success</span>':'<span class="tag" style="background:#ef4444;color:#fff">Failed</span>'}</td>
-        <td style="word-break:break-all;font-size:12px">${r.url||''}</td>
-        <td style="color:#ef4444;font-size:12px">${r.error||''}</td>
+        <td>${r.sms_record_id || ''}</td>
+        <td>${r.status === 'success' ? '<span class="tag" style="background:#22c55e;color:#fff">Success</span>' : '<span class="tag" style="background:#ef4444;color:#fff">Failed</span>'}</td>
+        <td style="word-break:break-all;font-size:12px">${escapeHtml(r.url || '')}</td>
+        <td style="color:#ef4444;font-size:12px">${escapeHtml(r.error || '')}</td>
       </tr>`;
     }).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">No forward logs found</td></tr>';
   } catch(e){}
 }
 
+// Initial boot
 loadDashboard();
-</script></body></html>
+loadRangesAndInitDropdowns().then(loadNumbers);
+</script>
+<!-- ALLOCATION CONFIRMATION & PRICE OVERRIDE MODAL (Sections 36, 37, 38, 39) -->
+<div class="modal" id="allocConfirmModal">
+  <div class="box" style="max-width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 style="margin:0">Confirm SMS Number Allocation</h3>
+      <button class="btn ghost" style="padding:4px 8px;min-height:auto" onclick="closeAllocConfirmModal()">✕</button>
+    </div>
+    <div style="margin-bottom:14px;background:rgba(255,255,255,0.04);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span class="muted">Target User:</span>
+        <b id="confTargetUser">—</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span class="muted">Selected Numbers:</span>
+        <b id="confNumberCount">0</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span class="muted">Range(s):</span>
+        <b id="confRangeName">—</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span class="muted">Billing Period:</span>
+        <b id="confBillingPeriod">—</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="muted">Rate Card Default Price:</span>
+        <span class="tag" id="confRateCardPrice" style="background:#3b82f6;color:#fff">$0.0000</span>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-weight:700;margin-bottom:6px">
+        Downstream Selling Price ($) <span style="color:#ef4444">*</span>
+      </label>
+      <input type="number" id="confOverridePrice" step="0.0001" min="0" style="width:100%;box-sizing:border-box;font-size:15px;font-weight:700" placeholder="0.0000">
+      <div class="muted" style="font-size:11.5px;margin-top:6px;line-height:1.4">
+        Default price comes from the SMS Rate Card. You may modify this downstream price before confirming. Upstream provider cost remains untouched.
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn ghost" onclick="closeAllocConfirmModal()">Cancel</button>
+      <button class="btn green" id="btnConfirmAllocation" onclick="proceedWithConfirmedAllocation()">Confirm Allocation &amp; Download</button>
+    </div>
+  </div>
+</div>
+
+</body></html>

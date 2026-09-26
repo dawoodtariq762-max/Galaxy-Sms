@@ -248,3 +248,289 @@ GX.pay3=(v)=>{let s=String(v??'').replace(/[$,\s]/g,'');const m=s.match(/-?\d+(?
 GX.moneyShort=(v)=>{const n=Number(v)||0;const a=Math.abs(n);if(a>=1e9)return (n/1e9).toFixed(a%1e9?2:0)+'B';if(a>=1e6)return (n/1e6).toFixed(a%1e6?2:0)+'M';if(a>=1e4)return (n/1e3).toFixed(a%1e3?1:0)+'K';let s=String(n);if(s.includes('.'))s=s.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');return s;};
 GX.GX=GX; window.GX=GX;
 })();
+
+/* ============================================================================
+   SEARCHABLE DROPDOWN CONTROLLER
+   Search input strictly INSIDE the opened dropdown.
+   ========================================================================== */
+window.GX_DROPDOWNS = window.GX_DROPDOWNS || {};
+
+window.toggleSearchDropdown = function(id) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const menu = dd.querySelector('.sd-menu');
+  if (!menu) return;
+  const isHidden = menu.style.display === 'none' || !menu.style.display;
+
+  // Close any other open dropdowns first
+  document.querySelectorAll('.sd-menu').forEach(m => {
+    if (m !== menu) m.style.display = 'none';
+  });
+
+  if (isHidden) {
+    menu.style.display = 'flex';
+    const inp = menu.querySelector('input');
+    if (inp) {
+      inp.value = '';
+      inp.focus();
+    }
+    // Re-filter to show all options
+    window.filterSearchDropdown(id, '');
+  } else {
+    menu.style.display = 'none';
+  }
+};
+
+window.filterSearchDropdown = function(id, q) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const opts = dd.querySelectorAll('.sd-option');
+  const term = String(q || '').toLowerCase().trim();
+  let matches = 0;
+  opts.forEach(opt => {
+    const txt = (opt.getAttribute('data-search') || opt.textContent || '').toLowerCase();
+    if (!term || txt.includes(term)) {
+      opt.style.display = 'flex';
+      matches++;
+    } else {
+      opt.style.display = 'none';
+    }
+  });
+  let noRes = dd.querySelector('.sd-no-results');
+  if (!matches) {
+    if (!noRes) {
+      const container = dd.querySelector('.sd-options');
+      if (container) {
+        noRes = document.createElement('div');
+        noRes.className = 'sd-no-results';
+        noRes.textContent = 'No matching results';
+        container.appendChild(noRes);
+      }
+    } else {
+      noRes.style.display = 'block';
+    }
+  } else if (noRes) {
+    noRes.style.display = 'none';
+  }
+};
+
+window.setSearchDropdownValue = function(id, value, label) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const hidden = dd.querySelector('input[type="hidden"]');
+  if (hidden) hidden.value = value;
+  const lbl = dd.querySelector('.sd-label');
+  if (lbl) lbl.textContent = label || value || 'Select';
+
+  dd.querySelectorAll('.sd-option').forEach(opt => {
+    if (opt.getAttribute('data-value') === String(value)) {
+      opt.classList.add('selected');
+    } else {
+      opt.classList.remove('selected');
+    }
+  });
+
+  const menu = dd.querySelector('.sd-menu');
+  if (menu) menu.style.display = 'none';
+
+  // Trigger change event on hidden input if listeners exist
+  if (hidden) {
+    const ev = new Event('change', { bubbles: true });
+    hidden.dispatchEvent(ev);
+  }
+};
+
+// Global click outside listener to auto-close any open dropdown menu
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.searchable-dropdown')) {
+    document.querySelectorAll('.sd-menu').forEach(m => {
+      m.style.display = 'none';
+    });
+  }
+});
+
+/* ============================================================================
+   ZIP ARCHIVE BUILDER (Standard Pure JS Store ZIP)
+   Used for Sections 46, 50 (Detailed Allocation Files.zip & Numbers Only Files.zip)
+   Zero external dependencies, opens natively in all operating systems.
+   ========================================================================== */
+window.createZipArchive = function(fileList) {
+  const textEncoder = new TextEncoder();
+  const crcTable = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+    crcTable[i] = c;
+  }
+  function calcCrc(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = crcTable[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  const entries = (fileList || []).map(f => {
+    const nameBytes = textEncoder.encode(f.name);
+    const dataBytes = typeof f.content === 'string' ? textEncoder.encode(f.content) : (f.content || new Uint8Array(0));
+    return { nameBytes, dataBytes, crc: calcCrc(dataBytes), size: dataBytes.length };
+  });
+
+  let totalSize = 0;
+  for (const f of entries) totalSize += 30 + f.nameBytes.length + f.size;
+  let cdSize = 0;
+  for (const f of entries) cdSize += 46 + f.nameBytes.length;
+  totalSize += cdSize + 22;
+
+  const buf = new Uint8Array(totalSize);
+  const view = new DataView(buf.buffer);
+  let pos = 0;
+  const offsets = [];
+
+  for (const f of entries) {
+    offsets.push(pos);
+    view.setUint32(pos, 0x04034b50, true);
+    view.setUint16(pos + 4, 20, true);
+    view.setUint16(pos + 6, 0x0800, true); // UTF-8
+    view.setUint16(pos + 8, 0, true);      // store
+    view.setUint16(pos + 10, 0, true);
+    view.setUint16(pos + 12, 0, true);
+    view.setUint32(pos + 14, f.crc, true);
+    view.setUint32(pos + 18, f.size, true);
+    view.setUint32(pos + 22, f.size, true);
+    view.setUint16(pos + 26, f.nameBytes.length, true);
+    view.setUint16(pos + 28, 0, true);
+    pos += 30;
+    buf.set(f.nameBytes, pos);
+    pos += f.nameBytes.length;
+    buf.set(f.dataBytes, pos);
+    pos += f.size;
+  }
+
+  const cdStart = pos;
+  for (let i = 0; i < entries.length; i++) {
+    const f = entries[i];
+    const offset = offsets[i];
+    view.setUint32(pos, 0x02014b50, true);
+    view.setUint16(pos + 4, 20, true);
+    view.setUint16(pos + 6, 20, true);
+    view.setUint16(pos + 8, 0x0800, true);
+    view.setUint16(pos + 10, 0, true);
+    view.setUint16(pos + 12, 0, true);
+    view.setUint16(pos + 14, 0, true);
+    view.setUint32(pos + 16, f.crc, true);
+    view.setUint32(pos + 20, f.size, true);
+    view.setUint32(pos + 24, f.size, true);
+    view.setUint16(pos + 28, f.nameBytes.length, true);
+    view.setUint16(pos + 30, 0, true);
+    view.setUint16(pos + 32, 0, true);
+    view.setUint16(pos + 34, 0, true);
+    view.setUint16(pos + 36, 0, true);
+    view.setUint32(pos + 38, 0, true);
+    view.setUint32(pos + 42, offset, true);
+    pos += 46;
+    buf.set(f.nameBytes, pos);
+    pos += f.nameBytes.length;
+  }
+
+  view.setUint32(pos, 0x06054b50, true);
+  view.setUint16(pos + 4, 0, true);
+  view.setUint16(pos + 6, 0, true);
+  view.setUint16(pos + 8, entries.length, true);
+  view.setUint16(pos + 10, entries.length, true);
+  view.setUint32(pos + 12, pos - cdStart, true);
+  view.setUint32(pos + 16, cdStart, true);
+  view.setUint16(pos + 20, 0, true);
+
+  return new Blob([buf], { type: 'application/zip' });
+};
+
+/* ============================================================================
+   renderSearchSelect HELPER
+   Renders custom searchable dropdown with search input INSIDE the menu.
+   ========================================================================== */
+window.renderSearchSelect = function(containerId, config) {
+  const container = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
+  if (!container) return;
+
+  const ddId = config.id || ('sd_' + Math.random().toString(36).substring(2, 9));
+  const placeholder = config.placeholder || 'Select Option';
+  const searchPlaceholder = config.searchPlaceholder || 'Search...';
+  const items = config.items || [];
+  const initialValue = config.value !== undefined ? String(config.value) : '';
+
+  // Sort items A-Z by label
+  items.sort((a, b) => String(a.label || '').localeCompare(String(b.label || '')));
+
+  let selectedLabel = placeholder;
+  const initialItem = items.find(it => String(it.value) === initialValue);
+  if (initialItem) selectedLabel = initialItem.label;
+
+  container.innerHTML = `
+    <div class="searchable-dropdown" id="${ddId}" style="${config.style || ''}">
+      <div class="sd-trigger" onclick="toggleSearchDropdown('${ddId}')">
+        <span class="sd-label" id="${ddId}-label">${escapeHtml(selectedLabel)}</span>
+        <span class="sd-caret">▾</span>
+      </div>
+      <div class="sd-menu" id="${ddId}-menu" style="display:none">
+        <div class="sd-search-box" onclick="event.stopPropagation()">
+          <input type="text" placeholder="${escapeHtml(searchPlaceholder)}" oninput="filterSearchDropdown('${ddId}', this.value)" autocomplete="off">
+        </div>
+        <div class="sd-options" id="${ddId}-options">
+          ${items.map(it => {
+            const isSel = String(it.value) === initialValue;
+            const searchKey = escapeHtml((it.search || it.label || '').toLowerCase());
+            return `<div class="sd-option ${isSel ? 'selected' : ''}" data-value="${escapeHtml(String(it.value))}" data-search="${searchKey}" onclick="onSelectSearchDropdownItem('${ddId}', '${escapeHtml(String(it.value))}', '${escapeHtml(it.label)}')">
+              <span>${escapeHtml(it.label)}</span>
+              ${it.badge ? `<span class="tag" style="font-size:10px;margin-left:6px">${escapeHtml(it.badge)}</span>` : ''}
+            </div>`;
+          }).join('')}
+          ${!items.length ? '<div class="sd-no-results">No options available</div>' : ''}
+        </div>
+      </div>
+      <input type="hidden" id="${config.inputName || config.id}" value="${escapeHtml(initialValue)}">
+    </div>
+  `;
+
+  // Store callback
+  window.GX_DROPDOWNS[ddId] = {
+    config: config,
+    items: items,
+    onChange: config.onChange,
+    onSelect: config.onSelect
+  };
+};
+
+window.onSelectSearchDropdownItem = function(ddId, val, label) {
+  const meta = window.GX_DROPDOWNS[ddId] || {};
+  if (meta.onSelect) {
+    // Multi-select or custom select handler
+    const item = (meta.items || []).find(it => String(it.value) === String(val)) || { value: val, label: label };
+    meta.onSelect(item);
+    // Keep menu open or close based on config
+    if (meta.config && meta.config.keepOpenOnSelect) {
+      // Clear search input and restore full list
+      const menu = document.getElementById(ddId + '-menu');
+      if (menu) {
+        const inp = menu.querySelector('input');
+        if (inp) inp.value = '';
+        window.filterSearchDropdown(ddId, '');
+      }
+      return;
+    }
+  }
+
+  window.setSearchDropdownValue(ddId, val, label);
+  if (meta.onChange) {
+    const item = (meta.items || []).find(it => String(it.value) === String(val)) || { value: val, label: label };
+    meta.onChange(val, item);
+  }
+};
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>'"]/g, tag => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;'
+  }[tag] || tag));
+}

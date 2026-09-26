@@ -461,11 +461,9 @@
         <div class="page-head"><div><h2>Range Allocation</h2><div class="breadcrumb"><b>SMS Module</b> › Range Allocation</div></div></div>
         <div class="toolbar">
           <div style="font-weight:600;margin-bottom:12px;color:#c7d2fe">Allocate a Range to a Manager</div>
-          <div class="filter-row">
-            <input type="text" id="allocRangeSearch" placeholder="🔍 Search range..." style="width:130px;font-size:12px;padding:6px 8px" oninput="filterAllocRangeSelect()" title="Search range">
-            <select class="sel-lg" id="allocRange" onchange="allocRateRefresh()"><option value="">Select Range</option></select>
-            <input type="text" id="allocManagerSearch" placeholder="🔍 Search user..." style="width:130px;font-size:12px;padding:6px 8px" oninput="filterAllocUserSelect()" title="Search manager/agent/client">
-            <select class="sel-lg" id="allocManager"><option value="">Select User</option></select>
+          <div class="filter-row" style="align-items:center;gap:10px">
+            <div id="allocRangeDropdownContainer"></div>
+            <div id="allocUserDropdownContainer"></div>
             <select class="sel-lg" id="allocPayterm" onchange="renderAlloc();allocRateRefresh()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select>
             <input type="number" style="width:130px" placeholder="Qty" id="allocQty" />
             <input type="number" style="width:130px" placeholder="Rate (default)" id="allocRate" step="0.000001" min="0" title="Allocation rate — defaults to Rate Management" oninput="this.dataset.dirty='1'"/>
@@ -3335,32 +3333,41 @@ function adminAllocTargets(){
   all.sort((a,b)=>a.label.localeCompare(b.label));
   return all;
 }
-function filterAllocRangeSelect(){
-  const q = (document.getElementById('allocRangeSearch')?.value || '').toLowerCase().trim();
-  const sel = document.getElementById('allocRange');
-  if(!sel) return;
-  const cur = sel.value;
+function refreshAdminAllocRangeDropdown(){
   const list = (typeof allocData !== 'undefined' ? allocData : []).map(r=>r.range).filter(Boolean);
   list.sort((a,b)=>a.localeCompare(b));
-  sel.innerHTML = '<option value="">Select Range</option>' +
-    list.filter(r=>!q || r.toLowerCase().includes(q)).map(r=>`<option value="${r}" ${r===cur?'selected':''}>${r}</option>`).join('');
-  if (typeof allocRateRefresh === 'function') allocRateRefresh();
+  const cur = document.getElementById('allocRange')?.value || '';
+  if (typeof window.renderSearchSelect === 'function') {
+    window.renderSearchSelect('allocRangeDropdownContainer', {
+      id: 'allocRange',
+      placeholder: 'Select Range',
+      searchPlaceholder: 'Search range...',
+      style: 'min-width:180px',
+      value: cur,
+      items: list.map(r=>({ value: r, label: r })),
+      onChange: function(){ if(typeof allocRateRefresh==='function') allocRateRefresh(); }
+    });
+  }
 }
-function filterAllocUserSelect(){
-  const q = (document.getElementById('allocManagerSearch')?.value || '').toLowerCase().trim();
-  const sel = document.getElementById('allocManager');
-  if(!sel) return;
-  const cur = sel.value;
-  const opts = adminAllocTargets().filter(u=>!q || u.label.toLowerCase().includes(q));
-  sel.innerHTML = '<option value="">Select User</option>' +
-    opts.map(u=>`<option value="${u.id}" ${String(u.id)===cur?'selected':''}>${u.label}</option>`).join('');
+function refreshAdminAllocUserDropdown(){
+  const opts = adminAllocTargets();
+  const cur = document.getElementById('allocManager')?.value || '';
+  if (typeof window.renderSearchSelect === 'function') {
+    window.renderSearchSelect('allocUserDropdownContainer', {
+      id: 'allocManager',
+      placeholder: 'Select User',
+      searchPlaceholder: 'Search users...',
+      style: 'min-width:220px',
+      value: cur,
+      items: opts.map(u=>({ value: u.id, label: u.label, search: u.label }))
+    });
+  }
 }
 function fillAdminAllocationTargets(){
   const opts=adminAllocTargets();
+  refreshAdminAllocUserDropdown();
   const html='<option value="">Select User</option>'+opts.map(u=>`<option value="${u.id}">${u.label}</option>`).join('');
-  const main=document.getElementById('allocManager'); if(main) main.innerHTML=html;
   document.querySelectorAll('select[id^="am"]').forEach(sel=>{ const cur=sel.value; sel.innerHTML=html; if(cur) sel.value=cur; });
-  filterAllocUserSelect();
 }
 function adminCycleRate(r,cycle){
   if(!r) return '0';
@@ -3378,7 +3385,7 @@ async function loadNumberSummary(){
     const rows=await API.get('/numbers/summary');
     allocData=(rows||[]).map(r=>({id:r.range_id,range:r.range_name,total:r.total||0,alloc:r.allocated||0,avail:r.available||0,rate:r.rate||'0',r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type}));
   }catch(e){allocData=[];}
-  fillSelect('allocRange',allocData.map(r=>r.range));
+  refreshAdminAllocRangeDropdown();
   fillAdminAllocationTargets();
   renderAlloc();
   if(typeof allocRateRefresh==='function') allocRateRefresh(); /* P19: default rate load */

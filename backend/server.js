@@ -4494,6 +4494,7 @@ app.delete('/api/panel-sharing/users/:id', authRequired, requireRole('admin'), (
 app.get('/api/panel-sharing/ranges', authRequired, requireRole('admin'), (req, res) => {
   const rows = db.all(`
     SELECT r.id, r.name, r.prefix, r.currency, r.payment_type,
+           r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
            COUNT(n.id) as total_numbers,
            SUM(CASE WHEN n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL THEN 1 ELSE 0 END) as available_numbers
     FROM ranges r
@@ -4523,76 +4524,234 @@ app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req
   const su=db.get('SELECT * FROM sharing_users WHERE id=? AND active=1',[userId]); if(!su) return res.status(404).json({error:'Sharing user not found'});
   if(!ids.length) return res.status(400).json({error:'ids[] required'});
   const ph=ids.map(()=>'?').join(',');
-  const rows=db.all(`SELECT n.id,n.number,r.name AS range_name FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE n.id IN (${ph}) AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL`, ids);
+  const rows=db.all(`SELECT n.id,n.number,r.name AS range_name,r.id AS range_id FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE n.id IN (${ph}) AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL`, ids);
   if(!rows.length) return res.status(404).json({error:'No unallocated numbers found'});
+
+  const price = String(b.price !== undefined ? b.price : (b.rate || '0')).trim();
+  const payterm = normalizePaymentCycle(b.payterm || 'weekly_7_1');
+
   try{ db.beginBatch&&db.beginBatch();
     const rowIds=rows.map(r=>r.id); const ph2=rowIds.map(()=>'?').join(',');
-    db.run(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, payout='0', rate='', payterm='weekly', alloc_source='manual' WHERE id IN (${ph2})`, [su.agent_user_id,...rowIds]);
+    db.run(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${ph2})`, [su.agent_user_id, price, price, price, payterm, ...rowIds]);
     rows.forEach(nr=>logNumberHistory(req,nr,'allocated','',su.panel_name,{target_role:'sharing_agent',sharing_user_id:su.id}));
-    logAction(req,'allocate_panel_sharing_numbers','panel_sharing',{count:rows.length,panel_name:su.panel_name});
+    logAction(req,'allocate_panel_sharing_numbers','panel_sharing',{count:rows.length,panel_name:su.panel_name,price,payterm});
     bumpNumbersVer();
-    res.json({ok:true,count:rows.length,panel_name:su.panel_name,rows:rows.map(r=>({range_name:r.range_name||'',number:r.number||''}))});
+
+    // Group rows by range
+    const rangeGroups = {};
+    for (const r of rows) {
+      const rName = r.range_name || 'Range';
+      if (!rangeGroups[rName]) rangeGroups[rName] = { range_name: rName, price: price, numbers: [] };
+      rangeGroups[rName].numbers.push(r.number);
+    }
+
+    res.json({
+      ok: true,
+      count: rows.length,
+      panel_name: su.panel_name,
+      price: price,
+      payterm: payterm,
+      ranges: Object.values(rangeGroups),
+      rows: rows.map(r=>({range_name:r.range_name||'',number:r.number||'',price:price}))
+    });
   } finally { try{db.endBatch&&db.endBatch()}catch(e){} }
 });
 app.post('/api/panel-sharing/bulk-allocate', authRequired, requireRole('admin'), (req, res) => {
   const b = req.body || {};
   const sharingUserId = parsePositiveInt(b.sharing_user_id, 0);
-  const rangeId = parsePositiveInt(b.range_id, 0);
-  const price = String(b.price !== undefined ? b.price : (b.rate || '0')).trim();
   const payterm = normalizePaymentCycle(b.payterm || 'weekly_7_1');
 
   const su = db.get('SELECT * FROM sharing_users WHERE id=? AND active=1', [sharingUserId]);
   if (!su) return res.status(404).json({ error: 'Sharing user not found or inactive' });
 
-  const range = db.get('SELECT * FROM ranges WHERE id=? AND COALESCE(deleted_at,"")=""', [rangeId]);
-  if (!range) return res.status(404).json({ error: 'Range not found' });
-
-  let rawNumbers = [];
-  if (Array.isArray(b.numbers)) rawNumbers = b.numbers;
-  else if (typeof b.numbers === 'string') {
-    rawNumbers = b.numbers.split(/[\r\n,;\t]+/).map(s => s.trim()).filter(Boolean);
+  // Handle Multi-Range bulk allocation (Section 40-51)
+  let rangeConfigs = [];
+  if (Array.isArray(b.ranges) && b.ranges.length) {
+    rangeConfigs = b.ranges.map(item => ({
+      range_id: parsePositiveInt(item.range_id || item.id, 0),
+      qty: parsePositiveInt(item.qty, 0)
+    })).filter(x => x.range_id > 0);
+  } else if (b.range_id) {
+    rangeConfigs = [{
+      range_id: parsePositiveInt(b.range_id, 0),
+      qty: parsePositiveInt(b.qty, 0)
+    }];
   }
 
-  const uniqueNums = [...new Set(rawNumbers.map(s => String(s).replace(/[^0-9+]/g, '').trim()).filter(Boolean))];
-  if (!uniqueNums.length) return res.status(400).json({ error: 'No valid numbers provided' });
+  // Single range with specific numbers pasted
+  if (b.numbers && rangeConfigs.length === 1) {
+    const rangeId = rangeConfigs[0].range_id;
+    const range = db.get('SELECT * FROM ranges WHERE id=? AND COALESCE(deleted_at,"")=""', [rangeId]);
+    if (!range) return res.status(404).json({ error: 'Range not found' });
+    const price = String(b.price !== undefined ? b.price : payoutRateForPaymentCycle(range, payterm)).trim();
 
-  let allocatedRows = [];
-  let failedList = [];
-  const CHUNK = 1000;
+    let rawNumbers = [];
+    if (Array.isArray(b.numbers)) rawNumbers = b.numbers;
+    else if (typeof b.numbers === 'string') {
+      rawNumbers = b.numbers.split(/[\r\n,;\t]+/).map(s => s.trim()).filter(Boolean);
+    }
+
+    const uniqueNums = [...new Set(rawNumbers.map(s => String(s).replace(/[^0-9+]/g, '').trim()).filter(Boolean))];
+    if (!uniqueNums.length) return res.status(400).json({ error: 'No valid numbers provided' });
+
+    let allocatedRows = [];
+    let failedList = [];
+    const CHUNK = 1000;
+
+    try {
+      if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
+
+      for (let i = 0; i < uniqueNums.length; i += CHUNK) {
+        const chunk = uniqueNums.slice(i, i + CHUNK);
+        const ph = chunk.map(() => '?').join(',');
+        const dbRows = db.all(
+          `SELECT id, number, manager_id, agent_id, client_id, range_id FROM numbers WHERE range_id=? AND number IN (${ph})`,
+          [rangeId, ...chunk]
+        );
+        const foundMap = new Map();
+        dbRows.forEach(r => foundMap.set(r.number, r));
+
+        const toAllocateIds = [];
+        for (const num of chunk) {
+          const row = foundMap.get(num);
+          if (!row) {
+            failedList.push({ number: num, reason: 'Number does not exist in selected range' });
+          } else if (row.manager_id !== null || row.agent_id !== null || row.client_id !== null) {
+            failedList.push({ number: num, reason: 'Already allocated to another user' });
+          } else {
+            toAllocateIds.push(row.id);
+            allocatedRows.push({ range_name: range.name, number: num, price });
+          }
+        }
+
+        if (toAllocateIds.length) {
+          const phAlloc = toAllocateIds.map(() => '?').join(',');
+          db.runNoSave(
+            `UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${phAlloc})`,
+            [su.agent_user_id, price, price, price, payterm, ...toAllocateIds]
+          );
+        }
+      }
+
+      if (db.inTransaction()) db.exec('COMMIT');
+      db.save();
+      clearApiReadCache();
+      bumpNumbersVer();
+
+      logAction(req, 'bulk_allocate_panel_sharing', 'panel_sharing', {
+        count: allocatedRows.length,
+        requested: uniqueNums.length,
+        skipped: failedList.length,
+        panel_name: su.panel_name,
+        range_name: range.name,
+        price
+      });
+
+      return res.json({
+        ok: true,
+        requested: uniqueNums.length,
+        allocated: allocatedRows.length,
+        skipped: failedList.length,
+        failed_numbers: failedList.slice(0, 100),
+        panel_name: su.panel_name,
+        range_name: range.name,
+        price,
+        rows: allocatedRows,
+        ranges: [{
+          range_id: range.id,
+          range_name: range.name,
+          requested: uniqueNums.length,
+          allocated: allocatedRows.length,
+          failed: failedList.length,
+          price: price,
+          numbers: allocatedRows.map(r => r.number)
+        }]
+      });
+    } catch (err) {
+      if (db.inTransaction()) db.exec('ROLLBACK');
+      return res.status(500).json({ error: 'Bulk allocation failed: ' + err.message });
+    }
+  }
+
+  // Multi-Range Bulk Allocation (Sections 40-51)
+  if (!rangeConfigs.length) return res.status(400).json({ error: 'Please select at least one range' });
+
+  const rangeResults = [];
+  let totalAllocated = 0;
+  let totalRequested = 0;
+  let totalFailed = 0;
 
   try {
     if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
 
-    for (let i = 0; i < uniqueNums.length; i += CHUNK) {
-      const chunk = uniqueNums.slice(i, i + CHUNK);
-      const ph = chunk.map(() => '?').join(',');
-      const dbRows = db.all(
-        `SELECT id, number, manager_id, agent_id, client_id, range_id FROM numbers WHERE range_id=? AND number IN (${ph})`,
-        [rangeId, ...chunk]
+    for (const item of rangeConfigs) {
+      const range = db.get('SELECT * FROM ranges WHERE id=? AND COALESCE(deleted_at,"")=""', [item.range_id]);
+      if (!range) {
+        rangeResults.push({
+          range_id: item.range_id,
+          range_name: 'Unknown Range #' + item.range_id,
+          requested: item.qty || 0,
+          allocated: 0,
+          failed: item.qty || 0,
+          price: '0',
+          error: 'Range not found',
+          numbers: []
+        });
+        totalFailed += (item.qty || 0);
+        continue;
+      }
+
+      // Authoritative Rate Card price for this range and billing period (Section 44, 47, 52)
+      const rangePrice = payoutRateForPaymentCycle(range, payterm);
+
+      // Select available unallocated numbers
+      let poolQuery = `SELECT id, number FROM numbers WHERE range_id=? AND manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL ORDER BY id ASC`;
+      const poolParams = [range.id];
+      if (item.qty > 0) {
+        poolQuery += ` LIMIT ?`;
+        poolParams.push(item.qty);
+      }
+      const pool = db.all(poolQuery, poolParams);
+      const reqCount = item.qty > 0 ? item.qty : pool.length;
+      totalRequested += reqCount;
+
+      if (!pool.length) {
+        rangeResults.push({
+          range_id: range.id,
+          range_name: range.name,
+          requested: reqCount,
+          allocated: 0,
+          failed: reqCount,
+          price: rangePrice,
+          error: 'No available unallocated numbers in this range',
+          numbers: []
+        });
+        totalFailed += reqCount;
+        continue;
+      }
+
+      const poolIds = pool.map(p => p.id);
+      const poolNums = pool.map(p => p.number);
+      const phPool = poolIds.map(() => '?').join(',');
+
+      db.runNoSave(
+        `UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${phPool})`,
+        [su.agent_user_id, rangePrice, rangePrice, rangePrice, payterm, ...poolIds]
       );
-      const foundMap = new Map();
-      dbRows.forEach(r => foundMap.set(r.number, r));
 
-      const toAllocateIds = [];
-      for (const num of chunk) {
-        const row = foundMap.get(num);
-        if (!row) {
-          failedList.push({ number: num, reason: 'Number does not exist in selected range' });
-        } else if (row.manager_id !== null || row.agent_id !== null || row.client_id !== null) {
-          failedList.push({ number: num, reason: 'Already allocated to another user' });
-        } else {
-          toAllocateIds.push(row.id);
-          allocatedRows.push({ range_name: range.name, number: num, price });
-        }
-      }
+      totalAllocated += pool.length;
+      const failedInThisRange = Math.max(0, reqCount - pool.length);
+      totalFailed += failedInThisRange;
 
-      if (toAllocateIds.length) {
-        const phAlloc = toAllocateIds.map(() => '?').join(',');
-        db.runNoSave(
-          `UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${phAlloc})`,
-          [su.agent_user_id, price, price, price, payterm, ...toAllocateIds]
-        );
-      }
+      rangeResults.push({
+        range_id: range.id,
+        range_name: range.name,
+        requested: reqCount,
+        allocated: pool.length,
+        failed: failedInThisRange,
+        price: rangePrice,
+        numbers: poolNums
+      });
     }
 
     if (db.inTransaction()) db.exec('COMMIT');
@@ -4600,25 +4759,21 @@ app.post('/api/panel-sharing/bulk-allocate', authRequired, requireRole('admin'),
     clearApiReadCache();
     bumpNumbersVer();
 
-    logAction(req, 'bulk_allocate_panel_sharing', 'panel_sharing', {
-      count: allocatedRows.length,
-      requested: uniqueNums.length,
-      skipped: failedList.length,
+    logAction(req, 'bulk_allocate_multi_range', 'panel_sharing', {
+      total_allocated: totalAllocated,
+      total_requested: totalRequested,
       panel_name: su.panel_name,
-      range_name: range.name,
-      price
+      range_count: rangeResults.length
     });
 
     res.json({
       ok: true,
-      requested: uniqueNums.length,
-      allocated: allocatedRows.length,
-      skipped: failedList.length,
-      failed_numbers: failedList.slice(0, 100),
       panel_name: su.panel_name,
-      range_name: range.name,
-      price,
-      rows: allocatedRows
+      payterm: payterm,
+      total_allocated: totalAllocated,
+      total_requested: totalRequested,
+      total_failed: totalFailed,
+      ranges: rangeResults
     });
   } catch (err) {
     if (db.inTransaction()) db.exec('ROLLBACK');

@@ -5,7 +5,7 @@
  *  2. Range Allocation Safe Quantity Handling (requested > available)
  *  3. Range Unallocation Quantity Reduction (requested > owned)
  *  4. SMS Number Allocation — Direct Reassignment (Client A -> Client B)
- *  5. Searchable Dropdowns & Alphabetical Sorting
+ *  5. Searchable Dropdowns with Search Inside & Alphabetical Sorting
  *  6. SMS Number Copy/Download preservation
  *  7. Agent Panel Security PIN & Binance UID preservation
  *  8-12. Panel Sharing SMPP Connection (Client & Server modes, credentials protection)
@@ -180,7 +180,6 @@ async function run() {
     assert.strictEqual(num.client_id, 201);
 
     // Agent 301 assigns number directly to Client 202
-    // Inside handleAllocate: update sets client_id=202 within agent's scope
     const agentScopeWhere = "n.agent_id = 301";
     const sets = "client_id=202, client_rate='0.008', payout='0.008'";
     const upd = db.run(
@@ -200,28 +199,30 @@ async function run() {
     db.run("DELETE FROM ranges WHERE id=?", [rid]);
   });
 
-  // --- SECTION 5: SEARCHABLE DROPDOWNS & A-Z SORTING ---
+  // --- SECTION 5: SEARCHABLE DROPDOWNS & A-Z SORTING (Sections 32, 33, 41) ---
   console.log('\n--- Section 5: Searchable Dropdowns & A-Z Sorting ---');
-  test('Dropdowns contain search fields and sorting is strictly alphabetical (A-Z)', () => {
+  test('Dropdowns contain search fields inside opened dropdown and sorting is strictly alphabetical (A-Z)', () => {
     const adminHtml = fs.readFileSync(path.join(__dirname, '../admin.html'), 'utf-8');
     const mgrHtml = fs.readFileSync(path.join(__dirname, '../manager.html'), 'utf-8');
     const agtHtml = fs.readFileSync(path.join(__dirname, '../agent.html'), 'utf-8');
     const psHtml = fs.readFileSync(path.join(__dirname, '../panel-sharing.html'), 'utf-8');
+    const gxJs = fs.readFileSync(path.join(__dirname, '../assets/galaxy.js'), 'utf-8');
 
-    assert(adminHtml.includes('id="allocRangeSearch"'), 'admin.html missing allocRangeSearch');
-    assert(adminHtml.includes('id="allocManagerSearch"'), 'admin.html missing allocManagerSearch');
+    assert(adminHtml.includes('allocRangeDropdownContainer'), 'admin.html missing allocRangeDropdownContainer');
+    assert(adminHtml.includes('allocUserDropdownContainer'), 'admin.html missing allocUserDropdownContainer');
     assert(adminHtml.includes('localeCompare'), 'admin.html missing alphabetical sort');
 
-    assert(mgrHtml.includes('id="baRangeSearch"'), 'manager.html missing baRangeSearch');
-    assert(mgrHtml.includes('id="baAgentSearch"'), 'manager.html missing baAgentSearch');
-    assert(mgrHtml.includes('managerAllocTargets'), 'manager.html missing managerAllocTargets');
+    assert(mgrHtml.includes('baRangeDropdownContainer'), 'manager.html missing baRangeDropdownContainer');
+    assert(mgrHtml.includes('baAgentDropdownContainer'), 'manager.html missing baAgentDropdownContainer');
 
-    assert(agtHtml.includes('id="baRangeSearch"'), 'agent.html missing baRangeSearch');
-    assert(agtHtml.includes('id="baClientSearch"'), 'agent.html missing baClientSearch');
-    assert(agtHtml.includes('agentAllocTargets'), 'agent.html missing agentAllocTargets');
+    assert(agtHtml.includes('baRangeDropdownContainer'), 'agent.html missing baRangeDropdownContainer');
+    assert(agtHtml.includes('baClientDropdownContainer'), 'agent.html missing baClientDropdownContainer');
 
-    assert(psHtml.includes('id="bulkRangeSearch"'), 'panel-sharing.html missing bulkRangeSearch');
-    assert(psHtml.includes('id="bulkUserSearch"'), 'panel-sharing.html missing bulkUserSearch');
+    assert(psHtml.includes('bulkRangeDropdownContainer'), 'panel-sharing.html missing bulkRangeDropdownContainer');
+    assert(psHtml.includes('bulkUserDropdownContainer'), 'panel-sharing.html missing bulkUserDropdownContainer');
+
+    // Verify search is inside dropdown menu
+    assert(gxJs.includes('sd-search-box'), 'galaxy.js missing sd-search-box inside dropdown');
   });
 
   // --- SECTIONS 15-18: PANEL SHARING BULK ALLOCATION & TWO CSV DOWNLOADS ---

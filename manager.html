@@ -562,11 +562,9 @@
     <div class="page-head"><div><h2>SMS Range Allocation</h2><div class="breadcrumb"><b>SMS Numbers</b> › Range Allocation</div></div></div>
     <div class="toolbar">
       <div style="font-weight:600;margin-bottom:12px;color:#5eead4">Allocate numbers to an Agent</div>
-      <div class="filter-row">
-        <input type="text" id="baRangeSearch" placeholder="🔍 Search range..." style="width:130px;font-size:12px;padding:6px 8px" oninput="filterManagerBaRanges()" title="Search range">
-        <select class="sel-lg" id="baRange"><option value="">Select Range</option></select>
-        <input type="text" id="baAgentSearch" placeholder="🔍 Search agent/client..." style="width:140px;font-size:12px;padding:6px 8px" oninput="filterManagerBaAgents()" title="Search agent or client">
-        <select class="sel-lg" id="baAgent"><option value="">Select Agent</option></select>
+      <div class="filter-row" style="align-items:center;gap:10px">
+        <div id="baRangeDropdownContainer"></div>
+        <div id="baAgentDropdownContainer"></div>
         <select class="sel-lg" id="baPayterm" onchange="renderBulk()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select>
         <input type="number" style="width:130px" placeholder="Qty" id="baQty"/>
         <button class="btn btn-teal" onclick="doBulk()">Allocate to Agent</button>
@@ -1470,33 +1468,42 @@ function managerAllocTargets(){
   all.sort((a,b)=>a.label.localeCompare(b.label));
   return all;
 }
-function filterManagerBaRanges(){
-  const q = (document.getElementById('baRangeSearch')?.value || '').toLowerCase().trim();
-  const sel = document.getElementById('baRange');
-  if(!sel) return;
-  const cur = sel.value;
+function refreshManagerBaRangeDropdown(){
   const list = (typeof baData !== 'undefined' ? baData : []).map(r=>r.range).filter(Boolean);
   list.sort((a,b)=>a.localeCompare(b));
-  sel.innerHTML = '<option value="">Select Range</option>' +
-    list.filter(r=>!q || r.toLowerCase().includes(q)).map(r=>`<option value="${r}" ${r===cur?'selected':''}>${r}</option>`).join('');
+  const cur = document.getElementById('baRange')?.value || '';
+  if (typeof window.renderSearchSelect === 'function') {
+    window.renderSearchSelect('baRangeDropdownContainer', {
+      id: 'baRange',
+      placeholder: 'Select Range',
+      searchPlaceholder: 'Search range...',
+      style: 'min-width:180px',
+      value: cur,
+      items: list.map(r=>({ value: r, label: r }))
+    });
+  }
 }
-function filterManagerBaAgents(){
-  const q = (document.getElementById('baAgentSearch')?.value || '').toLowerCase().trim();
-  const sel = document.getElementById('baAgent');
-  if(!sel) return;
-  const cur = sel.value;
-  const opts = managerAllocTargets().filter(u=>!q || u.label.toLowerCase().includes(q));
-  sel.innerHTML = '<option value="">Select Agent / Client</option>' +
-    opts.map(u=>`<option value="${u.username}" data-id="${u.id}" ${u.username===cur?'selected':''}>${u.label}</option>`).join('');
+function refreshManagerBaAgentDropdown(){
+  const opts = managerAllocTargets();
+  const cur = document.getElementById('baAgent')?.value || '';
+  if (typeof window.renderSearchSelect === 'function') {
+    window.renderSearchSelect('baAgentDropdownContainer', {
+      id: 'baAgent',
+      placeholder: 'Select Agent / Client',
+      searchPlaceholder: 'Search agent/client...',
+      style: 'min-width:220px',
+      value: cur,
+      items: opts.map(u=>({ value: u.username, label: u.label, search: u.label }))
+    });
+  }
 }
 async function loadNumberSummaryForBulk(){
   try{
     const rows=await API.get('/numbers/summary');
     baData=(rows||[]).map(r=>({id:r.range_id,range:r.range_name,total:r.total||0,alloc:r.allocated||0,avail:r.available||0,rate:r.rate||'0',r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type}));
   }catch(e){baData=[];}
-  fillSel('baRange',baData.map(r=>r.range));
-  filterManagerBaRanges();
-  filterManagerBaAgents();
+  refreshManagerBaRangeDropdown();
+  refreshManagerBaAgentDropdown();
   renderBulk();
 }
 
