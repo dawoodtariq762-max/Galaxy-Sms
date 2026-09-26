@@ -21,7 +21,7 @@
     const opt = { method, headers: { 'Content-Type': 'application/json' } };
     const t = TOKEN();
     if (t) opt.headers['Authorization'] = 'Bearer ' + t;
-    const unlock = sessionStorage.getItem('gx_chat_unlock_token');
+    const unlock = sessionStorage.getItem('gx_chat_unlock_token') || localStorage.getItem('gx_chat_unlock_token');
     if (unlock) opt.headers['X-Chat-Unlock-Token'] = unlock;
     if (body !== undefined) opt.body = JSON.stringify(body);
     const r = await fetch('/api' + path, opt);
@@ -36,7 +36,7 @@
     const opt = { method: 'POST', body: formData, headers: {} };
     const t = TOKEN();
     if (t) opt.headers['Authorization'] = 'Bearer ' + t;
-    const unlock = sessionStorage.getItem('gx_chat_unlock_token');
+    const unlock = sessionStorage.getItem('gx_chat_unlock_token') || localStorage.getItem('gx_chat_unlock_token');
     if (unlock) opt.headers['X-Chat-Unlock-Token'] = unlock;
     const r = await fetch('/api' + path, opt);
     if (r.status === 401) { clearAuthStorage(); location.href = '/panel-login'; throw new Error('Session expired'); }

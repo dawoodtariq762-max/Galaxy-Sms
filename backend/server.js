@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const os = require('os');
 try { require('dotenv').config({ path: path.join(__dirname, '..', '.env') }); require('dotenv').config({ path: path.join(__dirname, '.env') }); } catch (_) {}
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const db = require('./db');
 const { createTables } = require('./schema');
 const { seed } = require('./seed');
@@ -2391,22 +2392,8 @@ function handleAllocate(req, res) {
   //  - single BEGIN IMMEDIATE transaction → concurrent duplicate requests can
   //    no longer both "succeed" (race condition [audit-confirmed] fixed).
   const slotCol = { manager: 'manager_id', agent: 'agent_id', client: 'client_id' }[target.role];
-  const force = truthy(req.body && req.body.force) && slotCol !== undefined; // callers are never clients, but stay defensive
+  const force = truthy(req.body && req.body.force) && slotCol !== undefined;
   const scope = numberScope(req.user, 'n');
-  /* P19 FIX (pre-existing regression from f31ee62 audit guard #21–#25, 2026-09-13):
-     Purana ownGuard sirf fully-unallocated (teen slots NULL) ya already-target numbers
-     allow karta tha — is liye MANAGER apne pool ke numbers AGENT ko panel se allocate
-     karta tha to SKIPPED ho jate the (allocated:0, silent fail — UI "✅ allocated" dikha
-     raha tha) aur AGENT→CLIENT bhi same trap me tha. Manager/agent ke liye scope.where
-     pehle hi unke apne pool tak restrict karta hai, to steal ka akela risk target slot
-     hai — guard ab "target slot free ya already-target" hai (do agents ke beech silent
-     X→Y move ab bhi impossible — unallocate ya force chahiye). Admin ke liye strict
-     fully-unallocated rule barkarar (admin ke paas force hai). Rollback (purani line):
-     const ownGuard = force ? '1=1' : `((n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL) OR n.${slotCol}=?)`; */
-  const ownGuard = force ? '1=1'
-    : req.user.role === 'admin'
-      ? `((n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL) OR n.${slotCol}=?)`
-      : `(n.${slotCol} IS NULL OR n.${slotCol}=?)`;
 
   const TEMP = 'tmp_alloc_ids';
   let allocatedCount = 0;
@@ -2427,10 +2414,13 @@ function handleAllocate(req, res) {
       if (db.inTransaction()) db.exec('COMMIT');
       return res.status(404).json({ error: 'No numbers found' });
     }
-    const updParams = force ? [...vals, ...scope.params] : [...vals, ...scope.params, target.id];
+    // Direct Reassignment for SMS Numbers:
+    // Authorized callers can directly move numbers between permitted owners
+    // within their scope (e.g. Client A -> Client B) without manual unallocation first.
+    const updParams = [...vals, ...scope.params];
     const upd = db.runNoSave(
       `UPDATE numbers AS n SET ${sets}
-       WHERE n.id IN (SELECT id FROM ${TEMP}) AND (${scope.where}) AND ${ownGuard}`,
+       WHERE n.id IN (SELECT id FROM ${TEMP}) AND (${scope.where})`,
       updParams);
     allocatedCount = upd.changes || 0;
     // capture the post-state rows we actually own now (for history + response)
@@ -2439,11 +2429,11 @@ function handleAllocate(req, res) {
     db.execNoSave(`DROP TABLE IF EXISTS ${TEMP}`);
     if (db.inTransaction()) db.exec('COMMIT');
 
-    const conflictRows = beforeRows.filter(r => (r.manager_id || r.agent_id || r.client_id) && r[slotCol] !== target.id);
+    const conflictRows = beforeRows.filter(r => (r.manager_id || r.agent_id || r.client_id) && r[slotCol] && r[slotCol] !== target.id);
     // history only for rows this call actually set to the target (before-state kept)
     try {
       db.beginBatch();
-      for (const nr of afterRows) logNumberHistory(req, nr, 'allocated', '', target.username, { target_role: target.role, forced: force || undefined });
+      for (const nr of afterRows) logNumberHistory(req, nr, 'allocated', '', target.username, { target_role: target.role, forced: force || undefined, reassigned: conflictRows.length > 0 });
     } finally { db.endBatch(); }
 
     const response = {
@@ -2452,7 +2442,7 @@ function handleAllocate(req, res) {
       requested: beforeRows.length,
       allocated: allocatedCount,
       skipped: Math.max(0, beforeRows.length - allocatedCount),
-      ...(force && conflictRows.length ? { reassigned: conflictRows.length } : {}),
+      ...(conflictRows.length ? { reassigned: conflictRows.length } : {}),
       ...(conflictRows.length && !force ? { conflicts_sample: conflictRows.slice(0, 10).map(r => ({ id: r.id, number: r.number })) } : {}),
     };
     logAction(req, 'allocate_numbers', 'numbers',
@@ -3082,7 +3072,7 @@ app.post('/api/numbers/unallocate-by-range', authRequired, (req, res) => {
     FROM numbers n
     WHERE n.range_id=? AND ${scope.where} AND n.${ownerCol} IS NOT NULL
     ORDER BY n.id ASC LIMIT ?`, [rangeId, ...scope.params, qty]);
-  if (!rows.length) return res.status(404).json({ error: 'Allocated numbers were not found' });
+  if (!rows.length) return res.json({ ok: true, count: 0, unallocated: 0, requested: qty, message: 'No numbers currently allocated for this user/range.' });
   const ids = rows.map(r => r.id);
   const ph = ids.map(() => '?').join(',');
 
@@ -3092,7 +3082,11 @@ app.post('/api/numbers/unallocate-by-range', authRequired, (req, res) => {
 
   rows.forEach(nr=>logNumberHistory(req,nr,'unallocated','','','Unallocate range quantity'));
   logAction(req,'unallocate_numbers_by_range','numbers',{rangeId,count:rows.length,role:req.user.role});
-  res.json({ ok:true, count: rows.length });
+  let msg = `Successfully unallocated ${rows.length} numbers.`;
+  if (rows.length < qty) {
+    msg = `Only ${rows.length} numbers were allocated. Requested reduction was ${qty}. Therefore, unallocated all ${rows.length} owned numbers.`;
+  }
+  res.json({ ok: true, count: rows.length, unallocated: rows.length, requested: qty, message: msg });
 });
 
 
@@ -3265,7 +3259,13 @@ app.post('/api/numbers/smart-divide', authRequired, async (req, res) => {
   // Small jobs: wait for completion but still yield internally so event loop stays responsive.
   while(['queued','processing'].includes(job.status)) await new Promise(r=>setTimeout(r,50));
   if(job.status==='failed') return res.status(500).json({ok:false,error:job.error||'Job failed',job_id:job.job_id});
-  res.json({ok:true,total:job.total||0,report:job.report||[],job_id:job.job_id});
+  const requested = cleanRangeIds.length * cleanQty;
+  const allocated = job.total || 0;
+  let allocMsg = `Successfully allocated ${allocated} numbers.`;
+  if (allocated < requested) {
+    allocMsg = `Only ${allocated} numbers were available out of ${requested} requested. Therefore, only ${allocated} numbers were allocated.`;
+  }
+  res.json({ok:true,total:allocated,allocated,requested,message:allocMsg,report:job.report||[],job_id:job.job_id});
 });
 
 
@@ -4419,7 +4419,20 @@ app.delete('/api/limit-management/:id', authRequired, requireRole('admin'), (req
 
 
 /* ============ PANEL SHARING (Admin-only external panel allocation) ============ */
-function sharingPublic(row){ return row ? {...row, password: undefined, password_hash: undefined} : row; }
+function sharingPublic(row){
+  if (!row) return row;
+  const { password, password_hash, ...rest } = row;
+  let safeHttp = rest.http_config;
+  if (safeHttp && typeof safeHttp === 'string') {
+    try {
+      const parsed = JSON.parse(safeHttp);
+      if (parsed.auth_token) parsed.auth_token = '********';
+      if (parsed.auth_password) parsed.auth_password = '********';
+      safeHttp = JSON.stringify(parsed);
+    } catch (_) {}
+  }
+  return { ...rest, http_config: safeHttp };
+}
 function sharingUserByAgent(agentId){ return db.get('SELECT * FROM sharing_users WHERE agent_user_id=? AND active=1', [agentId]); }
 function sharingAgentUser(row){ return db.get('SELECT * FROM users WHERE id=?', [row.agent_user_id]); }
 app.get('/api/panel-sharing/dashboard', authRequired, requireRole('admin'), (req,res)=>{
@@ -4436,10 +4449,13 @@ app.post('/api/panel-sharing/users', authRequired, requireRole('admin'), (req,re
   const b=req.body||{}; const panel=String(b.panel_name||'').trim(); const username=String(b.username||'').trim(); const password=String(b.password||'');
   if(!panel||!username||!password) return res.status(400).json({error:'panel_name, username and password required'});
   if(db.get('SELECT id FROM users WHERE username=? COLLATE NOCASE',[username])) return res.status(409).json({error:'Username already exists'});
+  const connType = String(b.connection_type || 'activity').toLowerCase();
+  const httpCfg = typeof b.http_config === 'object' ? JSON.stringify(b.http_config) : String(b.http_config || '');
+  const smppId = b.smpp_connection_id ? parseInt(b.smpp_connection_id, 10) : null;
   try{ db.beginBatch&&db.beginBatch();
     const ins=db.run(`INSERT INTO users (username,password,role,name,email,whatsapp,contact,skype,parent_id,active,payment_type) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [username,bcrypt.hashSync(password,10),'agent',String(b.user_name||panel),b.email||'',b.whatsapp||'',b.contact||'',b.skype||'',req.user.id,b.active===false?0:1,'weekly']);
-    db.run('INSERT INTO sharing_users (agent_user_id,panel_name,user_name,username,attribute_url,active,created_by) VALUES (?,?,?,?,?,?,?)',[ins.lastInsertRowid,panel,String(b.user_name||''),username,String(b.attribute_url||''),b.active===false?0:1,req.user.id]);
-    logAction(req,'create_sharing_user','panel_sharing',{panel_name:panel,username});
+    db.run('INSERT INTO sharing_users (agent_user_id,panel_name,user_name,username,attribute_url,active,created_by,connection_type,http_config,smpp_connection_id) VALUES (?,?,?,?,?,?,?,?,?,?)',[ins.lastInsertRowid,panel,String(b.user_name||''),username,String(b.attribute_url||''),b.active===false?0:1,req.user.id,connType,httpCfg,smppId]);
+    logAction(req,'create_sharing_user','panel_sharing',{panel_name:panel,username,connection_type:connType});
     res.json({ok:true,id:ins.lastInsertRowid});
   } finally { try{db.endBatch&&db.endBatch()}catch(e){} }
 });
@@ -4447,11 +4463,24 @@ app.put('/api/panel-sharing/users/:id', authRequired, requireRole('admin'), (req
   const id=+req.params.id; const row=db.get('SELECT * FROM sharing_users WHERE id=?',[id]); if(!row) return res.status(404).json({error:'Sharing user not found'});
   const b=req.body||{}; const panel=String(b.panel_name||row.panel_name).trim(); const username=String(b.username||row.username).trim();
   const other=db.get('SELECT id FROM users WHERE username=? COLLATE NOCASE AND id<>?',[username,row.agent_user_id]); if(other) return res.status(409).json({error:'Username already exists'});
+  const connType = String(b.connection_type || row.connection_type || 'activity').toLowerCase();
+  let httpCfg = b.http_config !== undefined ? (typeof b.http_config === 'object' ? JSON.stringify(b.http_config) : String(b.http_config)) : row.http_config;
+  // If password/token masked, keep existing
+  if (httpCfg && httpCfg.includes('********')) {
+    try {
+      const cur = JSON.parse(row.http_config || '{}');
+      const neu = JSON.parse(httpCfg);
+      if (neu.auth_token === '********') neu.auth_token = cur.auth_token || '';
+      if (neu.auth_password === '********') neu.auth_password = cur.auth_password || '';
+      httpCfg = JSON.stringify(neu);
+    } catch (_) {}
+  }
+  const smppId = b.smpp_connection_id !== undefined ? (b.smpp_connection_id ? parseInt(b.smpp_connection_id, 10) : null) : row.smpp_connection_id;
   try{ db.beginBatch&&db.beginBatch();
-    db.run('UPDATE sharing_users SET panel_name=?,user_name=?,username=?,attribute_url=?,active=?,updated_at=datetime(\'now\') WHERE id=?',[panel,String(b.user_name||''),username,String(b.attribute_url||''),b.active===false?0:1,id]);
+    db.run('UPDATE sharing_users SET panel_name=?,user_name=?,username=?,attribute_url=?,active=?,connection_type=?,http_config=?,smpp_connection_id=?,updated_at=datetime(\'now\') WHERE id=?',[panel,String(b.user_name||''),username,String(b.attribute_url||''),b.active===false?0:1,connType,httpCfg,smppId,id]);
     db.run('UPDATE users SET username=?,name=?,active=? WHERE id=?',[username,String(b.user_name||panel),b.active===false?0:1,row.agent_user_id]);
     if(b.password) db.run('UPDATE users SET password=? WHERE id=?',[bcrypt.hashSync(String(b.password),10),row.agent_user_id]);
-    logAction(req,'update_sharing_user','panel_sharing',{id,panel_name:panel});
+    logAction(req,'update_sharing_user','panel_sharing',{id,panel_name:panel,connection_type:connType});
     res.json({ok:true});
   } finally { try{db.endBatch&&db.endBatch()}catch(e){} }
 });
@@ -4461,6 +4490,19 @@ app.delete('/api/panel-sharing/users/:id', authRequired, requireRole('admin'), (
   db.run('UPDATE users SET active=0 WHERE id=?',[row.agent_user_id]);
   logAction(req,'disable_sharing_user','panel_sharing',{id});
   res.json({ok:true});
+});
+app.get('/api/panel-sharing/ranges', authRequired, requireRole('admin'), (req, res) => {
+  const rows = db.all(`
+    SELECT r.id, r.name, r.prefix, r.currency, r.payment_type,
+           COUNT(n.id) as total_numbers,
+           SUM(CASE WHEN n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL THEN 1 ELSE 0 END) as available_numbers
+    FROM ranges r
+    LEFT JOIN numbers n ON n.range_id=r.id
+    WHERE COALESCE(r.deleted_at,'')=''
+    GROUP BY r.id
+    ORDER BY r.name COLLATE NOCASE ASC
+  `);
+  res.json(rows);
 });
 app.get('/api/panel-sharing/numbers', authRequired, requireRole('admin'), (req,res)=>cachedJson(req,res,1500,()=>{
   const q=String(req.query.search||'').trim(); const range=String(req.query.range||'').trim();
@@ -4485,28 +4527,280 @@ app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req
   if(!rows.length) return res.status(404).json({error:'No unallocated numbers found'});
   try{ db.beginBatch&&db.beginBatch();
     const rowIds=rows.map(r=>r.id); const ph2=rowIds.map(()=>'?').join(',');
-    db.run(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, payout='0', rate='', payterm='weekly' WHERE id IN (${ph2})`, [su.agent_user_id,...rowIds]);
+    db.run(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, payout='0', rate='', payterm='weekly', alloc_source='manual' WHERE id IN (${ph2})`, [su.agent_user_id,...rowIds]);
     rows.forEach(nr=>logNumberHistory(req,nr,'allocated','',su.panel_name,{target_role:'sharing_agent',sharing_user_id:su.id}));
     logAction(req,'allocate_panel_sharing_numbers','panel_sharing',{count:rows.length,panel_name:su.panel_name});
     bumpNumbersVer();
     res.json({ok:true,count:rows.length,panel_name:su.panel_name,rows:rows.map(r=>({range_name:r.range_name||'',number:r.number||''}))});
   } finally { try{db.endBatch&&db.endBatch()}catch(e){} }
 });
+app.post('/api/panel-sharing/bulk-allocate', authRequired, requireRole('admin'), (req, res) => {
+  const b = req.body || {};
+  const sharingUserId = parsePositiveInt(b.sharing_user_id, 0);
+  const rangeId = parsePositiveInt(b.range_id, 0);
+  const price = String(b.price !== undefined ? b.price : (b.rate || '0')).trim();
+  const payterm = normalizePaymentCycle(b.payterm || 'weekly_7_1');
+
+  const su = db.get('SELECT * FROM sharing_users WHERE id=? AND active=1', [sharingUserId]);
+  if (!su) return res.status(404).json({ error: 'Sharing user not found or inactive' });
+
+  const range = db.get('SELECT * FROM ranges WHERE id=? AND COALESCE(deleted_at,"")=""', [rangeId]);
+  if (!range) return res.status(404).json({ error: 'Range not found' });
+
+  let rawNumbers = [];
+  if (Array.isArray(b.numbers)) rawNumbers = b.numbers;
+  else if (typeof b.numbers === 'string') {
+    rawNumbers = b.numbers.split(/[\r\n,;\t]+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  const uniqueNums = [...new Set(rawNumbers.map(s => String(s).replace(/[^0-9+]/g, '').trim()).filter(Boolean))];
+  if (!uniqueNums.length) return res.status(400).json({ error: 'No valid numbers provided' });
+
+  let allocatedRows = [];
+  let failedList = [];
+  const CHUNK = 1000;
+
+  try {
+    if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
+
+    for (let i = 0; i < uniqueNums.length; i += CHUNK) {
+      const chunk = uniqueNums.slice(i, i + CHUNK);
+      const ph = chunk.map(() => '?').join(',');
+      const dbRows = db.all(
+        `SELECT id, number, manager_id, agent_id, client_id, range_id FROM numbers WHERE range_id=? AND number IN (${ph})`,
+        [rangeId, ...chunk]
+      );
+      const foundMap = new Map();
+      dbRows.forEach(r => foundMap.set(r.number, r));
+
+      const toAllocateIds = [];
+      for (const num of chunk) {
+        const row = foundMap.get(num);
+        if (!row) {
+          failedList.push({ number: num, reason: 'Number does not exist in selected range' });
+        } else if (row.manager_id !== null || row.agent_id !== null || row.client_id !== null) {
+          failedList.push({ number: num, reason: 'Already allocated to another user' });
+        } else {
+          toAllocateIds.push(row.id);
+          allocatedRows.push({ range_name: range.name, number: num, price });
+        }
+      }
+
+      if (toAllocateIds.length) {
+        const phAlloc = toAllocateIds.map(() => '?').join(',');
+        db.runNoSave(
+          `UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${phAlloc})`,
+          [su.agent_user_id, price, price, price, payterm, ...toAllocateIds]
+        );
+      }
+    }
+
+    if (db.inTransaction()) db.exec('COMMIT');
+    db.save();
+    clearApiReadCache();
+    bumpNumbersVer();
+
+    logAction(req, 'bulk_allocate_panel_sharing', 'panel_sharing', {
+      count: allocatedRows.length,
+      requested: uniqueNums.length,
+      skipped: failedList.length,
+      panel_name: su.panel_name,
+      range_name: range.name,
+      price
+    });
+
+    res.json({
+      ok: true,
+      requested: uniqueNums.length,
+      allocated: allocatedRows.length,
+      skipped: failedList.length,
+      failed_numbers: failedList.slice(0, 100),
+      panel_name: su.panel_name,
+      range_name: range.name,
+      price,
+      rows: allocatedRows
+    });
+  } catch (err) {
+    if (db.inTransaction()) db.exec('ROLLBACK');
+    res.status(500).json({ error: 'Bulk allocation failed: ' + err.message });
+  }
+});
+app.post('/api/panel-sharing/http/test', authRequired, requireRole('admin'), async (req, res) => {
+  const b = req.body || {};
+  const url = cleanUrl(b.url);
+  if (!url) return res.status(400).json({ error: 'URL is required' });
+  const method = (b.method || 'POST').toUpperCase();
+  const authType = b.auth_type || 'none';
+  const token = b.auth_token || '';
+  const headers = { 'User-Agent': 'Galaxy-SMS-Webhook-Test/2.0' };
+
+  if (authType === 'bearer' && token) headers['Authorization'] = 'Bearer ' + token;
+  else if (authType === 'header' && token) headers[b.auth_header || 'X-API-Key'] = token;
+  else if (authType === 'basic' && (b.auth_username || b.auth_password)) {
+    headers['Authorization'] = 'Basic ' + Buffer.from(`${b.auth_username || ''}:${b.auth_password || ''}`).toString('base64');
+  }
+
+  const sampleData = {
+    cli: '67425',
+    number: '+44712345678',
+    message: 'Galaxy SMS connection test code: 123456',
+    date: new Date().toISOString().slice(0, 10),
+    time: new Date().toISOString().slice(11, 19),
+    otp_code: '123456',
+    range_name: 'Test Range',
+    is_test: true
+  };
+
+  const m = b.map || {};
+  const payload = {};
+  payload[m.cli || 'cli'] = sampleData.cli;
+  payload[m.number || 'number'] = sampleData.number;
+  payload[m.message || 'message'] = sampleData.message;
+  payload[m.date || 'date'] = sampleData.date;
+  payload[m.time || 'time'] = sampleData.time;
+  payload[m.otp_code || 'otp_code'] = sampleData.otp_code;
+  payload[m.range_name || 'range_name'] = sampleData.range_name;
+
+  if (b.custom_params && typeof b.custom_params === 'object') {
+    Object.assign(payload, b.custom_params);
+  }
+
+  let fullUrl = url;
+  const init = { method, headers, signal: AbortSignal.timeout(10000) };
+  if (method === 'GET') {
+    try {
+      const u = new URL(url);
+      if (authType === 'query' && token) u.searchParams.set(b.auth_query || 'token', token);
+      for (const [k, v] of Object.entries(payload)) u.searchParams.set(k, String(v));
+      fullUrl = u.toString();
+    } catch (_) {}
+  } else {
+    headers['Content-Type'] = 'application/json';
+    if (authType === 'query' && token) {
+      try {
+        const u = new URL(url);
+        u.searchParams.set(b.auth_query || 'token', token);
+        fullUrl = u.toString();
+      } catch (_) {}
+    }
+    init.body = JSON.stringify(payload);
+  }
+
+  try {
+    const resp = await fetch(fullUrl, init);
+    const text = await resp.text();
+    const preview = text.slice(0, 500);
+    res.json({
+      ok: resp.ok,
+      status: resp.status,
+      status_text: resp.statusText,
+      response_preview: preview,
+      tested_url: fullUrl.replace(/(token|key|password|secret|bearer)=?([^\s&]+)/gi, '$1=***')
+    });
+  } catch (e) {
+    res.json({
+      ok: false,
+      status: 0,
+      error: e.message || String(e),
+      tested_url: fullUrl.replace(/(token|key|password|secret|bearer)=?([^\s&]+)/gi, '$1=***')
+    });
+  }
+});
 app.get('/api/panel-sharing/forward-logs', authRequired, requireRole('admin'), (req,res)=>{
   res.json(db.all(`SELECT l.*, su.panel_name FROM sharing_forward_logs l LEFT JOIN sharing_users su ON su.id=l.sharing_user_id ORDER BY l.id DESC LIMIT 500`));
 });
 function forwardSharingOtpIfNeeded(savedId, smsRow){
   if(!savedId || !smsRow || !smsRow.agent_id) return;
-  const su=sharingUserByAgent(smsRow.agent_id); if(!su || !su.attribute_url) return;
+  const su=sharingUserByAgent(smsRow.agent_id); if(!su) return;
   setImmediate(async()=>{
+    const rangeName=db.get('SELECT name FROM ranges WHERE id=?',[smsRow.range_id])?.name||'';
+    const connType = String(su.connection_type || 'activity').toLowerCase();
+
+    // 1. SMPP Forwarding
+    if (connType === 'smpp' && su.smpp_connection_id) {
+      let status='failed', error='', preview='';
+      try{
+        const r = smppService.queueOutbound(su.smpp_connection_id, smsRow.number, smsRow.message, smsRow.cli);
+        status = 'success'; preview = 'Queued in SMPP outbox: ID ' + r.id;
+      }catch(e){ error=e.message||String(e); }
+      try{ db.run('INSERT INTO sharing_forward_logs (sharing_user_id,sms_record_id,url,status,error,response_preview,connection_type) VALUES (?,?,?,?,?,?,?)',[su.id,savedId,'SMPP:'+su.smpp_connection_id,status,error,preview,'smpp']); }catch(_){}
+      return;
+    }
+
+    // 2. HTTP Connection Forwarding with custom mapping
+    if (connType === 'http' && su.http_config) {
+      let status='failed', error='', preview='';
+      let targetUrl = '';
+      try{
+        const cfg = typeof su.http_config === 'string' ? JSON.parse(su.http_config) : (su.http_config || {});
+        targetUrl = cleanUrl(cfg.url);
+        if (!targetUrl) throw new Error('HTTP URL not configured');
+
+        const method = (cfg.method || 'POST').toUpperCase();
+        const authType = cfg.auth_type || 'none';
+        const token = cfg.auth_token || '';
+        const headers = { 'User-Agent': 'Galaxy-SMS-Forwarder/2.0' };
+
+        if (authType === 'bearer' && token) headers['Authorization'] = 'Bearer ' + token;
+        else if (authType === 'header' && token) headers[cfg.auth_header || 'X-API-Key'] = token;
+        else if (authType === 'basic' && (cfg.auth_username || cfg.auth_password)) {
+          headers['Authorization'] = 'Basic ' + Buffer.from(`${cfg.auth_username || ''}:${cfg.auth_password || ''}`).toString('base64');
+        }
+
+        const recDate = String(smsRow.received_at || new Date().toISOString());
+        const dOnly = recDate.slice(0, 10);
+        const tOnly = recDate.length >= 19 ? recDate.slice(11, 19) : recDate;
+
+        const m = cfg.map || {};
+        const payload = {};
+        payload[m.cli || 'cli'] = smsRow.cli;
+        payload[m.number || 'number'] = smsRow.number;
+        payload[m.message || 'message'] = smsRow.message;
+        payload[m.date || 'date'] = dOnly;
+        payload[m.time || 'time'] = tOnly;
+        payload[m.otp_code || 'otp_code'] = smsRow.otp_code || '';
+        payload[m.range_name || 'range_name'] = rangeName;
+        payload[m.sms_id || 'sms_id'] = savedId;
+
+        if (cfg.custom_params && typeof cfg.custom_params === 'object') {
+          Object.assign(payload, cfg.custom_params);
+        }
+
+        let reqUrl = targetUrl;
+        const init = { method, headers, signal: AbortSignal.timeout(10000) };
+        if (method === 'GET') {
+          const u = new URL(targetUrl);
+          if (authType === 'query' && token) u.searchParams.set(cfg.auth_query || 'token', token);
+          for (const [k, v] of Object.entries(payload)) u.searchParams.set(k, String(v));
+          reqUrl = u.toString();
+        } else {
+          headers['Content-Type'] = 'application/json';
+          if (authType === 'query' && token) {
+            const u = new URL(targetUrl);
+            u.searchParams.set(cfg.auth_query || 'token', token);
+            reqUrl = u.toString();
+          }
+          init.body = JSON.stringify(payload);
+        }
+
+        const resp = await fetch(reqUrl, init);
+        preview = (await resp.text()).slice(0, 250);
+        status = resp.ok ? 'success' : 'failed';
+        if (!resp.ok) error = 'HTTP ' + resp.status;
+      }catch(e){ error=e.message||String(e); }
+      try{ db.run('INSERT INTO sharing_forward_logs (sharing_user_id,sms_record_id,url,status,error,response_preview,connection_type) VALUES (?,?,?,?,?,?,?)',[su.id,savedId,targetUrl||'http',status,error,preview,'http']); }catch(_){}
+      return;
+    }
+
+    // 3. Activity Connection (Legacy / Default)
+    if (!su.attribute_url) return;
     let status='failed', error='', preview='';
     try{
-      const rangeName=db.get('SELECT name FROM ranges WHERE id=?',[smsRow.range_id])?.name||'';
       const payload={number:smsRow.number,cli:smsRow.cli,message:smsRow.message,otp_code:smsRow.otp_code,range_name:rangeName,received_at:new Date().toISOString(),panel_name:su.panel_name};
       const resp=await fetch(su.attribute_url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout?AbortSignal.timeout(10000):undefined});
       preview=(await resp.text()).slice(0,250); status=resp.ok?'success':'failed'; if(!resp.ok) error='HTTP '+resp.status;
     }catch(e){ error=e.message||String(e); }
-    try{ db.run('INSERT INTO sharing_forward_logs (sharing_user_id,sms_record_id,url,status,error,response_preview) VALUES (?,?,?,?,?,?)',[su.id,savedId,su.attribute_url,status,error,preview]); }catch(e){}
+    try{ db.run('INSERT INTO sharing_forward_logs (sharing_user_id,sms_record_id,url,status,error,response_preview,connection_type) VALUES (?,?,?,?,?,?,?)',[su.id,savedId,su.attribute_url,status,error,preview,'activity']); }catch(_){}
   });
 }
 

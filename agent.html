@@ -566,7 +566,9 @@
         <div class="toolbar">
           <div style="font-weight:600;margin-bottom:12px;color:#93c5fd">Allocate numbers to a Client</div>
           <div class="filter-row">
+            <input type="text" id="baRangeSearch" placeholder="🔍 Search range..." style="width:130px;font-size:12px;padding:6px 8px" oninput="filterAgentBaRanges()" title="Search range">
             <select class="sel-lg" id="baRange"><option value="">Select Range</option></select>
+            <input type="text" id="baClientSearch" placeholder="🔍 Search client..." style="width:140px;font-size:12px;padding:6px 8px" oninput="filterAgentBaClients()" title="Search client">
             <select class="sel-lg" id="baClient"><option value="">Select Client</option></select>
             <select class="sel-lg" id="baPayterm" onchange="renderBulk()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select>
             <input type="number" style="width:130px" placeholder="Qty" id="baQty"/>
@@ -779,7 +781,7 @@
 if(window.API){ API.guard('agent'); }
 /* P21: Security Lock for Chat and Payment */
 function isChatPaymentUnlocked(){
-  const token = sessionStorage.getItem('gx_chat_unlock_token');
+  const token = sessionStorage.getItem('gx_chat_unlock_token') || localStorage.getItem('gx_chat_unlock_token');
   return !!token;
 }
 
@@ -796,6 +798,7 @@ async function checkChatSecurityEnabled(){
     const res = await API.get('/chat/auth/lock-status');
     if(res && res.unlocked && res.unlock_token){
       sessionStorage.setItem('gx_chat_unlock_token', res.unlock_token);
+      localStorage.setItem('gx_chat_unlock_token', res.unlock_token);
     }
     updateNavLockIndicators();
     return true;
@@ -841,6 +844,7 @@ async function unlockSectionWithPin(section){
     if(res.ok && data.ok){
       if(data.unlock_token){
         sessionStorage.setItem('gx_chat_unlock_token', data.unlock_token);
+        localStorage.setItem('gx_chat_unlock_token', data.unlock_token);
       }
       updateNavLockIndicators();
       if(inp) inp.value = '';
@@ -886,7 +890,9 @@ function revealUnlockedSection(section){
 
 function relockChatPayment(){
   sessionStorage.removeItem('gx_chat_unlock_token');
+  localStorage.removeItem('gx_chat_unlock_token');
   sessionStorage.removeItem('gx_agent_sec_unlocked');
+  localStorage.removeItem('gx_agent_sec_unlocked');
   updateNavLockIndicators();
 
   const paymentLockView = document.getElementById('paymentLockView');
@@ -1059,7 +1065,7 @@ async function openSmart(){const ranges=await API.get('/ranges');if(!clientsData
   document.getElementById('smQty').value='';document.getElementById('smartModal').classList.add('show');}
 async function runSmartDivide(){const range_ids=[...document.querySelectorAll('.smR:checked')].map(c=>+c.value);const target_ids=[...document.querySelectorAll('.smC:checked')].map(c=>+c.value);const qty=parseInt(document.getElementById('smQty').value);
   if(!range_ids.length){alert('Select range.');return;}if(!target_ids.length){alert('Select a client.');return;}if(!qty||qty<=0){alert('Enter quantity.');return;}
-  try{const r=await API.post('/numbers/smart-divide',{range_ids,target_ids,qty});closeModal('smartModal');alert(`✅ Smart divide complete!\nTotal: ${r.total}`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
+  try{const r=await API.post('/numbers/smart-divide',{range_ids,target_ids,qty});closeModal('smartModal');alert(r.message || `✅ Smart divide complete!\nTotal: ${r.total}`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
 
 /* BULK ALLOC */
 function cycleRate(r,cycle){
@@ -1671,12 +1677,38 @@ window.copyCurrentPageNumbers = copyCurrentPageNumbers;
 function copyNumbersOnly(btn){ return copyCurrentPageNumbers(btn); }
 window.copyNumbersOnly = copyNumbersOnly;
 async function loadNumbers(){return renderNumbers();}
+function agentAllocTargets(){
+  const cls = (clientsData||[]).map(c=>({id:c.id, label:'Client: '+(c.name?c.name+' ('+c.username+')':c.username), username:c.username, role:'client'}));
+  cls.sort((a,b)=>a.label.localeCompare(b.label));
+  return cls;
+}
+function filterAgentBaRanges(){
+  const q = (document.getElementById('baRangeSearch')?.value || '').toLowerCase().trim();
+  const sel = document.getElementById('baRange');
+  if(!sel) return;
+  const cur = sel.value;
+  const list = (typeof baData !== 'undefined' ? baData : []).map(r=>r.range).filter(Boolean);
+  list.sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML = '<option value="">Select Range</option>' +
+    list.filter(r=>!q || r.toLowerCase().includes(q)).map(r=>`<option value="${r}" ${r===cur?'selected':''}>${r}</option>`).join('');
+}
+function filterAgentBaClients(){
+  const q = (document.getElementById('baClientSearch')?.value || '').toLowerCase().trim();
+  const sel = document.getElementById('baClient');
+  if(!sel) return;
+  const cur = sel.value;
+  const opts = agentAllocTargets().filter(u=>!q || u.label.toLowerCase().includes(q));
+  sel.innerHTML = '<option value="">Select Client</option>' +
+    opts.map(u=>`<option value="${u.username}" data-id="${u.id}" ${u.username===cur?'selected':''}>${u.label}</option>`).join('');
+}
 async function loadNumberSummaryForBulk(){
   try{
     const rows=await API.get('/numbers/summary');
     baData=(rows||[]).map(r=>({id:r.range_id,range:r.range_name,total:r.total||0,alloc:r.allocated||0,avail:r.available||0,rate:r.rate||'0',r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type}));
   }catch(e){baData=[];}
   fillSel('baRange',baData.map(r=>r.range));
+  filterAgentBaRanges();
+  filterAgentBaClients();
   renderBulk();
 }
 

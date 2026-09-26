@@ -462,7 +462,9 @@
         <div class="toolbar">
           <div style="font-weight:600;margin-bottom:12px;color:#c7d2fe">Allocate a Range to a Manager</div>
           <div class="filter-row">
+            <input type="text" id="allocRangeSearch" placeholder="🔍 Search range..." style="width:130px;font-size:12px;padding:6px 8px" oninput="filterAllocRangeSelect()" title="Search range">
             <select class="sel-lg" id="allocRange" onchange="allocRateRefresh()"><option value="">Select Range</option></select>
+            <input type="text" id="allocManagerSearch" placeholder="🔍 Search user..." style="width:130px;font-size:12px;padding:6px 8px" oninput="filterAllocUserSelect()" title="Search manager/agent/client">
             <select class="sel-lg" id="allocManager"><option value="">Select User</option></select>
             <select class="sel-lg" id="allocPayterm" onchange="renderAlloc();allocRateRefresh()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1" selected>Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select>
             <input type="number" style="width:130px" placeholder="Qty" id="allocQty" />
@@ -964,14 +966,14 @@ function allocRow(i){
   const row=allocData[i], mgr=(usersData.manager||[]).find(x=>x.username===m);
   if(!row||!mgr){alert('Manager not found.');return;}
   API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[mgr.id],qty:q}).then(res=>{
-    alert(`✅ ${res.total||0} numbers allocated.`);loadNumbers();
+    alert(res.message || `✅ ${res.total||0} numbers allocated.`);loadNumbers();
   }).catch(e=>alert('❌ '+e.message));
 }
 function unallocRow(i){
   const q=parseInt(document.getElementById('ul'+i).value), row=allocData[i];
   if(!q||q<=0){alert('Enter a valid quantity.');return;}
   if(!row){alert('Range not found.');return;}
-  API.post('/numbers/unallocate-by-range',{range_id:row.id,qty:q}).then(res=>{alert(`✅ ${res.count||0} numbers unallocated.`);loadNumbers();}).catch(e=>alert('❌ '+e.message));
+  API.post('/numbers/unallocate-by-range',{range_id:row.id,qty:q}).then(res=>{alert(res.message || `✅ ${res.count||0} numbers unallocated.`);loadNumbers();}).catch(e=>alert('❌ '+e.message));
 }
 function doAllocate(){
   const rname=document.getElementById('allocRange').value,m=document.getElementById('allocManager').value,q=parseInt(document.getElementById('allocQty').value);
@@ -3326,15 +3328,39 @@ async function renderSmsReport(){
 
 /* =============== ADMIN RANGE ALLOCATION FINAL OVERRIDES =============== */
 function adminAllocTargets(){
-  const mgrs=(usersData.manager||[]).map(u=>({id:u.id,label:'Manager: '+u.username,username:u.username,role:'manager'}));
-  const ags=(usersData.agent||[]).map(u=>({id:u.id,label:'Agent: '+u.username,username:u.username,role:'agent'}));
-  return mgrs.concat(ags);
+  const mgrs=(usersData.manager||[]).map(u=>({id:u.id,label:'Manager: '+(u.name?u.name+' ('+u.username+')':u.username),username:u.username,role:'manager'}));
+  const ags=(usersData.agent||[]).map(u=>({id:u.id,label:'Agent: '+(u.name?u.name+' ('+u.username+')':u.username),username:u.username,role:'agent'}));
+  const cls=(usersData.client||[]).map(u=>({id:u.id,label:'Client: '+(u.name?u.name+' ('+u.username+')':u.username),username:u.username,role:'client'}));
+  const all = mgrs.concat(ags).concat(cls);
+  all.sort((a,b)=>a.label.localeCompare(b.label));
+  return all;
+}
+function filterAllocRangeSelect(){
+  const q = (document.getElementById('allocRangeSearch')?.value || '').toLowerCase().trim();
+  const sel = document.getElementById('allocRange');
+  if(!sel) return;
+  const cur = sel.value;
+  const list = (typeof allocData !== 'undefined' ? allocData : []).map(r=>r.range).filter(Boolean);
+  list.sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML = '<option value="">Select Range</option>' +
+    list.filter(r=>!q || r.toLowerCase().includes(q)).map(r=>`<option value="${r}" ${r===cur?'selected':''}>${r}</option>`).join('');
+  if (typeof allocRateRefresh === 'function') allocRateRefresh();
+}
+function filterAllocUserSelect(){
+  const q = (document.getElementById('allocManagerSearch')?.value || '').toLowerCase().trim();
+  const sel = document.getElementById('allocManager');
+  if(!sel) return;
+  const cur = sel.value;
+  const opts = adminAllocTargets().filter(u=>!q || u.label.toLowerCase().includes(q));
+  sel.innerHTML = '<option value="">Select User</option>' +
+    opts.map(u=>`<option value="${u.id}" ${String(u.id)===cur?'selected':''}>${u.label}</option>`).join('');
 }
 function fillAdminAllocationTargets(){
   const opts=adminAllocTargets();
   const html='<option value="">Select User</option>'+opts.map(u=>`<option value="${u.id}">${u.label}</option>`).join('');
   const main=document.getElementById('allocManager'); if(main) main.innerHTML=html;
   document.querySelectorAll('select[id^="am"]').forEach(sel=>{ const cur=sel.value; sel.innerHTML=html; if(cur) sel.value=cur; });
+  filterAllocUserSelect();
 }
 function adminCycleRate(r,cycle){
   if(!r) return '0';

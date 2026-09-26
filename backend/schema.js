@@ -219,6 +219,9 @@ function createTables() {
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
+  try { db.run("ALTER TABLE sharing_users ADD COLUMN connection_type TEXT DEFAULT 'activity'"); } catch(_) {}
+  try { db.run("ALTER TABLE sharing_users ADD COLUMN http_config TEXT DEFAULT ''"); } catch(_) {}
+  try { db.run("ALTER TABLE sharing_users ADD COLUMN smpp_connection_id INTEGER DEFAULT NULL"); } catch(_) {}
 
   db.run(`CREATE TABLE IF NOT EXISTS sharing_forward_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -228,8 +231,10 @@ function createTables() {
     status TEXT DEFAULT '',
     error TEXT DEFAULT '',
     response_preview TEXT DEFAULT '',
+    connection_type TEXT DEFAULT 'activity',
     created_at TEXT DEFAULT (datetime('now'))
   )`);
+  try { db.run("ALTER TABLE sharing_forward_logs ADD COLUMN connection_type TEXT DEFAULT 'activity'"); } catch(_) {}
 
 /* ============ P12: AI ASSISTANT TABLES (additive) ============ */
   db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (

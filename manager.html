@@ -563,7 +563,9 @@
     <div class="toolbar">
       <div style="font-weight:600;margin-bottom:12px;color:#5eead4">Allocate numbers to an Agent</div>
       <div class="filter-row">
+        <input type="text" id="baRangeSearch" placeholder="🔍 Search range..." style="width:130px;font-size:12px;padding:6px 8px" oninput="filterManagerBaRanges()" title="Search range">
         <select class="sel-lg" id="baRange"><option value="">Select Range</option></select>
+        <input type="text" id="baAgentSearch" placeholder="🔍 Search agent/client..." style="width:140px;font-size:12px;padding:6px 8px" oninput="filterManagerBaAgents()" title="Search agent or client">
         <select class="sel-lg" id="baAgent"><option value="">Select Agent</option></select>
         <select class="sel-lg" id="baPayterm" onchange="renderBulk()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select>
         <input type="number" style="width:130px" placeholder="Qty" id="baQty"/>
@@ -851,7 +853,7 @@ async function runSmartDivide(){const range_ids=[...document.querySelectorAll('.
   if(!range_ids.length){alert('Select range.');return;}if(!target_ids.length){alert('Select an agent.');return;}if(!qty||qty<=0){alert('Enter quantity.');return;}
   const body = {range_ids,target_ids,qty,payterm};
   if(rate) body.rate = rate;
-  try{const r=await API.post('/numbers/smart-divide',body);closeModal('smartModal');alert(`✅ Smart divide complete!\nTotal: ${r.total}`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
+  try{const r=await API.post('/numbers/smart-divide',body);closeModal('smartModal');alert(r.message || `✅ Smart divide complete!\nTotal: ${r.total}`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
 
 /* ===== BULK ALLOC ===== */
 function cycleRate(r,cycle){
@@ -1461,12 +1463,40 @@ window.copyCurrentPageNumbers = copyCurrentPageNumbers;
 function copyNumbersOnly(btn){ return copyCurrentPageNumbers(btn); }
 window.copyNumbersOnly = copyNumbersOnly;
 async function loadNumbers(){ return renderNumbers(); }
+function managerAllocTargets(){
+  const ags = (agentsData||[]).map(a=>({id:a.id, label:'Agent: '+(a.name?a.name+' ('+a.username+')':a.username), username:a.username, role:'agent'}));
+  const cls = (clientsData||[]).map(c=>({id:c.id, label:'Client: '+(c.name?c.name+' ('+c.username+')':c.username), username:c.username, role:'client'}));
+  const all = ags.concat(cls);
+  all.sort((a,b)=>a.label.localeCompare(b.label));
+  return all;
+}
+function filterManagerBaRanges(){
+  const q = (document.getElementById('baRangeSearch')?.value || '').toLowerCase().trim();
+  const sel = document.getElementById('baRange');
+  if(!sel) return;
+  const cur = sel.value;
+  const list = (typeof baData !== 'undefined' ? baData : []).map(r=>r.range).filter(Boolean);
+  list.sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML = '<option value="">Select Range</option>' +
+    list.filter(r=>!q || r.toLowerCase().includes(q)).map(r=>`<option value="${r}" ${r===cur?'selected':''}>${r}</option>`).join('');
+}
+function filterManagerBaAgents(){
+  const q = (document.getElementById('baAgentSearch')?.value || '').toLowerCase().trim();
+  const sel = document.getElementById('baAgent');
+  if(!sel) return;
+  const cur = sel.value;
+  const opts = managerAllocTargets().filter(u=>!q || u.label.toLowerCase().includes(q));
+  sel.innerHTML = '<option value="">Select Agent / Client</option>' +
+    opts.map(u=>`<option value="${u.username}" data-id="${u.id}" ${u.username===cur?'selected':''}>${u.label}</option>`).join('');
+}
 async function loadNumberSummaryForBulk(){
   try{
     const rows=await API.get('/numbers/summary');
     baData=(rows||[]).map(r=>({id:r.range_id,range:r.range_name,total:r.total||0,alloc:r.allocated||0,avail:r.available||0,rate:r.rate||'0',r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type}));
   }catch(e){baData=[];}
   fillSel('baRange',baData.map(r=>r.range));
+  filterManagerBaRanges();
+  filterManagerBaAgents();
   renderBulk();
 }
 
