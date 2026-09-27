@@ -533,8 +533,8 @@
     </div>
     <div class="toolbar">
       <div class="filter-row">
-        <div id="numRangeContainer" style="display:inline-block;min-width:180px"></div>
-        <div id="numAgentContainer" style="display:inline-block;min-width:180px"></div>
+        <div id="numRangeContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numRange"><option value="">Select Range</option></select></div>
+        <div id="numAgentContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numAgent"><option value="">Select Agent</option></select></div>
         <button type="button" class="gx-btn gx-blue"  onclick="renderNumbers()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
         <button type="button" class="gx-btn"  onclick="resetNum()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
       </div>
@@ -794,7 +794,7 @@ async function loadTestNumbers(){try{const data=await API.get('/test-numbers?pag
 
 async function loadNumbers(){ return renderNumbers(); }
 function renderNumbers(){
-  rangeF=document.getElementById('numRange').value;agentF=document.getElementById('numAgent').value;
+  rangeF=document.getElementById('numRange')?.value||'';agentF=document.getElementById('numAgent')?.value||'';
   const len=document.getElementById('numLen').value,q=(document.getElementById('numSearch').value||'').toLowerCase();
   let rows=(numData||[]).filter(r=>(r.number.includes(q)||r.agent.toLowerCase().includes(q)||r.range.toLowerCase().includes(q)));
   if(rangeF)rows=rows.filter(r=>r.range===rangeF);if(agentF)rows=rows.filter(r=>r.agent===agentF);
@@ -1292,42 +1292,57 @@ function pxPickRate(r){
   return 'NA';
 }
 function rebuildBa(){baData=(rateCard||[]).map(r=>{const nums=(numData||[]).filter(n=>n.range===r.range);const alloc=nums.filter(n=>n.agent).length;return{id:r.id,range:r.range,total:nums.length,alloc,avail:nums.length-alloc,rate:pxPickRate(r)};});}
+function refreshManagerNumbersFilters() {
+  const rList = (rangeNames || []).slice();
+  rList.sort((a,b)=>a.localeCompare(b));
+
+  if (window.renderSearchSelect && document.getElementById('numRangeContainer')) {
+    const items = rList.map(r => ({ value: r, label: r }));
+    window.renderSearchSelect('numRangeContainer', {
+      id: 'numRange',
+      placeholder: 'Select Range',
+      searchPlaceholder: 'Search range...',
+      style: 'min-width:180px',
+      items: items,
+      value: rangeF || '',
+      onChange: (v) => { rangeF = v; renderNumbers(); }
+    });
+  } else {
+    fillSel('numRange', rList);
+  }
+
+  const agtList = (myAgents || []).slice();
+  agtList.sort((a,b)=>a.localeCompare(b));
+
+  if (window.renderSearchSelect && document.getElementById('numAgentContainer')) {
+    const items = agtList.map(a => ({ value: a, label: a }));
+    window.renderSearchSelect('numAgentContainer', {
+      id: 'numAgent',
+      placeholder: 'Select Agent',
+      searchPlaceholder: 'Search agent...',
+      style: 'min-width:180px',
+      items: items,
+      value: agentF || '',
+      onChange: (v) => { agentF = v; renderNumbers(); }
+    });
+  } else {
+    fillSel('numAgent', agtList);
+  }
+}
 async function loadRateCard(){
   /* P19k #8: Rate Card = SAB configured ranges (/api/rate-card, public fields only).
      numRange/testRange selectors scoped /api/ranges se (P19f inventory visibility untouched). */
   try{ rateCard=(await API.get('/rate-card')).map(r=>({range:r.name,prefix:r.prefix,cur:r.currency,r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type})); }catch(e){ rateCard=[]; }
   renderRateCard();
   try{ const scoped=await API.get('/ranges'); rangeNames=(scoped||[]).map(r=>r.name); }catch(e){ rangeNames=[]; }
-  if (window.renderSearchSelect && document.getElementById('numRangeContainer')) {
-    const items = rangeNames.map(r => ({ value: r, label: r }));
-    window.renderSearchSelect('numRangeContainer', {
-      id: 'numRange',
-      placeholder: 'Select Range',
-      items: items,
-      value: rangeF || '',
-      onChange: (v) => { rangeF = v; renderNumbers(); }
-    });
-  } else {
-    fillSel('numRange',rangeNames);
-  }
+  refreshManagerNumbersFilters();
   fillSel('testRange',rangeNames);
 }
-async function loadNumbers(){ return renderNumbers(); }
+async function loadNumbers(){ refreshManagerNumbersFilters(); return renderNumbers(); }
 async function loadAgents(){
   try{ agentsData=await API.get('/users/agent'); }catch(e){ agentsData=[]; }
   refreshAgentClientMaps();
-  if (window.renderSearchSelect && document.getElementById('numAgentContainer')) {
-    const items = myAgents.map(a => ({ value: a, label: a }));
-    window.renderSearchSelect('numAgentContainer', {
-      id: 'numAgent',
-      placeholder: 'Select Agent',
-      items: items,
-      value: agentF || '',
-      onChange: (v) => { agentF = v; renderNumbers(); }
-    });
-  } else {
-    fillSel('numAgent',myAgents);
-  }
+  refreshManagerNumbersFilters();
   fillSel('bulkAgent',myAgents);
   fillSel('baAgent',myAgents);
   renderAgents();
@@ -1372,7 +1387,7 @@ async function loadManagerPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
     if(page==='rateCard') return loadRateCard();
-    if(page==='numbers') return loadNumbers();
+    if(page==='numbers'){ loadNumbers(); return Promise.allSettled([loadRateCard(), loadAgents()]).then(refreshManagerNumbersFilters); }
     if(page==='bulkAlloc'){ await Promise.allSettled([loadAgents(), loadNumberSummaryForBulk()]); return; }
     if(page==='chat') return window.GXChat?GXChat.open('chat'):null;
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
@@ -1580,7 +1595,7 @@ async function loadManagerPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
     if(page==='rateCard') return loadRateCard();
-    if(page==='numbers') return loadNumbers();
+    if(page==='numbers'){ loadNumbers(); return Promise.allSettled([loadRateCard(), loadAgents()]).then(refreshManagerNumbersFilters); }
     if(page==='bulkAlloc'){ await Promise.allSettled([loadAgents(), loadNumberSummaryForBulk()]); return; }
     if(page==='chat') return window.GXChat?GXChat.open('chat'):null;
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;

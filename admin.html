@@ -503,13 +503,13 @@
         </div>
         <div class="toolbar">
           <div class="filter-row">
-            <div id="numRangeContainer" style="display:inline-block;min-width:180px"></div>
-            <div id="numClientContainer" style="display:inline-block;min-width:180px"></div>
+            <div id="numRangeContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numRange"><option value="">Select Range</option></select></div>
+            <div id="numClientContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numClient"><option value="">Select Owner</option></select></div>
             <button type="button" class="gx-btn gx-blue"  onclick="applyNumFilter()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
             <button type="button" class="gx-btn"  onclick="clearNumFilter()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
           </div>
           <div class="filter-row" id="adminRangeDeleteTools">
-            <select class="sel-lg" id="deleteRangeSelect"><option value="">Delete by Range</option></select>
+            <div id="deleteRangeContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="deleteRangeSelect"><option value="">Delete by Range</option></select></div>
             <button type="button" class="gx-btn danger" data-tip="Delete Selected Range" aria-label="Delete Selected Range" onclick="deleteNumbersByRange()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg></button>
             <span class="muted" id="numberDbCount" style="font-size:12.5px">Loading count...</span>
             <button type="button" class="gx-btn gx-amber" data-tip="Rebuild Dashboard Stats (repair stale counters)" aria-label="Rebuild Dashboard Stats" onclick="rebuildDashboardStats()" title="Rebuild Dashboard Stats — repairs stale counters left by past deletes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
@@ -842,6 +842,8 @@ function fillAdminOwnerSelects(){
     window.renderSearchSelect('numClientContainer', {
       id: 'numClient',
       placeholder: 'Select Owner',
+      searchPlaceholder: 'Search owner...',
+      style: 'min-width:180px',
       items: items,
       value: numClientFilter || '',
       onChange: (val) => {
@@ -853,6 +855,50 @@ function fillAdminOwnerSelects(){
     fillSelect('numClient', owners);
     const s=document.getElementById('numClient'); if(s && s.children[0]) s.children[0].textContent='Select Owner';
   }
+}
+function renderAdminNumbersRangeFilter(){
+  const liveRanges = (ratesData||[]).map(r=>r.name).filter(Boolean);
+  liveRanges.sort((a,b)=>a.localeCompare(b));
+  if (window.renderSearchSelect && document.getElementById('numRangeContainer')) {
+    const items = liveRanges.map(r => ({ value: r, label: r }));
+    window.renderSearchSelect('numRangeContainer', {
+      id: 'numRange',
+      placeholder: 'Select Range',
+      searchPlaceholder: 'Search range...',
+      style: 'min-width:180px',
+      items: items,
+      value: numRangeFilter || '',
+      onChange: (val) => {
+        numRangeFilter = val;
+        renderNumbers();
+      }
+    });
+  } else {
+    fillSelect('numRange', liveRanges);
+  }
+}
+function renderAdminNumbersDeleteRangeFilter(){
+  const delRanges = (ratesData||[]).map(r=>({ value: String(r.id), label: r.name })).filter(x=>x.label);
+  delRanges.sort((a,b)=>a.label.localeCompare(b.label));
+  if (window.renderSearchSelect && document.getElementById('deleteRangeContainer')) {
+    window.renderSearchSelect('deleteRangeContainer', {
+      id: 'deleteRangeSelect',
+      placeholder: 'Delete by Range',
+      searchPlaceholder: 'Search range to delete...',
+      style: 'min-width:180px',
+      items: delRanges,
+      value: document.getElementById('deleteRangeSelect')?.value || '',
+      onChange: () => {}
+    });
+  } else {
+    const delSel = document.getElementById('deleteRangeSelect');
+    if (delSel) delSel.innerHTML = '<option value="">Delete by Range</option>' + delRanges.map(r=>`<option value="${r.value}">${r.label}</option>`).join('');
+  }
+}
+function refreshAdminNumbersFilters(){
+  renderAdminNumbersRangeFilter();
+  fillAdminOwnerSelects();
+  renderAdminNumbersDeleteRangeFilter();
 }
 function agentsOf(m){
   let list=(usersData.agent||[]).filter(a=>!m || (usersData.manager||[]).find(mm=>mm.username===m && mm.id===a.parent_id)).map(a=>a.username);
@@ -2019,21 +2065,7 @@ function rebuildAllocData(){
 async function loadRates(){ try{ ratesData=await API.get('/ranges'); }catch(e){ ratesData=[]; }
   const liveRanges=(ratesData||[]).map(r=>r.name);
   fillSelect('allocRange',liveRanges);
-  if (window.renderSearchSelect && document.getElementById('numRangeContainer')) {
-    const items = liveRanges.map(r => ({ value: r, label: r }));
-    window.renderSearchSelect('numRangeContainer', {
-      id: 'numRange',
-      placeholder: 'Select Range',
-      items: items,
-      value: numRangeFilter || '',
-      onChange: (val) => {
-        numRangeFilter = val;
-        renderNumbers();
-      }
-    });
-  } else {
-    fillSelect('numRange',liveRanges);
-  }
+  refreshAdminNumbersFilters();
   fillSelect('importRange',liveRanges);
   fillSelect('testImportRange',liveRanges);
   if (window.renderSearchSelect && document.getElementById('testRangeContainer')) {
@@ -2060,15 +2092,13 @@ async function loadRates(){ try{ ratesData=await API.get('/ranges'); }catch(e){ 
   } else {
     fillSelect('testNumRange',liveRanges);
   }
-  const delSel=document.getElementById('deleteRangeSelect');
-  if(delSel) delSel.innerHTML='<option value="">Select Range</option>'+((ratesData||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join(''));
   if(document.getElementById('ratesBody')) renderRates();
   rebuildAllocData();
   if(document.getElementById('allocBody')) renderAlloc();
 }
 
 async function loadNumbers(){ try{ numbersData=await API.get('/numbers'); }catch(e){ numbersData=[]; }
-  rebuildAllocData(); renderNumbers(); renderAlloc(); populateTestGeneratorNumbers();
+  rebuildAllocData(); renderNumbers(); renderAlloc(); populateTestGeneratorNumbers(); refreshAdminNumbersFilters();
 }
 async function doAllocate(){const r=document.getElementById('allocRange').value,m=document.getElementById('allocManager').value,q=parseInt(document.getElementById('allocQty').value);if(!r||!m||!q){alert('Select range, manager and quantity.');return;}const range=(ratesData||[]).find(x=>x.name===r);const mgr=(usersData.manager||[]).find(x=>x.username===m);if(!range||!mgr){alert('Range or manager not found.');return;}try{const res=await API.post('/numbers/smart-divide',{range_ids:[range.id],target_ids:[mgr.id],qty:q});alert(`✅ ${res.total||0} numbers allocated.`);document.getElementById('allocQty').value='';loadNumbers();}catch(e){alert('❌ '+e.message);}}
 function allocRangeRow(i){const q=parseInt(document.getElementById('ra'+i).value),m=document.getElementById('am'+i).value;if(!q||!m){alert('Select manager and quantity.');return;}const row=allocData[i],mgr=(usersData.manager||[]).find(x=>x.username===m);if(!row||!mgr)return;API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[mgr.id],qty:q}).then(res=>{alert(`✅ ${res.total||0} numbers allocated.`);loadNumbers();}).catch(e=>alert('❌ '+e.message));}
@@ -3192,7 +3222,7 @@ function openSuperManagerModal(userId, username, isSuper, currentDisplayName) {
 async function loadAdminPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
-    if(page==='numbers'){ loadNumbers(); /* GALAXY PERF: table foran (1 round-trip), selects/db-tools parallel background mein */ return Promise.allSettled([ensureAdminRates(), ensureAdminManagers(), refreshNumberDbTools()]); }
+    if(page==='numbers'){ loadNumbers(); return Promise.allSettled([ensureAdminRates().then(refreshAdminNumbersFilters), ensureAdminManagers().then(refreshAdminNumbersFilters), refreshNumberDbTools()]); }
     if(page==='allocation'){ await ensureAdminRates(); await ensureAdminManagers(); return loadNumberSummary(); }
     if(page==='rates') return loadRates();
     if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return renderSmsReport(); }

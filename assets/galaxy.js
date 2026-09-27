@@ -315,23 +315,29 @@ window.filterSearchDropdown = function(id, q) {
 };
 
 window.setSearchDropdownValue = function(id, value, label) {
-  const dd = document.getElementById(id);
+  let dd = document.getElementById(id);
   if (!dd) return;
-  const hidden = dd.querySelector('input[type="hidden"]');
+  let wrap = dd.classList && dd.classList.contains('searchable-dropdown') ? dd : dd.closest ? dd.closest('.searchable-dropdown') : null;
+  if (!wrap && window.GX_DROPDOWNS) {
+    const rawEntry = window.GX_DROPDOWNS[id] || window.GX_DROPDOWNS['dd_wrap_' + id];
+    if (rawEntry && rawEntry.wrapId) wrap = document.getElementById(rawEntry.wrapId);
+  }
+  const hidden = (dd && dd.tagName === 'INPUT') ? dd : (wrap ? wrap.querySelector('input[type="hidden"]') : null);
   if (hidden) hidden.value = value;
-  const lbl = dd.querySelector('.sd-label');
+  const lbl = wrap ? wrap.querySelector('.sd-label') : null;
   if (lbl) lbl.textContent = label || value || 'Select';
 
-  dd.querySelectorAll('.sd-option').forEach(opt => {
-    if (opt.getAttribute('data-value') === String(value)) {
-      opt.classList.add('selected');
-    } else {
-      opt.classList.remove('selected');
-    }
-  });
-
-  const menu = dd.querySelector('.sd-menu');
-  if (menu) menu.style.display = 'none';
+  if (wrap) {
+    wrap.querySelectorAll('.sd-option').forEach(opt => {
+      if (opt.getAttribute('data-value') === String(value)) {
+        opt.classList.add('selected');
+      } else {
+        opt.classList.remove('selected');
+      }
+    });
+    const menu = wrap.querySelector('.sd-menu');
+    if (menu) menu.style.display = 'none';
+  }
 
   // Trigger change event on hidden input if listeners exist
   if (hidden) {

@@ -533,8 +533,8 @@
         </div>
         <div class="toolbar">
           <div class="filter-row">
-            <div id="numRangeContainer" style="display:inline-block;min-width:180px"></div>
-            <div id="numClientContainer" style="display:inline-block;min-width:180px"></div>
+            <div id="numRangeContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numRange"><option value="">Select Range</option></select></div>
+            <div id="numClientContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numClient"><option value="">Select Client</option></select></div>
             <button type="button" class="gx-btn gx-blue"  onclick="renderNumbers()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
             <button type="button" class="gx-btn"  onclick="resetNum()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
             <div class="gx-numbers-count-badge" style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;color:var(--text,#e6ecfb);background:rgba(255,255,255,.06);padding:6px 12px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,.1))">
@@ -995,8 +995,49 @@ function smsToCdr(r){return {client:r.client_name||'—',range:r.range_name||'�
 /* CLI masking */
 /* fill selects */
 function fillSel(id,arr,keep=true){const s=document.getElementById(id);if(!s)return;const f=keep?s.children[0].outerHTML:'';s.innerHTML=f+arr.map(x=>`<option>${x}</option>`).join('');}
-function refreshClientSelects(){fillSel('numClient',myClients);fillSel('bulkClient',myClients);fillSel('baClient',myClients);}
-fillSel('numRange',rangeNames);refreshClientSelects();
+function refreshAgentNumbersFilters() {
+  const rList = (rangeNames || []).slice();
+  rList.sort((a,b)=>a.localeCompare(b));
+
+  if (window.renderSearchSelect && document.getElementById('numRangeContainer')) {
+    const items = rList.map(r => ({ value: r, label: r }));
+    window.renderSearchSelect('numRangeContainer', {
+      id: 'numRange',
+      placeholder: 'Select Range',
+      searchPlaceholder: 'Search range...',
+      style: 'min-width:180px',
+      items: items,
+      value: rangeF || '',
+      onChange: (v) => { rangeF = v; renderNumbers(); }
+    });
+  } else {
+    fillSel('numRange', rList);
+  }
+
+  const cList = (myClients || []).slice();
+  cList.sort((a,b)=>a.localeCompare(b));
+
+  if (window.renderSearchSelect && document.getElementById('numClientContainer')) {
+    const items = cList.map(c => ({ value: c, label: c }));
+    window.renderSearchSelect('numClientContainer', {
+      id: 'numClient',
+      placeholder: 'Select Client',
+      searchPlaceholder: 'Search client...',
+      style: 'min-width:180px',
+      items: items,
+      value: clientF || '',
+      onChange: (v) => { clientF = v; renderNumbers(); }
+    });
+  } else {
+    fillSel('numClient', cList);
+  }
+}
+function refreshClientSelects(){
+  refreshAgentNumbersFilters();
+  fillSel('bulkClient',myClients);
+  fillSel('baClient',myClients);
+}
+refreshAgentNumbersFilters();refreshClientSelects();
 
 /* RATE CARD (API) */
 function fr(v){return v==='NA'||!v?'<span class="muted">NA</span>':'<span class="cell-money">$ '+v+'</span>';}
@@ -1010,9 +1051,22 @@ function renderRateCard(){const len=document.getElementById('rcLen').value,q=(do
 let nSort={k:null,d:1},cliF=0,rangeF='',clientF='';
 function sortNum(k){if(nSort.k===k)nSort.d*=-1;else{nSort.k=k;nSort.d=1;}if(k==='number')document.getElementById('nSortHint').textContent=nSort.d===1?'▲':'▼';renderNumbers();}
 function cycleClientFilter(){cliF=(cliF+1)%3;document.getElementById('cSortHint').textContent=cliF===0?'⇅':(cliF===1?'Unallocated ▾':'Allocated ▾');renderNumbers();}
-function resetNum(){rangeF='';clientF='';document.getElementById('numRange').value='';document.getElementById('numClient').value='';document.getElementById('numSearch').value='';cliF=0;document.getElementById('cSortHint').textContent='⇅';renderNumbers();}
-async function loadNumbers(){ return renderNumbers(); }
-function renderNumbers(){rangeF=document.getElementById('numRange').value;clientF=document.getElementById('numClient').value;
+function resetNum(){
+  rangeF='';
+  clientF='';
+  if (window.setSearchDropdownValue) {
+    window.setSearchDropdownValue('numRange', '', 'Select Range');
+    window.setSearchDropdownValue('numClient', '', 'Select Client');
+  }
+  const nr=document.getElementById('numRange'); if(nr) nr.value='';
+  const nc=document.getElementById('numClient'); if(nc) nc.value='';
+  const ns=document.getElementById('numSearch'); if(ns) ns.value='';
+  cliF=0;
+  const csh=document.getElementById('cSortHint'); if(csh) csh.textContent='⇅';
+  renderNumbers();
+}
+async function loadNumbers(){ refreshAgentNumbersFilters(); return renderNumbers(); }
+function renderNumbers(){rangeF=document.getElementById('numRange')?.value||'';clientF=document.getElementById('numClient')?.value||'';
   const len=document.getElementById('numLen').value,q=(document.getElementById('numSearch').value||'').toLowerCase();
   let rows=(numData||[]).filter(r=>(r.number.includes(q)||r.client.toLowerCase().includes(q)||r.range.toLowerCase().includes(q)));
   if(rangeF)rows=rows.filter(r=>r.range===rangeF);if(clientF)rows=rows.filter(r=>r.client===clientF);
@@ -1437,9 +1491,9 @@ async function loadRateCard(){
   try{ rateCard=(await API.get('/rate-card')).map(r=>({range:r.name,cur:r.currency,r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type})); }catch(e){ rateCard=[]; }
   renderRateCard();
   try{ const scoped=await API.get('/ranges'); rangeNames=(scoped||[]).map(r=>r.name); }catch(e){ rangeNames=[]; }
-  fillSel('numRange',rangeNames);
+  refreshAgentNumbersFilters();
 }
-async function loadNumbers(){ return renderNumbers(); }
+async function loadNumbers(){ refreshAgentNumbersFilters(); return renderNumbers(); }
 async function loadClients(){ try{ clientsData=await API.get('/users/client'); }catch(e){ clientsData=[]; } refreshClients(); refreshClientSelects(); renderClients(); }
 async function loadSms(){ try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; } cdr=(smsRecords||[]).map(smsToCdr); recentTests=(smsRecords||[]).slice(0,50).map(r=>({date:(r.received_at||'').slice(0,19),range:r.range_name||'—',num:r.number||'',cli:r.cli||'',msg:r.message||''})); refreshClients(); const byCli={};smsRecords.forEach(r=>{const c=r.client_name||'—';byCli[c]=(byCli[c]||0)+1;});const b=document.getElementById('clSumBody');if(b)b.innerHTML=Object.keys(byCli).map(c=>`<tr><td><span class="tag tag-cli">${c}</span></td><td class="cell-money">${byCli[c]}</td><td class="cell-money" style="color:#86efac">$ ${sumPay((smsRecords||[]).filter(r=>r.client_name===c))}</td></tr>`).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:16px">No records found</td></tr>`; if(document.getElementById('srBody'))renderSmsReport();if(document.getElementById('sdBody'))renderSmsDetail();if(document.getElementById('csBody'))renderClientStats();['range','number'].forEach(k=>{if(document.getElementById(k+'Body')){renderDrill(k);}});}
 function baRow(i){const q=parseInt(document.getElementById('bq'+i).value),c=document.getElementById('bc'+i).value;if(!q||!c){alert('Select client and quantity.');return;}const row=baData[i],cl=(clientsData||[]).find(x=>x.username===c);if(!row||!cl)return;API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[cl.id],qty:q,payterm:(document.getElementById('baPayterm')?.value||'weekly_7_1')}).then(res=>{alert(`✅ ${res.total||0} numbers allocated.`);loadNumberSummaryForBulk();renderNumbers();}).catch(e=>alert('❌ '+e.message));}
@@ -1504,7 +1558,7 @@ async function loadAgentPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
     if(page==='rateCard') return loadRateCard();
-    if(page==='numbers') return loadNumbers();
+    if(page==='numbers'){ loadNumbers(); return Promise.allSettled([loadRateCard(), loadClients()]).then(refreshAgentNumbersFilters); }
     if(page==='bulkAlloc'){ await Promise.allSettled([loadClients(), loadNumberSummaryForBulk()]); return; }
     if(page==='clients'){ buildClients(); return loadClients(); }
     if(page==='chat'){

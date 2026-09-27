@@ -382,7 +382,7 @@
       <div class="page-head"><div><h2>SMS Numbers <span class="gx-num-page-badge" style="font-size:14px;font-weight:600;color:var(--text,#e6ecfb);background:rgba(255,255,255,.08);padding:3px 9px;border-radius:6px;margin-left:10px;vertical-align:middle;display:inline-flex;align-items:center;gap:6px">Numbers: <span id="numPageCount">0</span> <button type="button" class="gx-copy-num-btn" id="btnCopyPageNumbers" onclick="copyCurrentPageNumbers(this)" title="Copy numbers" aria-label="Copy numbers" style="background:none;border:none;cursor:pointer;font-size:15px;padding:0;line-height:1;display:inline-flex;align-items:center;color:#38bdf8">📋</button></span></h2><div class="breadcrumb"><b>My Panel</b> › Allocated Numbers</div></div>
         <div class="head-actions"><span class="masknote">🔒 Only numbers allocated to you</span></div></div>
       <div class="toolbar"><div class="filter-row">
-        <div id="numRangeContainer" style="display:inline-block;min-width:180px"></div>
+        <div id="numRangeContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numRange"><option value="">Select Range</option></select></div>
         <button type="button" class="gx-btn gx-blue"  onclick="renderNumbers()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
         <button type="button" class="gx-btn"  onclick="if(window.setSearchDropdownValue) setSearchDropdownValue('numRange','','Select Range'); const nr=document.getElementById('numRange'); if(nr) nr.value=''; document.getElementById('numSearch').value=''; renderNumbers()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
       </div></div>
@@ -643,7 +643,7 @@ async function loadStats(){ try{ const sms=await API.get('/sms'); stats=sms.map(
 async function loadClientPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
-    if(page==='numbers') return loadNumbers();
+    if(page==='numbers'){ loadRanges(); return loadNumbers(); }
     if(page==='stats'){ await loadRanges(); return renderStats(); }
     if(page==='test'){ await loadRanges(); await loadTestNumbers(); return renderTest(); }
     if(page==='chat') return window.GXChat?GXChat.open('chat'):null;
