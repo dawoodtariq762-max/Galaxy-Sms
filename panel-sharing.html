@@ -656,7 +656,7 @@ async function copyNumbersOnly() {
   if (!list.length) return alert('No numbers to copy');
 
   try {
-    const text = list.join('\\n');
+    const text = list.join('\n');
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(text);
     } else {
@@ -683,8 +683,8 @@ function downloadSelectedUnallocated() {
 
   const rangeName = selectedRows[0]?.range_name || 'unallocated';
   const fname = sanitizeFilename(rangeName + ' unallocated selected') + '.csv';
-  const csv = 'Range Name,Number\\n' + selectedRows.map(r => `"${(r.range_name||'').replace(/"/g, '""')}","${r.number}"`).join('\\n');
-  triggerBlobDownload(csv, fname);
+  const lines = ['Range Name,Number'].concat(selectedRows.map(r => `"${(r.range_name||'').replace(/"/g, '""')}","${r.number}"`));
+  triggerBlobDownload(lines.join('\r\n') + '\r\n', fname);
 }
 
 async function downloadAllFilteredNumbers() {
@@ -701,8 +701,8 @@ async function downloadAllFilteredNumbers() {
     if (!rows.length) return alert('No unallocated numbers found matching current filters');
 
     const fname = sanitizeFilename(filterRange || (q ? 'filtered numbers' : 'all unallocated numbers')) + '.csv';
-    const csv = 'Range Name,Number\\n' + rows.map(r => `"${(r.range_name||'').replace(/"/g, '""')}","${r.number}"`).join('\\n');
-    triggerBlobDownload(csv, fname);
+    const lines = ['Range Name,Number'].concat(rows.map(r => `"${(r.range_name||'').replace(/"/g, '""')}","${r.number}"`));
+    triggerBlobDownload(lines.join('\r\n') + '\r\n', fname);
   } catch(e) {
     alert('Failed to download: ' + e.message);
   }
@@ -711,10 +711,14 @@ async function downloadAllFilteredNumbers() {
 /* ALLOCATION CONFIRMATION & PRICE OVERRIDE FLOW (Sections 36, 37, 38, 39) */
 function openAllocConfirmFlow() {
   const ids = selectedIds();
-  if (!ids.length) return alert('Please select numbers from the table first.');
-
+  const filterRange = (document.getElementById('numRangeFilter')?.value || '').trim();
   const userId = document.getElementById('allocUser')?.value;
+
   if (!userId) return alert('Please select a Target Sharing User from the dropdown.');
+
+  if (!ids.length && !filterRange) {
+    return alert('Please select numbers from the table or choose a Range to allocate.');
+  }
 
   const payterm = document.getElementById('allocPayterm')?.value || 'weekly_7_1';
   const user = sharingUsers.find(u => String(u.id) === String(userId));
@@ -723,7 +727,17 @@ function openAllocConfirmFlow() {
   const chks = selectedCheckboxes();
   const rangesPresent = [...new Set(chks.map(c => c.dataset.range).filter(Boolean))];
   const rangeIdPresent = chks[0]?.dataset.rangeId;
-  let matchedRange = availableRanges.find(r => (rangeIdPresent && String(r.id) === String(rangeIdPresent)) || (rangesPresent[0] && r.name === rangesPresent[0]));
+  let matchedRange = null;
+
+  if (rangeIdPresent) {
+    matchedRange = availableRanges.find(r => String(r.id) === String(rangeIdPresent));
+  }
+  if (!matchedRange && rangesPresent.length > 0) {
+    matchedRange = availableRanges.find(r => r.name === rangesPresent[0]);
+  }
+  if (!matchedRange && filterRange) {
+    matchedRange = availableRanges.find(r => r.name === filterRange || String(r.id) === String(filterRange));
+  }
 
   // If not matched by id or name, match by pattern/prefix of selected number
   if (!matchedRange && chks.length > 0) {
@@ -743,13 +757,14 @@ function openAllocConfirmFlow() {
   } else {
     matchedRange = {
       id: rangeIdPresent || 0,
-      name: rangesPresent[0] || 'Standard Range',
+      name: filterRange || rangesPresent[0] || 'Standard Range',
       prefix: '',
       pattern: '',
       rate_1_1: '0.0000',
       rate_7_1: '0.0000',
       rate_7_7: '0.0000',
-      rate_30_45: '0.0000'
+      rate_30_45: '0.0000',
+      available_numbers: 0
     };
   }
 
@@ -759,6 +774,8 @@ function openAllocConfirmFlow() {
   // Store pending allocation state
   pendingAllocData = {
     ids: ids,
+    range_id: matchedRange.id,
+    range_name: matchedRange.name,
     userId: +userId,
     user: user,
     payterm: payterm,
@@ -769,7 +786,12 @@ function openAllocConfirmFlow() {
 
   // Populate Modal Fields (Section 36, 37)
   document.getElementById('confTargetUser').textContent = `${user.panel_name} (${user.username})`;
-  document.getElementById('confNumberCount').textContent = `${ids.length} numbers`;
+  if (ids.length > 0) {
+    document.getElementById('confNumberCount').textContent = `${ids.length} numbers`;
+  } else {
+    const avail = matchedRange.available_numbers !== undefined ? matchedRange.available_numbers : 'All available';
+    document.getElementById('confNumberCount').textContent = `All available unallocated numbers (${avail})`;
+  }
   document.getElementById('confRangeName').textContent = rangesPresent.join(', ') || matchedRange.name;
   document.getElementById('confBillingPeriod').textContent = ({
     daily: 'Daily (1/1)',
@@ -778,7 +800,7 @@ function openAllocConfirmFlow() {
     monthly_30x45: 'Monthly (30/45)'
   })[payterm] || payterm;
 
-  document.getElementById('confRateCardPrice').textContent = `$${defaultRateCardPrice}`;
+  document.getElementById('confRateCardPrice').textContent = `${defaultRateCardPrice}`;
   document.getElementById('confOverridePrice').value = defaultRateCardPrice;
 
   document.getElementById('allocConfirmModal').classList.add('show');
@@ -803,16 +825,26 @@ async function proceedWithConfirmedAllocation() {
   btn.textContent = 'Allocating...';
 
   try {
-    const res = await API.post('/panel-sharing/allocate', {
-      ids: pendingAllocData.ids,
+    const payload = {
       sharing_user_id: pendingAllocData.userId,
       price: priceVal,
       payterm: pendingAllocData.payterm
-    });
+    };
+    if (pendingAllocData.ids && pendingAllocData.ids.length > 0) {
+      payload.ids = pendingAllocData.ids;
+    }
+    if (pendingAllocData.range_id) {
+      payload.range_id = pendingAllocData.range_id;
+    }
+    if (pendingAllocData.range_name) {
+      payload.range_name = pendingAllocData.range_name;
+    }
+
+    const res = await API.post('/panel-sharing/allocate', payload);
 
     closeAllocConfirmModal();
 
-    alert(`✅ Successfully allocated ${res.count} numbers to ${res.panel_name}!\\n\\nDownstream Price: $${priceVal}\\nBilling Period: ${pendingAllocData.payterm}\\n\\nThe allocated file will download automatically.`);
+    alert(`✅ Successfully allocated ${res.count} numbers to ${res.panel_name}!\n\nDownstream Price: ${priceVal}\nBilling Period: ${pendingAllocData.payterm}\n\nThe allocated file will download automatically.`);
 
     // AUTOMATIC DOWNLOAD OF ALLOCATED CSV (Section 35: File name must use Range Name)
     if (res.ranges && res.ranges.length) {
@@ -822,15 +854,15 @@ async function proceedWithConfirmedAllocation() {
           lines.push(`"${(rg.range_name||'').replace(/"/g, '""')}","${num}",${rg.price}`);
         });
         const fname = sanitizeFilename(rg.range_name) + '.csv';
-        triggerBlobDownload(lines.join('\\n'), fname);
+        triggerBlobDownload(lines.join('\r\n') + '\r\n', fname);
       });
     } else if (res.rows && res.rows.length) {
-      const rName = pendingAllocData.ranges[0] || res.panel_name;
+      const rName = pendingAllocData.ranges[0] || res.range_name || res.panel_name;
       const lines = ['Range Name,Number,Price'];
       res.rows.forEach(r => {
         lines.push(`"${(r.range_name || rName).replace(/"/g, '""')}","${r.number}",${priceVal}`);
       });
-      triggerBlobDownload(lines.join('\\n'), sanitizeFilename(rName) + '.csv');
+      triggerBlobDownload(lines.join('\r\n') + '\r\n', sanitizeFilename(rName) + '.csv');
     }
 
     loadNumbers();
@@ -992,7 +1024,7 @@ async function executeMultiRangeBulkAllocation() {
     // AUTOMATIC DOWNLOAD OF BOTH ARCHIVES (Section 46, 50)
     triggerAutomaticArchiveDownloads(res);
 
-    alert(`✅ Bulk Allocation Complete!\\n\\nTotal Numbers Allocated: ${res.total_allocated}\\nAcross ${res.ranges.length} ranges.\\n\\nBoth ZIP archives (Detailed and Numbers-only) are downloading automatically.`);
+    alert(`✅ Bulk Allocation Complete!\n\nTotal Numbers Allocated: ${res.total_allocated}\\nAcross ${res.ranges.length} ranges.\\n\\nBoth ZIP archives (Detailed and Numbers-only) are downloading automatically.`);
 
     // Refresh inventory and ranges
     loadRangesAndInitDropdowns();
@@ -1026,7 +1058,7 @@ function downloadDetailedArchive(res) {
     r.numbers.forEach(num => {
       lines.push(`"${(r.range_name||'').replace(/"/g, '""')}","${num}",${r.price}`);
     });
-    files.push({ name: fname, content: lines.join('\\n') });
+    files.push({ name: fname, content: lines.join('\r\n') + '\r\n' });
   });
 
   if (!files.length) return alert('No numbers were allocated to generate detailed archive.');
@@ -1049,8 +1081,8 @@ function downloadNumbersOnlyArchive(res) {
   result.ranges.forEach(r => {
     if (!r.numbers || !r.numbers.length) return;
     const fname = sanitizeFilename(r.range_name) + '.csv';
-    const lines = r.numbers.join('\\n');
-    files.push({ name: fname, content: lines });
+    const lines = ['Number'].concat(r.numbers);
+    files.push({ name: fname, content: lines.join('\r\n') + '\r\n' });
   });
 
   if (!files.length) return alert('No numbers were allocated to generate numbers-only archive.');

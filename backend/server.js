@@ -4504,17 +4504,108 @@ app.get('/api/panel-sharing/numbers', authRequired, requireRole('admin'), (req,r
   return {rows,total,page,limit,totalPages};
 }));
 app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req,res)=>{
-  const b=req.body||{}; const userId=+b.sharing_user_id; const ids=(Array.isArray(b.ids)?b.ids:[]).map(x=>parseInt(x,10)).filter(x=>x>0);
-  const su=db.get('SELECT * FROM sharing_users WHERE id=? AND active=1',[userId]); if(!su) return res.status(404).json({error:'Sharing user not found'});
-  if(!ids.length) return res.status(400).json({error:'ids[] required'});
-  const ph=ids.map(()=>'?').join(',');
-  const rows=db.all(`SELECT n.id,n.number,n.range_id,r.name AS range_name,r.prefix AS range_prefix,COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE n.id IN (${ph}) AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL`, ids);
-  if(!rows.length) return res.status(404).json({error:'No unallocated numbers found'});
+  const b=req.body||{};
+  const userId=parsePositiveInt(b.sharing_user_id, 0);
+  const su=db.get('SELECT * FROM sharing_users WHERE id=? AND active=1',[userId]);
+  if(!su) return res.status(404).json({error:'Sharing user not found or inactive'});
 
-  const price = String(b.price !== undefined ? b.price : (b.rate || '0')).trim();
   const payterm = normalizePaymentCycle(b.payterm || 'weekly_7_1');
+  const ids = (Array.isArray(b.ids)?b.ids:[]).map(x=>parseInt(x,10)).filter(x=>x>0);
+  const rangeId = parsePositiveInt(b.range_id || b.id, 0);
+  const rangeName = String(b.range_name || b.range || '').trim();
+  const qty = parsePositiveInt(b.qty, 0);
 
-  try{
+  // Step 9: Range lookup
+  let range = null;
+  if (rangeId) {
+    range = db.get("SELECT * FROM ranges WHERE id=? AND (deleted_at IS NULL OR deleted_at = '')", [rangeId]);
+  }
+  if (!range && rangeName) {
+    range = db.get("SELECT * FROM ranges WHERE name=? AND (deleted_at IS NULL OR deleted_at = '')", [rangeName]);
+  }
+
+  // Step 10: Number lookup & Available-number query
+  let rows = [];
+  if (ids.length) {
+    const ph = ids.map(() => '?').join(',');
+    rows = db.all(
+      `SELECT n.id, n.number, n.range_id, n.manager_id, n.agent_id, n.client_id,
+              r.name AS range_name, r.prefix AS range_prefix,
+              COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern
+       FROM numbers n
+       LEFT JOIN ranges r ON r.id=n.range_id
+       WHERE n.id IN (${ph}) AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL`,
+      ids
+    );
+  } else if (range) {
+    let numSql = `
+      SELECT n.id, n.number, n.range_id, n.manager_id, n.agent_id, n.client_id,
+             r.name AS range_name, r.prefix AS range_prefix,
+             COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern
+      FROM numbers n
+      JOIN ranges r ON r.id=n.range_id
+      WHERE r.id=? AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL
+        AND (r.deleted_at IS NULL OR r.deleted_at = '')
+      ORDER BY n.id ASC
+    `;
+    const numParams = [range.id];
+    if (qty > 0) {
+      numSql += ` LIMIT ?`;
+      numParams.push(qty);
+    }
+    rows = db.all(numSql, numParams);
+
+    // Number-to-range relationship fallback if pool had unlinked numbers with matching prefix
+    if (!rows.length && range.prefix) {
+      const cleanPfx = cleanPhone(range.prefix);
+      if (cleanPfx) {
+        let unlinkedSql = `
+          SELECT n.id, n.number, n.range_id, n.manager_id, n.agent_id, n.client_id
+          FROM numbers n
+          WHERE (n.range_id IS NULL OR n.range_id = 0)
+            AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL
+          ORDER BY n.id ASC
+        `;
+        const unlinked = db.all(unlinkedSql);
+        const matchedUnlinked = unlinked.filter(u => cleanPhone(u.number).startsWith(cleanPfx));
+        const picked = qty > 0 ? matchedUnlinked.slice(0, qty) : matchedUnlinked;
+        if (picked.length) {
+          picked.forEach(p => {
+            p.range_id = range.id;
+            p.range_name = range.name;
+            p.range_prefix = range.prefix;
+            p.pattern = range.pattern || range.prefix;
+            db.runNoSave('UPDATE numbers SET range_id=? WHERE id=?', [range.id, p.id]);
+          });
+          rows = picked;
+        }
+      }
+    }
+  } else {
+    return res.status(400).json({ error: 'Either ids[] or a valid range is required for allocation' });
+  }
+
+  // Step 11: Ownership logic (only unallocated numbers, never overwrite existing owners)
+  rows = rows.filter(r => r.manager_id === null && r.agent_id === null && r.client_id === null);
+  if (!rows.length) {
+    return res.status(404).json({ error: 'No available unallocated numbers found for this allocation' });
+  }
+
+  // Step 12: Rate lookup (authoritative from Rate Card if not explicitly overridden)
+  if (!range && rows[0] && rows[0].range_id) {
+    range = db.get("SELECT * FROM ranges WHERE id=?", [rows[0].range_id]);
+  }
+  let price = String(b.price !== undefined ? b.price : (b.rate !== undefined ? b.rate : '')).trim();
+  if (price === '' || isNaN(parseFloat(price))) {
+    if (range) {
+      price = payoutRateForPaymentCycle(range, payterm);
+    } else {
+      price = '0.0000';
+    }
+  }
+
+  // Step 13: Database transaction
+  try {
     if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
 
     // Ensure all rows have range association and pattern defined
@@ -4531,9 +4622,9 @@ app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req
           r.pattern = matched.pattern || matched.prefix;
           db.runNoSave('UPDATE numbers SET range_id=? WHERE id=?', [matched.id, r.id]);
         } else {
-          r.range_name = r.range_name || 'Standard Range';
-          r.range_prefix = r.range_prefix || '';
-          r.pattern = r.pattern || '';
+          r.range_name = r.range_name || (range ? range.name : 'Standard Range');
+          r.range_prefix = r.range_prefix || (range ? range.prefix : '');
+          r.pattern = r.pattern || (range ? (range.pattern || range.prefix) : '');
         }
       } else {
         r.range_prefix = r.range_prefix || '';
@@ -4541,33 +4632,48 @@ app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req
       }
     }
 
-    const rowIds=rows.map(r=>r.id); const ph2=rowIds.map(()=>'?').join(',');
-    db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${ph2})`, [su.agent_user_id, price, price, price, payterm, ...rowIds]);
-    
+    const rowIds = rows.map(r => r.id);
+    const CHUNK = 5000;
+    for (let i = 0; i < rowIds.length; i += CHUNK) {
+      const cIds = rowIds.slice(i, i + CHUNK);
+      const phAlloc = cIds.map(() => '?').join(',');
+      db.runNoSave(
+        `UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${phAlloc})`,
+        [su.agent_user_id, price, price, price, payterm, ...cIds]
+      );
+    }
+
     if (db.inTransaction()) db.exec('COMMIT');
     db.save();
     clearApiReadCache();
     bumpNumbersVer();
 
-    rows.forEach(nr=>logNumberHistory(req,nr,'allocated','',su.panel_name,{target_role:'sharing_agent',sharing_user_id:su.id}));
-    logAction(req,'allocate_panel_sharing_numbers','panel_sharing',{count:rows.length,panel_name:su.panel_name,price,payterm});
+    rows.forEach(nr => logNumberHistory(req, nr, 'allocated', '', su.panel_name, { target_role: 'sharing_agent', sharing_user_id: su.id }));
+    logAction(req, 'allocate_panel_sharing_numbers', 'panel_sharing', { count: rows.length, panel_name: su.panel_name, price, payterm, range_name: range ? range.name : undefined });
 
     // Group rows by range
     const rangeGroups = {};
     for (const r of rows) {
-      const rName = r.range_name || 'Range';
+      const rName = r.range_name || (range ? range.name : 'Range');
       if (!rangeGroups[rName]) rangeGroups[rName] = { range_name: rName, price: price, numbers: [] };
       rangeGroups[rName].numbers.push(r.number);
     }
 
+    // Step 14: Final response
     res.json({
       ok: true,
       count: rows.length,
       panel_name: su.panel_name,
+      range_name: range ? range.name : (rows[0] ? rows[0].range_name : ''),
       price: price,
       payterm: payterm,
       ranges: Object.values(rangeGroups),
-      rows: rows.map(r=>({range_name:r.range_name||'',number:r.number||'',price:price,pattern:r.pattern||''}))
+      rows: rows.map(r => ({
+        range_name: r.range_name || (range ? range.name : ''),
+        number: r.number || '',
+        price: price,
+        pattern: r.pattern || ''
+      }))
     });
   } catch(err) {
     if (db.inTransaction()) db.exec('ROLLBACK');

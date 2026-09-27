@@ -24,7 +24,7 @@
 14. [Operational Tooling & Utility Scripts](#14-operational-tooling--utility-scripts)
 15. [Automated Backup, Storage & Recovery Runbook](#15-automated-backup-storage--recovery-runbook)
 16. [Performance, Capacity Benchmarks & Scale Analysis (~30M Numbers)](#16-performance-capacity-benchmarks--scale-analysis-30m-numbers)
-17. [Current Platform State & Production Bug Fixes (Issues 1, 2, 3)](#17-current-platform-state--production-bug-fixes-issues-1-2-3)
+17. [Current Platform State & Production Bug Fixes (Issues 1 to 5)](#17-current-platform-state--production-bug-fixes-issues-1-to-5)
 18. [20 Mandatory Rules for Future AI Developers](#18-20-mandatory-rules-for-future-ai-developers)
 
 ---
@@ -129,6 +129,31 @@ Galaxy SMS operates **two distinct allocation engines** designed for different b
 
 ---
 
+### 4.3 Panel Sharing SMS Number Range Allocation Architecture (The 14-Step Flow)
+In addition to individual number selection, Galaxy SMS supports high-velocity allocation directly from an unallocated Range pool inside Partner Panel Sharing (`panel-sharing.html`).
+
+#### The Complete 14-Step Flow:
+1. **SMS Numbers Page:** The administrator accesses the SMS Numbers management view (`#page-numbers`).
+2. **Range Selection:** The operator selects an active telecom range from the searchable Range filter (`#numRangeFilter`).
+3. **Selected User/Owner:** The operator selects the target Partner Panel user from `#allocUser`.
+4. **Allocation Popup:** The operator clicks **⚡ Allocate & Download**. The modal handles both checked table items AND entire range pool allocations if no individual checkboxes are checked.
+5. **Allocation Request:** The operator reviews the target partner, available number count, range name, billing period, and authoritative Rate Card price, with the option to set a downstream selling price override.
+6. **Frontend API Call:** The frontend issues `POST /api/panel-sharing/allocate` passing `{ sharing_user_id, range_id, range_name, price, payterm }` (or `ids[]` if specific numbers were manually chosen).
+7. **Backend Route Guard:** `backend/server.js` verifies the session via `authRequired` and enforces strict administrative role authority via `requireRole('admin')`.
+8. **Allocation Service Initialization:** The service resolves the active sharing user record from `sharing_users`, verifying account status (`active = 1`) and resolving the associated downstream agent account (`agent_user_id`).
+9. **Range Lookup:** The system looks up the range in `ranges` using `range_id` or `range_name` with `(deleted_at IS NULL OR deleted_at = '')`, extracting carrier metadata and Rate Card tiers.
+10. **Number Lookup & Available Pool Query:** The system queries unallocated numbers matching `n.range_id = r.id AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL` (ordered by `n.id ASC` with optional `qty` limit). If legacy unlinked numbers exist with prefixes matching `range.prefix`, the query automatically links and claims them.
+11. **Ownership Logic & Safety Enforcement:** Strict ownership validation ensures only genuinely unallocated numbers are claimed. Existing allocations (assigned to any manager, agent, or client) are **never overwritten**. If fewer unallocated numbers remain than requested, the system safely clamps to available inventory.
+12. **Rate Lookup & Billing Cycle Resolution:** If a price override is not supplied by the operator, the backend resolves the authoritative default price directly from the Rate Card according to the selected payment cycle via `payoutRateForPaymentCycle(range, payterm)` (`rate_1_1`, `rate_7_1`, `rate_7_7`, `rate_30_45`).
+13. **Database Transaction:** The allocation is committed atomically inside `BEGIN IMMEDIATE ... COMMIT`:
+    - Updates `numbers` in chunked batches of 5,000 rows setting `agent_id = su.agent_user_id, manager_id = NULL, client_id = NULL, client_rate = price, payout = price, rate = price, payterm = payterm, alloc_source = 'manual'`.
+    - Logs individual number assignment history via `logNumberHistory()`.
+    - Records an audit log entry via `logAction('allocate_panel_sharing_numbers')`.
+    - Persists changes to SQLite WAL disk, bumps numbers cache version (`bumpNumbersVer()`), and clears API query cache (`clearApiReadCache()`).
+14. **Final Response & Automatic Export:** The endpoint returns `{ ok: true, count, panel_name, range_name, price, payterm, ranges, rows }`. The browser receives the payload and immediately triggers an automatic download of the RFC 4180 compliant CSV file formatted with the range name.
+
+---
+
 ## 5. Rate Architecture & Financial Payout System
 
 The financial ledger maintains strict isolation between **Provider Real Cost** and **Downstream Selling Rates**:
@@ -167,6 +192,44 @@ Galaxy SMS includes a dedicated B2B distribution engine (`panel-sharing.html`):
 - **Dual ZIP Download:**
   1. `Detailed Allocation Files.zip` — Range Name, Number, Price, Billing Period.
   2. `Numbers Only Files.zip` — Pure MSISDN lists for direct partner carrier uploads.
+
+---
+
+### 6.4 Bulk Allocation CSV Formatting Standards & Dual Archive Generation
+When allocations are executed in bulk across multiple ranges, Galaxy SMS generates standardized CSV exports compliant with RFC 4180.
+
+#### CSV Type 1: Numbers-Only CSV
+- **Purpose:** Direct import into dialers, aggregators, or downstream SMS gateways.
+- **Header:** `Number`
+- **Format:** Exactly one telephone number per row, delimited by standard CRLF (`\r\n`).
+- **Row Count Rule:** Exactly $N$ data rows for $N$ allocated numbers (excluding the single header row).
+- **Integrity Rule:** Strictly eliminates literal `\n` characters or horizontal string concatenation.
+
+```csv
+Number
+44710000001
+44710000002
+44710000003
+```
+
+#### CSV Type 2: Detailed Range + Number + Rate CSV
+- **Purpose:** Financial reconciliation, partner invoicing, and Rate Card auditing.
+- **Columns (3):** `Range Name,Number,Price`
+- **Format:** Each allocated number produces exactly one complete 3-column row, delimited by standard CRLF (`\r\n`). Strings containing commas or quotes are escaped using RFC 4180 double-quote escaping (`""`).
+- **Row Count Rule:** Exactly $N$ data rows for $N$ allocated numbers (excluding the single header row).
+
+```csv
+Range Name,Number,Price
+"UK Mobile O2 01","44710000001",0.0075
+"UK Mobile O2 01","44710000002",0.0075
+"UK Mobile O2 01","44710000003",0.0075
+```
+
+#### Dual ZIP Archive Generation
+- Implemented purely in browser JavaScript via `window.createZipArchive` without external third-party CDN dependencies.
+- Generates two discrete archive bundles:
+  1. `Detailed Allocation Files.zip`: Contains one detailed 3-column CSV per allocated range.
+  2. `Numbers Only Files.zip`: Contains one single-column numbers-only CSV per allocated range.
 
 ---
 
@@ -587,7 +650,7 @@ pm2 start galaxy-sms
 
 ---
 
-## 17. Current Platform State & Production Bug Fixes (Issues 1, 2, 3)
+## 17. Current Platform State & Production Bug Fixes (Issues 1 to 5)
 
 ### 17.1 Production Issue 1: SMS Number Individual Allocation Fails (`.pattern` of null)
 - **Problem:** When an operator attempted to allocate an individual SMS number from Panel Sharing (`panel-sharing.html`), the UI displayed `Allocation failed: Cannot read properties of null (reading 'pattern')`.
@@ -618,6 +681,28 @@ pm2 start galaxy-sms
      - Added `event.stopPropagation()` to prevent clicks from closing the dropdown menu.
      - Sorted recipients strictly A-Z by label.
      - Preserved role-based scoping: Admin sees Managers/Agents/Clients; Manager sees Agents/Clients; Agent sees Clients.
+
+---
+
+### 17.4 Production Issue 4: SMS Number Range Allocation Fails
+- **Problem:** When operators attempted to allocate numbers using the Range filter on the SMS Numbers page in Panel Sharing (`panel-sharing.html`), the allocation flow blocked with `Please select numbers from the table first.` when checkboxes were not individually selected. If confirmed via API, the backend rejected requests missing `ids[]` with HTTP 400. Furthermore, table pagination limited manual selection to only the current page (25 rows), preventing full range pool allocation.
+- **Root Cause:**
+  1. Frontend `openAllocConfirmFlow()` strictly required `selectedIds().length > 0` before opening the confirmation popup, ignoring `#numRangeFilter`.
+  2. Backend route `POST /api/panel-sharing/allocate` enforced `if (!ids.length) return res.status(400).json({ error: 'ids[] required' })` and lacked range lookup (`range_id` / `range_name`) and available-number queries.
+  3. Price resolution lacked automatic fallback to authoritative Rate Card pricing when price was omitted.
+- **Permanent Resolution:**
+  1. Updated `openAllocConfirmFlow()` in `panel-sharing.html` to allow allocation when either numbers are selected OR a range is chosen in `#numRangeFilter`. Displays unallocated count in the modal.
+  2. Enhanced `proceedWithConfirmedAllocation()` to transmit `range_id` and `range_name` alongside optional `ids[]`.
+  3. Overhauled `POST /api/panel-sharing/allocate` in `backend/server.js` to implement the full 14-step flow: resolves range from database, queries unallocated numbers with strict ownership checks (`manager_id IS NULL AND agent_id IS NULL AND client_id IS NULL`), automatically resolves Rate Card price by payment cycle, executes updates within an atomic transaction, logs number history, and returns full metadata.
+
+### 17.5 Production Issue 5: Bulk Allocation CSV Format Defect (Literal \n Joining)
+- **Problem:** Downloaded CSV files from Bulk Allocation and SMS Numbers displayed literal `\n` characters within rows or placed numbers horizontally adjacent on a single line instead of creating discrete spreadsheet rows.
+- **Root Cause:** In `panel-sharing.html`, multiple CSV export routines (`downloadDetailedArchive`, `downloadNumbersOnlyArchive`, `downloadSelectedUnallocated`, `downloadAllFilteredNumbers`) used the string literal `'\\n'` (ASCII 92 followed by ASCII 110) rather than real line break delimiters. When written to a Blob or file, literal `\n` characters were written into the file stream.
+- **Permanent Resolution:**
+  1. Updated all CSV generation routines in `panel-sharing.html` to join rows using RFC 4180 standard CRLF (`\r\n`) and terminate files with `\r\n`.
+  2. Ensured Numbers-Only CSV contains a standardized `Number` header followed by one number per row.
+  3. Ensured Detailed CSV contains `Range Name,Number,Price` with 3 columns per row and RFC 4180 quote escaping.
+  4. Verified clipboard copy function (`copyNumbersOnly`) uses native newline (`\n`) for clean pasting into external tools.
 
 ---
 
