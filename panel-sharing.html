@@ -813,6 +813,7 @@ function closeAllocConfirmModal() {
 
 async function proceedWithConfirmedAllocation() {
   if (!pendingAllocData) return;
+  const currentAlloc = pendingAllocData;
 
   const priceVal = (document.getElementById('confOverridePrice')?.value || '').trim();
   const confirmedPrice = parseFloat(priceVal);
@@ -826,25 +827,28 @@ async function proceedWithConfirmedAllocation() {
 
   try {
     const payload = {
-      sharing_user_id: pendingAllocData.userId,
+      sharing_user_id: currentAlloc.userId,
       price: priceVal,
-      payterm: pendingAllocData.payterm
+      payterm: currentAlloc.payterm
     };
-    if (pendingAllocData.ids && pendingAllocData.ids.length > 0) {
-      payload.ids = pendingAllocData.ids;
+    if (currentAlloc.ids && currentAlloc.ids.length > 0) {
+      payload.ids = currentAlloc.ids;
     }
-    if (pendingAllocData.range_id) {
-      payload.range_id = pendingAllocData.range_id;
+    if (currentAlloc.range_id) {
+      payload.range_id = currentAlloc.range_id;
     }
-    if (pendingAllocData.range_name) {
-      payload.range_name = pendingAllocData.range_name;
+    if (currentAlloc.range_name) {
+      payload.range_name = currentAlloc.range_name;
     }
 
     const res = await API.post('/panel-sharing/allocate', payload);
 
     closeAllocConfirmModal();
 
-    alert(`✅ Successfully allocated ${res.count} numbers to ${res.panel_name}!\n\nDownstream Price: ${priceVal}\nBilling Period: ${pendingAllocData.payterm}\n\nThe allocated file will download automatically.`);
+    const assignedPayterm = res.payterm || currentAlloc.payterm || 'weekly_7_1';
+    const assignedRangeName = (currentAlloc.ranges && currentAlloc.ranges[0]) || res.range_name || res.panel_name || 'Range';
+
+    alert(`✅ Successfully allocated ${res.count} numbers to ${res.panel_name}!\n\nDownstream Price: $${priceVal}\nBilling Period: ${assignedPayterm}\n\nThe allocated file will download automatically.`);
 
     // AUTOMATIC DOWNLOAD OF ALLOCATED CSV (Section 35: File name must use Range Name)
     if (res.ranges && res.ranges.length) {
@@ -857,12 +861,11 @@ async function proceedWithConfirmedAllocation() {
         triggerBlobDownload(lines.join('\r\n') + '\r\n', fname);
       });
     } else if (res.rows && res.rows.length) {
-      const rName = pendingAllocData.ranges[0] || res.range_name || res.panel_name;
       const lines = ['Range Name,Number,Price'];
       res.rows.forEach(r => {
-        lines.push(`"${(r.range_name || rName).replace(/"/g, '""')}","${r.number}",${priceVal}`);
+        lines.push(`"${(r.range_name || assignedRangeName).replace(/"/g, '""')}","${r.number}",${priceVal}`);
       });
-      triggerBlobDownload(lines.join('\r\n') + '\r\n', sanitizeFilename(rName) + '.csv');
+      triggerBlobDownload(lines.join('\r\n') + '\r\n', sanitizeFilename(assignedRangeName) + '.csv');
     }
 
     loadNumbers();

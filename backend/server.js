@@ -1287,6 +1287,7 @@ function paymentTypeLabel(t){ return ({daily:'Daily',weekly:'Weekly',weekly_7_1:
 function assignedPaymentCycleForNumber(n, rangeRow={}){ const u=n?.agent_id?db.get('SELECT payment_type FROM users WHERE id=?',[n.agent_id]):null; return normalizePaymentCycle(n?.payterm || u?.payment_type || rangeRow?.payment_type || 'weekly_7_1'); }
 function assignedPaymentTypeForNumber(n, rangeRow={}){ return normalizePaymentType(assignedPaymentCycleForNumber(n, rangeRow)); }
 function payoutRateForPaymentCycle(row, cycle){
+  if (!row) return '0';
   cycle=normalizePaymentCycle(cycle);
   /* P19: number_rate (numbers.rate = admin allocation override) ab SAB se pehle check hota hai —
      TRUE override semantics, bilkul numbers-list effective_rate display jaisi (wahan bhi n.rate
