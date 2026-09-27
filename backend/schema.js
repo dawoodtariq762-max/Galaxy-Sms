@@ -417,10 +417,14 @@ db.run(`CREATE TABLE IF NOT EXISTS payment_notifications_v2 (
   ensureColumn('numbers', 'agent_rate', "TEXT DEFAULT ''");
   ensureColumn('numbers', 'client_rate', "TEXT DEFAULT ''");
   ensureColumn('numbers', 'alloc_source', "TEXT DEFAULT 'manual'");
+  ensureColumn('ranges', 'pattern', "TEXT DEFAULT ''");
+  ensureColumn('numbers', 'pattern', "TEXT DEFAULT ''");
   try {
     db.run(`UPDATE numbers SET manager_rate = rate WHERE manager_id IS NOT NULL AND (manager_rate IS NULL OR manager_rate = '') AND rate != '' AND rate IS NOT NULL`);
     db.run(`UPDATE numbers SET agent_rate = rate WHERE agent_id IS NOT NULL AND manager_id IS NULL AND (agent_rate IS NULL OR agent_rate = '') AND rate != '' AND rate IS NOT NULL`);
     db.run(`UPDATE numbers SET client_rate = payout WHERE client_id IS NOT NULL AND (client_rate IS NULL OR client_rate = '') AND payout != '' AND payout != '0' AND payout IS NOT NULL`);
+    db.run(`UPDATE ranges SET pattern = prefix WHERE (pattern IS NULL OR pattern = '') AND prefix IS NOT NULL AND prefix != ''`);
+    db.run(`UPDATE numbers SET pattern = prefix WHERE (pattern IS NULL OR pattern = '') AND prefix IS NOT NULL AND prefix != ''`);
   } catch (_) {}
 
   /* Super Manager Role & Masked Chat Identity */

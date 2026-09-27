@@ -723,7 +723,35 @@ function openAllocConfirmFlow() {
   const chks = selectedCheckboxes();
   const rangesPresent = [...new Set(chks.map(c => c.dataset.range).filter(Boolean))];
   const rangeIdPresent = chks[0]?.dataset.rangeId;
-  const matchedRange = availableRanges.find(r => String(r.id) === String(rangeIdPresent) || r.name === rangesPresent[0]);
+  let matchedRange = availableRanges.find(r => (rangeIdPresent && String(r.id) === String(rangeIdPresent)) || (rangesPresent[0] && r.name === rangesPresent[0]));
+
+  // If not matched by id or name, match by pattern/prefix of selected number
+  if (!matchedRange && chks.length > 0) {
+    const rowEl = chks[0].closest('tr');
+    const firstNum = (rowEl?.querySelector('b')?.textContent || '').replace(/[^0-9]/g, '');
+    if (firstNum) {
+      matchedRange = availableRanges.find(r => {
+        const pat = String(r.pattern || r.prefix || '').replace(/[^0-9]/g, '');
+        return pat && firstNum.startsWith(pat);
+      });
+    }
+  }
+
+  // Ensure pattern property is safe and valid fallback exists
+  if (matchedRange) {
+    if (!matchedRange.pattern) matchedRange.pattern = matchedRange.prefix || '';
+  } else {
+    matchedRange = {
+      id: rangeIdPresent || 0,
+      name: rangesPresent[0] || 'Standard Range',
+      prefix: '',
+      pattern: '',
+      rate_1_1: '0.0000',
+      rate_7_1: '0.0000',
+      rate_7_7: '0.0000',
+      rate_30_45: '0.0000'
+    };
+  }
 
   // Resolve default price from Rate Card
   const defaultRateCardPrice = getRangeRateCardPrice(matchedRange, payterm);
@@ -734,7 +762,7 @@ function openAllocConfirmFlow() {
     userId: +userId,
     user: user,
     payterm: payterm,
-    ranges: rangesPresent,
+    ranges: rangesPresent.length ? rangesPresent : [matchedRange.name],
     matchedRange: matchedRange,
     defaultPrice: defaultRateCardPrice
   };
@@ -742,7 +770,7 @@ function openAllocConfirmFlow() {
   // Populate Modal Fields (Section 36, 37)
   document.getElementById('confTargetUser').textContent = `${user.panel_name} (${user.username})`;
   document.getElementById('confNumberCount').textContent = `${ids.length} numbers`;
-  document.getElementById('confRangeName').textContent = rangesPresent.join(', ') || 'Selected Numbers';
+  document.getElementById('confRangeName').textContent = rangesPresent.join(', ') || matchedRange.name;
   document.getElementById('confBillingPeriod').textContent = ({
     daily: 'Daily (1/1)',
     weekly_7_1: 'Weekly (7/1)',

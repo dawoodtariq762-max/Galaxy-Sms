@@ -1464,11 +1464,12 @@ app.get('/api/ranges', authRequired, (req, res) => cachedJson(req, res, 5000, ()
     });
   };
   if (!includeTests) {
-    return stripProviderRates(db.all(`SELECT r.id,r.name,r.prefix,r.currency,r.rate_1_1,r.rate_7_1,r.rate_7_7,r.rate_30_45,r.memo,r.payment_type,r.created_at,r.deleted_at,r.country,r.provider,r.currency_rate,r.cli_limit,r.range_start,r.range_end,r.status,r.provider_rate_1_1,r.provider_rate_7_1,r.provider_rate_7_7,r.provider_rate_30_45,r.self_alloc_enabled,r.self_alloc_max,r.self_alloc_periods,'' AS test_number,'' AS test_numbers
+    return stripProviderRates(db.all(`SELECT r.id,r.name,r.prefix,COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern,r.currency,r.rate_1_1,r.rate_7_1,r.rate_7_7,r.rate_30_45,r.memo,r.payment_type,r.created_at,r.deleted_at,r.country,r.provider,r.currency_rate,r.cli_limit,r.range_start,r.range_end,r.status,r.provider_rate_1_1,r.provider_rate_7_1,r.provider_rate_7_7,r.provider_rate_30_45,r.self_alloc_enabled,r.self_alloc_max,r.self_alloc_periods,'' AS test_number,'' AS test_numbers
       FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`)
       .filter(r => !scopeIds || scopeIds.has(r.id)));
   }
   const rows = stripProviderRates(db.all(`SELECT r.*,
+    COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern,
     COALESCE((SELECT GROUP_CONCAT(test_number, ', ') FROM range_test_numbers t WHERE t.range_id=r.id AND t.active=1), r.test_number, '') AS test_numbers
     FROM ranges r WHERE ${where} ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`)
     .filter(r => !scopeIds || scopeIds.has(r.id)));
@@ -1484,7 +1485,7 @@ app.get('/api/ranges', authRequired, (req, res) => cachedJson(req, res, 5000, ()
 app.get('/api/rate-card', authRequired, (req, res) => {
   if (!['admin', 'manager', 'agent'].includes(req.user.role)) return res.status(403).json({ error: 'Not allowed' });
   return cachedJson(req, res, 5000, () => {
-    return db.all(`SELECT r.id, r.name, r.prefix, r.currency, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45, r.payment_type
+    return db.all(`SELECT r.id, r.name, r.prefix, COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern, r.currency, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45, r.payment_type
       FROM ranges r WHERE COALESCE(r.deleted_at,'')='' ORDER BY r.name COLLATE NOCASE ASC, r.id ASC`);
   }, 'numbers_ver');
 });
@@ -4476,13 +4477,13 @@ app.delete('/api/panel-sharing/users/:id', authRequired, requireRole('admin'), (
 });
 app.get('/api/panel-sharing/ranges', authRequired, requireRole('admin'), (req, res) => {
   const rows = db.all(`
-    SELECT r.id, r.name, r.prefix, r.currency, r.payment_type,
+    SELECT r.id, r.name, r.prefix, COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern, r.currency, r.payment_type,
            r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
            COUNT(n.id) as total_numbers,
            SUM(CASE WHEN n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL THEN 1 ELSE 0 END) as available_numbers
     FROM ranges r
     LEFT JOIN numbers n ON n.range_id=r.id
-    WHERE COALESCE(r.deleted_at,'')=''
+    WHERE (r.deleted_at IS NULL OR r.deleted_at = '')
     GROUP BY r.id
     ORDER BY r.name COLLATE NOCASE ASC
   `);
@@ -4490,7 +4491,7 @@ app.get('/api/panel-sharing/ranges', authRequired, requireRole('admin'), (req, r
 });
 app.get('/api/panel-sharing/numbers', authRequired, requireRole('admin'), (req,res)=>cachedJson(req,res,1500,()=>{
   const q=String(req.query.search||'').trim(); const range=String(req.query.range||'').trim();
-  const where=['n.manager_id IS NULL','n.agent_id IS NULL','n.client_id IS NULL',"COALESCE(r.deleted_at,'')=''"], params=[];
+  const where=['n.manager_id IS NULL','n.agent_id IS NULL','n.client_id IS NULL',"(r.deleted_at IS NULL OR r.deleted_at='')"], params=[];
   if(q){where.push('(LOWER(n.number) LIKE ? OR LOWER(r.name) LIKE ?)'); params.push('%'+String(q).toLowerCase()+'%','%'+String(q).toLowerCase()+'%');}
   if(range){where.push('r.name=?'); params.push(range);}
   const total=db.get(`SELECT COUNT(*) c FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')}`,params)?.c||0;
@@ -4499,7 +4500,7 @@ app.get('/api/panel-sharing/numbers', authRequired, requireRole('admin'), (req,r
   if (isNaN(limit) || limit < 1) limit = 25;
   if (limit > 5000) limit = 5000;
   const totalPages=Math.max(1,Math.ceil(total/limit)); const page=Math.min(Math.max(parseInt(req.query.page||1)||1,1),totalPages); const offset=(page-1)*limit;
-  const rows=db.all(`SELECT n.id,n.number,n.range_id,r.name AS range_name FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')} ORDER BY r.name COLLATE NOCASE,n.number LIMIT ? OFFSET ?`,[...params,limit,offset]);
+  const rows=db.all(`SELECT n.id,n.number,n.range_id,r.name AS range_name,r.prefix,COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE ${where.join(' AND ')} ORDER BY r.name COLLATE NOCASE,n.number LIMIT ? OFFSET ?`,[...params,limit,offset]);
   return {rows,total,page,limit,totalPages};
 }));
 app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req,res)=>{
@@ -4507,18 +4508,49 @@ app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req
   const su=db.get('SELECT * FROM sharing_users WHERE id=? AND active=1',[userId]); if(!su) return res.status(404).json({error:'Sharing user not found'});
   if(!ids.length) return res.status(400).json({error:'ids[] required'});
   const ph=ids.map(()=>'?').join(',');
-  const rows=db.all(`SELECT n.id,n.number,r.name AS range_name,r.id AS range_id FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE n.id IN (${ph}) AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL`, ids);
+  const rows=db.all(`SELECT n.id,n.number,n.range_id,r.name AS range_name,r.prefix AS range_prefix,COALESCE(NULLIF(r.pattern,''), r.prefix, '') AS pattern FROM numbers n LEFT JOIN ranges r ON r.id=n.range_id WHERE n.id IN (${ph}) AND n.manager_id IS NULL AND n.agent_id IS NULL AND n.client_id IS NULL`, ids);
   if(!rows.length) return res.status(404).json({error:'No unallocated numbers found'});
 
   const price = String(b.price !== undefined ? b.price : (b.rate || '0')).trim();
   const payterm = normalizePaymentCycle(b.payterm || 'weekly_7_1');
 
-  try{ db.beginBatch&&db.beginBatch();
+  try{
+    if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
+
+    // Ensure all rows have range association and pattern defined
+    const allRanges = db.all("SELECT id, name, prefix, COALESCE(NULLIF(pattern,''), prefix, '') AS pattern, rate_1_1, rate_7_1, rate_7_7, rate_30_45 FROM ranges WHERE (deleted_at IS NULL OR deleted_at = '') ORDER BY LENGTH(prefix) DESC");
+
+    for (const r of rows) {
+      if (!r.range_id || !r.range_name) {
+        const clean = cleanPhone(r.number);
+        const matched = allRanges.find(rg => rg.prefix && clean.startsWith(cleanPhone(rg.prefix)));
+        if (matched) {
+          r.range_id = matched.id;
+          r.range_name = matched.name;
+          r.range_prefix = matched.prefix;
+          r.pattern = matched.pattern || matched.prefix;
+          db.runNoSave('UPDATE numbers SET range_id=? WHERE id=?', [matched.id, r.id]);
+        } else {
+          r.range_name = r.range_name || 'Standard Range';
+          r.range_prefix = r.range_prefix || '';
+          r.pattern = r.pattern || '';
+        }
+      } else {
+        r.range_prefix = r.range_prefix || '';
+        r.pattern = r.pattern || r.range_prefix || '';
+      }
+    }
+
     const rowIds=rows.map(r=>r.id); const ph2=rowIds.map(()=>'?').join(',');
-    db.run(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${ph2})`, [su.agent_user_id, price, price, price, payterm, ...rowIds]);
+    db.runNoSave(`UPDATE numbers SET agent_id=?, manager_id=NULL, client_id=NULL, client_rate=?, payout=?, rate=?, payterm=?, alloc_source='manual' WHERE id IN (${ph2})`, [su.agent_user_id, price, price, price, payterm, ...rowIds]);
+    
+    if (db.inTransaction()) db.exec('COMMIT');
+    db.save();
+    clearApiReadCache();
+    bumpNumbersVer();
+
     rows.forEach(nr=>logNumberHistory(req,nr,'allocated','',su.panel_name,{target_role:'sharing_agent',sharing_user_id:su.id}));
     logAction(req,'allocate_panel_sharing_numbers','panel_sharing',{count:rows.length,panel_name:su.panel_name,price,payterm});
-    bumpNumbersVer();
 
     // Group rows by range
     const rangeGroups = {};
@@ -4535,9 +4567,12 @@ app.post('/api/panel-sharing/allocate', authRequired, requireRole('admin'), (req
       price: price,
       payterm: payterm,
       ranges: Object.values(rangeGroups),
-      rows: rows.map(r=>({range_name:r.range_name||'',number:r.number||'',price:price}))
+      rows: rows.map(r=>({range_name:r.range_name||'',number:r.number||'',price:price,pattern:r.pattern||''}))
     });
-  } finally { try{db.endBatch&&db.endBatch()}catch(e){} }
+  } catch(err) {
+    if (db.inTransaction()) db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'Allocation failed: ' + err.message });
+  }
 });
 app.post('/api/panel-sharing/bulk-allocate', authRequired, requireRole('admin'), (req, res) => {
   const b = req.body || {};
@@ -4564,7 +4599,7 @@ app.post('/api/panel-sharing/bulk-allocate', authRequired, requireRole('admin'),
   // Single range with specific numbers pasted
   if (b.numbers && rangeConfigs.length === 1) {
     const rangeId = rangeConfigs[0].range_id;
-    const range = db.get('SELECT * FROM ranges WHERE id=? AND COALESCE(deleted_at,"")=""', [rangeId]);
+    const range = db.get("SELECT * FROM ranges WHERE id=? AND (deleted_at IS NULL OR deleted_at = '')", [rangeId]);
     if (!range) return res.status(404).json({ error: 'Range not found' });
     const price = String(b.price !== undefined ? b.price : payoutRateForPaymentCycle(range, payterm)).trim();
 
@@ -4668,7 +4703,7 @@ app.post('/api/panel-sharing/bulk-allocate', authRequired, requireRole('admin'),
     if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
 
     for (const item of rangeConfigs) {
-      const range = db.get('SELECT * FROM ranges WHERE id=? AND COALESCE(deleted_at,"")=""', [item.range_id]);
+      const range = db.get("SELECT * FROM ranges WHERE id=? AND (deleted_at IS NULL OR deleted_at = '')", [item.range_id]);
       if (!range) {
         rangeResults.push({
           range_id: item.range_id,

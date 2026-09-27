@@ -745,7 +745,7 @@
 <div class="modal-overlay" id="allocAllModal"><div class="modal">
   <div class="modal-head"><h3>Allocate Selected Numbers</h3><button class="modal-close" onclick="closeModal('allocAllModal')">×</button></div>
   <div class="modal-body">
-    <div class="form-group"><label>Select Manager / Agent / Client <span class="req">*</span></label><select id="aaClient"><option value="">Please Select</option></select></div>
+    <div class="form-group"><label>Select Manager / Agent / Client <span class="req">*</span></label><div id="aaTargetDropdownWrap"></div></div>
     <div class="form-group"><label>Payterm</label><select id="aaPayterm" onchange="aaRefreshDefaultRate()"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
     <div class="form-group"><label>Allocation Rate <span class="req">*</span> <span class="muted" style="font-weight:400;font-size:11.5px">(default: from Rate Management)</span></label>
       <input type="number" id="aaRate" step="0.000001" min="0" placeholder="0.010" oninput="this.dataset.dirty='1'"/>
@@ -1092,10 +1092,28 @@ async function openAllocAll(){const ids=getSelectedIds();if(!ids.length){alert('
   try{ if(!usersData.manager.length) usersData.manager=await API.get('/users/manager'); }catch(e){}
   try{ if(!usersData.agent.length) usersData.agent=await API.get('/users/agent'); }catch(e){}
   try{ if(!usersData.client?.length) usersData.client=await API.get('/users/client'); }catch(e){}
-  const managerOpts=(usersData.manager||[]).map(m=>`<option value="${m.id}">Manager: ${m.username}</option>`).join('');
-  const agentOpts=(usersData.agent||[]).map(a=>`<option value="${a.id}">Agent: ${a.username}</option>`).join('');
-  const clientOpts=(usersData.client||[]).map(c=>`<option value="${c.id}">Client: ${c.username}</option>`).join('');
-  const sel=document.getElementById('aaClient'); sel.innerHTML='<option value="">Please Select</option>'+managerOpts+agentOpts+clientOpts;
+  const managerOpts=(usersData.manager||[]).map(m=>({ value: String(m.id), label: `Manager: ${m.username}`, search: `Manager ${m.username} ${m.name||''}` }));
+  const agentOpts=(usersData.agent||[]).map(a=>({ value: String(a.id), label: `Agent: ${a.username}`, search: `Agent ${a.username} ${a.name||''}` }));
+  const clientOpts=(usersData.client||[]).map(c=>({ value: String(c.id), label: `Client: ${c.username}`, search: `Client ${c.username} ${c.name||''}` }));
+  const items=[...managerOpts,...agentOpts,...clientOpts];
+  items.sort((a,b)=>a.label.localeCompare(b.label,undefined,{sensitivity:'base'}));
+
+  if(window.renderSearchSelect){
+    window.renderSearchSelect('aaTargetDropdownWrap',{
+      id:'aaClient',
+      name:'aaClient',
+      placeholder:'Please select manager, agent, client',
+      searchPlaceholder:'Search manager, agent, client...',
+      style:'width:100%',
+      items:items,
+      value:'',
+      onChange:function(val){ aaRefreshDefaultRate(); }
+    });
+  } else {
+    const sel=document.getElementById('aaTargetDropdownWrap');
+    sel.innerHTML=`<select id="aaClient" style="width:100%" onchange="aaRefreshDefaultRate()"><option value="">Please select manager, agent, client</option>${items.map(it=>`<option value="${it.value}">${it.label}</option>`).join('')}</select>`;
+  }
+
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
   const rateInput=document.getElementById('aaRate'); if(rateInput){ rateInput.value=''; rateInput.dataset.dirty=''; }
   aaRefreshDefaultRate();

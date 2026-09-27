@@ -1,9 +1,12 @@
-# GALAXY SMS — Complete AI Handover & Engineering Architecture Reference
+# Rebuild script for README.md and AI-HANDOVER-README.md
+import os
+
+readme_content = """# GALAXY SMS — Complete AI Handover & Engineering Architecture Reference
 
 > **AUTHORITATIVE HANDOVER DOCUMENTATION FOR FUTURE AI DEVELOPERS & SYSTEM ENGINEERS**  
 > **Notice:** This document is completely self-contained. It assumes you have NO prior conversation history, NO access to previous chat prompts, and NO tribal knowledge of historical design discussions. Everything documented here reflects the **actual, audited, verified code and database state** of the Galaxy SMS platform.  
 > **System Branding:** Galaxy SMS (Official)  
-> **Repository Root:** `/home/user/Galaxy-Sms` (Local Workspace) / Target VPS Deploy Path: `/opt/galaxy-sms` or `F:\galaxy-sms`  
+> **Repository Root:** `/home/user/Galaxy-Sms` (Local Workspace) / Target VPS Deploy Path: `/opt/galaxy-sms` or `F:\\galaxy-sms`  
 
 ---
 
@@ -31,7 +34,7 @@
 
 ## 1. System Overview & Technology Stack
 
-**Galaxy SMS** is a high-throughput, multi-tenant telecom SMS and OTP ingestion, hierarchy-allocation, financial accounting, and partner distribution engine. It enables administrators to import millions of telecom virtual mobile numbers (MSISDNs), organize them into geographic/carrier ranges, apply Rate Card tiers, delegate ranges down a multi-level organizational chain (Manager $\to$ Agent $\to$ Client), ingest incoming carrier SMS webhooks, monitor real-time OTP traffic, account for margins, and export allocations.
+**Galaxy SMS** is a high-throughput, multi-tenant telecom SMS and OTP ingestion, hierarchy-allocation, financial accounting, and partner distribution engine. It enables administrators to import millions of telecom virtual mobile numbers (MSISDNs), organize them into geographic/carrier ranges, apply Rate Card tiers, delegate ranges down a multi-level organizational chain (Manager $\\to$ Agent $\\to$ Client), ingest incoming carrier SMS webhooks, monitor real-time OTP traffic, account for margins, and export allocations.
 
 ### 1.1 Verified Technology Stack
 - **Runtime Environment:** Node.js (LTS v18.x or v20.x, tested on v20.20.2).
@@ -50,7 +53,7 @@
 
 The platform enforces a strict 4-tier organizational hierarchy governed by single-parent ownership:
 
-$$	ext{Admin} \longrightarrow 	ext{Manager} \longrightarrow 	ext{Agent} \longrightarrow 	ext{Client}$$
+$$\text{Admin} \longrightarrow \text{Manager} \longrightarrow \text{Agent} \longrightarrow \text{Client}$$
 
 ```
                 ┌──────────────────────────────────────┐
@@ -254,7 +257,7 @@ The SQLite database (`backend/data.sqlite`) runs in native C++ mode via `better-
 
 ### 11.5 Carrier Ingest & Health
 - `POST /api/incoming-sms` — Public Carrier Ingest. Ingests incoming SMS (JSON, form-urlencoded, multipart).
-- `GET /api/health` — Public. Returns `{ status: "ok", uptime: ... }`. Must respond in $< 15\text{ ms}$.
+- `GET /api/health` — Public. Returns `{ status: "ok", uptime: ... }`. Must respond in $< 15\\text{ ms}$.
 
 ---
 
@@ -544,7 +547,7 @@ node tests/verify-hierarchy-rates.js
 ```bash
 curl -I https://sms.yourdomain.com/api/health
 ```
-*Expected: HTTP/2 200 OK with $< 15\text{ ms}$ response latency.*
+*Expected: HTTP/2 200 OK with $< 15\\text{ ms}$ response latency.*
 
 ---
 
@@ -581,8 +584,8 @@ pm2 start galaxy-sms
 
 ## 16. Performance, Capacity Benchmarks & Scale Analysis (~30M Numbers)
 
-- **Storage Sizing:** At 30 million numbers, database size is approximately $8.87\text{--}9.2\text{ GB}$.
-- **V8 Heap Memory:** The Node.js process stays stable at $\sim 150\text{--}280\text{ MB RSS}$ because all database queries use streamed pagination (`LIMIT` / `OFFSET`). Loading millions of rows into a single JavaScript array is strictly forbidden.
+- **Storage Sizing:** At 30 million numbers, database size is approximately $8.87\\text{--}9.2\\text{ GB}$.
+- **V8 Heap Memory:** The Node.js process stays stable at $\\sim 150\\text{--}280\\text{ MB RSS}$ because all database queries use streamed pagination (`LIMIT` / `OFFSET`). Loading millions of rows into a single JavaScript array is strictly forbidden.
 - **Sync Event Loop Safety:** `better-sqlite3` is synchronous. Every query on `numbers` and `sms_records` **must** utilize a composite covering index (`idx_num_range_id`, `idx_sms_range_date`, etc.).
 
 ---
@@ -645,3 +648,12 @@ Follow these strict rules to prevent system corruption, regressions, or operatio
 18. **Always Test Inline Scripts:** When updating HTML files, validate all inline `<script>` blocks using Node's `vm.Script` to catch syntax errors before deployment.
 19. **Run Automated Test Batteries Before Delivery:** Always run `verify-production-fixes.js`, `verify-sections-31-to-55.js`, `verify-hierarchy-rates.js`, and `verify-all-30-points.js` to ensure 100% test passage.
 20. **Keep Documentation Updated:** Whenever an architectural change is made, immediately update this `README.md` to ensure future engineers have an accurate source of truth.
+"""
+
+with open('/home/user/Galaxy-Sms/README.md', 'w', encoding='utf-8') as f:
+    f.write(readme_content)
+
+with open('/home/user/Galaxy-Sms/AI-HANDOVER-README.md', 'w', encoding='utf-8') as f:
+    f.write(readme_content)
+
+print("Successfully rebuilt README.md and AI-HANDOVER-README.md!")

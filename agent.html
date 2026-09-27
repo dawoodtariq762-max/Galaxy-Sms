@@ -682,7 +682,7 @@
 <div class="modal-overlay" id="allocAllModal"><div class="modal">
   <div class="modal-head"><h3>Allocate Selected Numbers</h3><button class="modal-close" onclick="closeModal('allocAllModal')">×</button></div>
   <div class="modal-body">
-    <div class="form-group"><label>Select Client <span class="req">*</span></label><select id="aaClient"><option value="">Please Select</option></select></div>
+    <div class="form-group"><label>Select Client <span class="req">*</span></label><div id="aaTargetDropdownWrap"></div></div>
     <div class="form-group"><label>Payterm</label><select id="aaPayterm"><option value="daily">Daily (1/1)</option><option value="weekly_7_1">Weekly (7/1)</option><option value="weekly_7_7">Weekly (7/7)</option><option value="monthly_30x45">Monthly (30/45)</option></select></div>
     <div class="form-group"><label>Payout ($)</label><input type="number" id="aaPayout" step="0.001" value="0" placeholder="0"/></div>
     <div class="hint" id="aaCount"></div>
@@ -1031,7 +1031,25 @@ async function unallocSel(){const ids=selIds();if(!ids.length){alert('Select num
 /* Allocate All modal (to Client) */
 async function openAllocAll(){const ids=selIds();if(!ids.length){alert('Please select numbers first (checkbox).');return;}
   if(!clientsData.length)clientsData=await API.get('/users/client');
-  document.getElementById('aaClient').innerHTML='<option value="">Please Select</option>'+clientsData.map(c=>`<option value="${c.id}">${c.username}</option>`).join('');
+  const items = (clientsData||[]).map(c=>({ value: String(c.id), label: `Client: ${c.username}`, search: `Client ${c.username} ${c.name||''}` }));
+  items.sort((a,b)=>a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+
+  if(window.renderSearchSelect){
+    window.renderSearchSelect('aaTargetDropdownWrap', {
+      id: 'aaClient',
+      name: 'aaClient',
+      placeholder: 'Please select client',
+      searchPlaceholder: 'Search client...',
+      style: 'width:100%',
+      items: items,
+      value: '',
+      onChange: function(val){}
+    });
+  } else {
+    const sel = document.getElementById('aaTargetDropdownWrap');
+    sel.innerHTML = `<select id="aaClient" style="width:100%"><option value="">Please select client</option>${items.map(it=>`<option value="${it.value}">${it.label}</option>`).join('')}</select>`;
+  }
+
   document.getElementById('aaPayterm').value='weekly_7_1';document.getElementById('aaPayout').value='0';
   document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the Client.`;
   document.getElementById('allocAllModal').classList.add('show');}
