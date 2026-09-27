@@ -177,26 +177,7 @@ module.exports = function mountChat(app, deps) {
   app.post('/api/chat/admin/accounts/:userId/toggle', chatAuth, requireRole('admin'), handleToggleStatus);
   app.post('/api/account-pin/accounts/:userId/toggle', chatAuth, requireRole('admin'), handleToggleStatus);
 
-  const handleSendSetup = (req, res) => {
-    const targetId = intId(req.params.userId);
-    if (!targetId) return res.status(400).json({ error: 'Valid user ID required' });
-    const target = db.get('SELECT * FROM users WHERE id=?', [targetId]);
-    if (!target) return res.status(404).json({ error: 'User not found' });
-    if (!target.email) return res.status(400).json({ error: 'User does not have an email address configured' });
 
-    const token = crypto.randomBytes(24).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const expiresAt = new Date(Date.now() + 48 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
-
-    db.run(`INSERT INTO password_setup_tokens (user_id, token_hash, expires_at, token_purpose) VALUES (?,?,?,?)`,
-      [targetId, tokenHash, expiresAt, 'chat_password']);
-
-    const setupUrl = `${req.protocol}://${req.get('host')}/set-password?token=${token}&purpose=account_pin`;
-    logAction(req, 'admin_send_pin_setup', 'security', { target_id: targetId, username: target.username, email: target.email });
-    res.json({ ok: true, message: `Setup link generated for ${target.username}`, setup_url: setupUrl });
-  };
-  app.post('/api/chat/admin/accounts/:userId/send-setup', chatAuth, requireRole('admin'), handleSendSetup);
-  app.post('/api/account-pin/accounts/:userId/send-setup', chatAuth, requireRole('admin'), handleSendSetup);
 
   const handleInitAll = (req, res) => {
     const uninit = db.all(`

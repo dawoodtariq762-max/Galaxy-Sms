@@ -119,7 +119,7 @@ async function runTests() {
     });
   });
 
-  // TEST 1: Database Schema Cleanliness
+  // TEST 1: Database Schema Cleanliness (AI Assistant, Separate Chat & Panel Request Purged)
   console.log('--- Test 1: Database Schema Cleanliness ---');
   const tables = db.all("SELECT name FROM sqlite_master WHERE type='table'").map(t => t.name);
   
@@ -131,17 +131,38 @@ async function runTests() {
     'chat_conversations',
     'chat_messages',
     'chat_device_tokens',
-    'chat_message_deletions'
+    'chat_message_deletions',
+    'panel_requests',
+    'panel_request_otp',
+    'password_setup_tokens'
   ];
   for (const table of forbiddenTables) {
     assert.strictEqual(tables.includes(table), false, `Forbidden table "${table}" should NOT exist in database`);
   }
   assert.strictEqual(tables.includes('chat_credentials'), true, 'chat_credentials table must exist for PIN security');
   assert.strictEqual(tables.includes('complaints'), true, 'complaints table must exist for support ticketing');
-  console.log('  ✓ PASS: Schema is clean of AI Assistant and standalone chat tables; PIN & complaints preserved.');
+  console.log('  ✓ PASS: Schema is completely clean: AI Assistant, Chat, and Panel Request tables removed.');
 
-  // TEST 2: User Setup & PIN Security
-  console.log('--- Test 2: Agent Account PIN Security & Unlock ---');
+  // TEST 2: Complete Removal of Panel Request Feature
+  console.log('--- Test 2: Panel Request Complete Removal ---');
+  const rootDir = path.join(__dirname, '..');
+  assert.strictEqual(fs.existsSync(path.join(rootDir, 'public-request.html')), false, 'public-request.html must be deleted');
+  assert.strictEqual(fs.existsSync(path.join(rootDir, 'set-password.html')), false, 'set-password.html must be deleted');
+  assert.strictEqual(fs.existsSync(path.join(rootDir, 'backend', 'pubreq.js')), false, 'backend/pubreq.js must be deleted');
+
+  const adminHtml = fs.readFileSync(path.join(rootDir, 'admin.html'), 'utf8');
+  assert.strictEqual(adminHtml.includes('data-page="panelRequests"'), false, 'admin.html must not contain panelRequests nav');
+  assert.strictEqual(adminHtml.includes('id="page-panelRequests"'), false, 'admin.html must not contain panelRequests section');
+  assert.strictEqual(adminHtml.includes('buildPanelRequests'), false, 'admin.html must not contain buildPanelRequests');
+  assert.strictEqual(adminHtml.includes('prqModal'), false, 'admin.html must not contain prqModal');
+  assert.strictEqual(adminHtml.includes('sendChatSetupLink'), false, 'admin.html must not contain sendChatSetupLink');
+
+  const serverJs = fs.readFileSync(path.join(rootDir, 'backend', 'server.js'), 'utf8');
+  assert.strictEqual(serverJs.includes("require('./pubreq')"), false, 'server.js must not mount pubreq');
+  console.log('  ✓ PASS: Panel Request UI, API mount, files, and navigation completely removed with zero dead code.');
+
+  // TEST 3: User Setup & PIN Security
+  console.log('--- Test 3: Agent Account PIN Security & Unlock ---');
   const agentPass = bcrypt.hashSync('AgentPass123', 10);
   db.run("INSERT INTO users (username, password, role, active) VALUES ('test_agent', ?, 'agent', 1)", [agentPass]);
   const agentUser = db.get("SELECT id, username, role FROM users WHERE username = 'test_agent'");
@@ -199,8 +220,8 @@ async function runTests() {
   assert.strictEqual(wallet.binance_uid, '987654321');
   console.log('  ✓ PASS: PIN security accurately protects Agent payment credentials and blocks unauthorized access.');
 
-  // TEST 3: Support Complaints Ticketing
-  console.log('--- Test 3: Complaints Ticketing System ---');
+  // TEST 4: Support Complaints Ticketing
+  console.log('--- Test 4: Complaints Ticketing System ---');
   const postComplaint = await api('/api/complaints', 'POST', {
     subject: 'Billing inquiry',
     body: 'Please check my payout for range US-Direct'
@@ -216,26 +237,26 @@ async function runTests() {
   assert.strictEqual(getComplaints.body[0].subject, 'Billing inquiry');
   console.log('  ✓ PASS: Complaints ticketing system functions properly without standalone chat system.');
 
-  // TEST 4: Frontend UI Consistency and Search Dropdowns
-  console.log('--- Test 4: Frontend Inside-Search Dropdowns Verification ---');
+  // TEST 5: Frontend UI Consistency and Search Dropdowns
+  console.log('--- Test 5: Frontend Inside-Search Dropdowns Verification ---');
   const htmlFiles = ['admin.html', 'manager.html', 'agent.html', 'client.html', 'panel-sharing.html', 'test.html'];
   for (const file of htmlFiles) {
     const content = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
     assert.strictEqual(content.includes('renderSearchSelect'), true, `${file} must use renderSearchSelect`);
     assert.strictEqual(content.includes('id="page-chat"'), false, `${file} must NOT contain obsolete #page-chat`);
+    assert.strictEqual(content.includes('id="page-panelRequests"'), false, `${file} must NOT contain obsolete panel requests`);
   }
-  console.log('  ✓ PASS: All 6 frontends use renderSearchSelect and have no legacy #page-chat.');
+  console.log('  ✓ PASS: All 6 frontends use renderSearchSelect and have no legacy chat or panel request views.');
 
-  // TEST 5: Branding Check
-  console.log('--- Test 5: Branding Check ---');
-  const adminHtml = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+  // TEST 6: Branding Check
+  console.log('--- Test 6: Branding Check ---');
   assert.strictEqual(/GALAXY SMS/i.test(adminHtml), true, 'admin.html must contain Galaxy SMS branding');
   assert.strictEqual(adminHtml.includes('Agent Account PIN'), true, 'admin.html must display Agent Account PIN instead of Chat Accounts');
   console.log('  ✓ PASS: Branding is consistently "Galaxy SMS" and "Agent Account PIN".');
 
   server.close();
   console.log('\n====================================================');
-  console.log(' ALL 5 TESTS PASSED 100% SUCCESSFULLY!');
+  console.log(' ALL 6 TESTS PASSED 100% SUCCESSFULLY!');
   console.log('====================================================');
 }
 

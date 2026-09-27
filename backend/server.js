@@ -433,10 +433,7 @@ app.use(express.static(FRONTEND_ROOT));
    poora disable/revert ho jata hai; kisi existing route/behaviour ko touch nahi karta) ===== */
 require('./chat')(app, { authRequired, chatAuthRequired, requireRole, logAction, signChat, SECRET });
 
-/* ===== P19i: PUBLIC PANEL REQUESTS + GMAIL OTP VERIFICATION (isolated module —
-   is line ko hata kar feature poora revert ho jata hai; users creation sirf
-   insertUserAccount helper se hoti hai jo upar /api/users POST bhi use karta hai) ===== */
-require('./pubreq')(app, { authRequired, requireRole, logAction, SECRET, insertUserAccount });
+
 
 
 /* ============ PROVIDER SYNC ADMIN API ============
@@ -1131,9 +1128,7 @@ app.get('/api/users/:role', authRequired, (req, res) => {
 });
 
 // create user (admin->manager, manager->agent, agent->client)
-/* P19i (panel requests): shared user-insert helper — POST /api/users aur panel-request
-   APPROVE dono yahi use karte hain (ek hi user system, koi duplication nahi).
-   Behaviour /api/users ke purane inline insert ke bilkul barabar hai. */
+/* Shared user-insert helper — used by POST /api/users */
 function insertUserAccount({ username, password, role, name, email, whatsapp, contact, skype, active, payment_type, parentId }) {
   const cleanUsername = String(username || '').trim();
   if (!cleanUsername) return { error: 'username required', status: 400 };
@@ -1248,7 +1243,7 @@ app.delete('/api/users/:id', authRequired, (req, res) => {
 
     // 4. Detach jobs & tokens
     db.runNoSave('UPDATE jobs SET created_by = NULL WHERE created_by = ?', [id]);
-    db.runNoSave('DELETE FROM password_setup_tokens WHERE user_id = ?', [id]);
+
     db.runNoSave('DELETE FROM idempotency_keys WHERE user_id = ?', [id]);
 
     // 5. Delete the user
