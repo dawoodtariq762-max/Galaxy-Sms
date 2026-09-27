@@ -327,7 +327,7 @@ app.get('/api/exports/:id/download', (req, res) => {
   const file = parseJsonSafe(job.result_json)?.file;
   if (!file || !fs.existsSync(file)) return res.status(410).json({ error: 'Export file expired' });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="powerx-${job.payload_json.includes('sms') ? 'sms' : 'numbers'}-${job.id}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="galaxy-${job.payload_json.includes('sms') ? 'sms' : 'numbers'}-${job.id}.csv"`);
   fs.createReadStream(file).pipe(res);
 });
 
@@ -1233,19 +1233,8 @@ app.delete('/api/users/:id', authRequired, (req, res) => {
       db.runNoSave("UPDATE numbers SET client_id = NULL, payout = '0' WHERE client_id = ?", [id]);
     }
 
-    // 2. Clean up Chat conversations & messages for this user
-    const convs = db.all('SELECT id FROM chat_conversations WHERE user_a = ? OR user_b = ?', [id, id]);
-    if (convs.length) {
-      const cids = convs.map(c => c.id);
-      const ph = cids.map(() => '?').join(',');
-      db.runNoSave('DELETE FROM chat_message_deletions WHERE message_id IN (SELECT id FROM chat_messages WHERE conversation_id IN (' + ph + '))', cids);
-      db.runNoSave('DELETE FROM chat_messages WHERE conversation_id IN (' + ph + ')', cids);
-      db.runNoSave('DELETE FROM chat_conversations WHERE id IN (' + ph + ')', cids);
-    }
-    db.runNoSave('DELETE FROM chat_messages WHERE sender_id = ?', [id]);
+    // 2. Clean up user security PIN credentials
     db.runNoSave('DELETE FROM chat_credentials WHERE user_id = ?', [id]);
-    db.runNoSave('DELETE FROM chat_device_tokens WHERE user_id = ?', [id]);
-    db.runNoSave('DELETE FROM chat_message_deletions WHERE user_id = ?', [id]);
 
     // 3. Clean up complaints & replies
     const cmps = db.all('SELECT id FROM complaints WHERE sender_id = ?', [id]);
@@ -4233,27 +4222,26 @@ app.put('/api/payment-v2/settings', authRequired, requireRole('admin'), (req,res
   rows.forEach(r=>{ const t=normalizePaymentType(r.payment_type); db.run('UPDATE payment_v2_settings SET min_withdrawal=?, updated_at=datetime(\'now\') WHERE payment_type=?',[normalizeDecimalString(r.min_withdrawal)||'0',t]); paymentAudit(req,'update_minimum',{payment_type:t,amount:r.min_withdrawal,status:'settings'}); });
   res.json({ok:true,settings:paymentTypesSettings()});
 });
-/* P21: Enforce Chat Security Unlock on Agent Payment endpoints */
+/* Account Security PIN Unlock on Agent Payment endpoints */
 function requireAgentChatUnlock(req, res, next) {
   if (!req.user || req.user.role !== 'agent') return next();
-  if (req.user.type === 'chat') return next();
 
   const cred = db.get('SELECT chat_enabled FROM chat_credentials WHERE user_id = ?', [req.user.id]);
   if (cred && (cred.chat_enabled === 0 || cred.chat_enabled === false)) {
     return next();
   }
 
-  const token = req.headers['x-chat-unlock-token'];
+  const token = req.headers['x-chat-unlock-token'] || req.headers['x-pin-unlock-token'];
   if (!token) {
-    return res.status(403).json({ error: 'Chat security PIN verification required to access payment section', locked: true });
+    return res.status(403).json({ error: 'Security PIN verification required to access payment section', locked: true });
   }
   try {
     const decoded = jwt.verify(token, SECRET);
-    if (decoded && decoded.type === 'chat_unlocked' && decoded.id === req.user.id) {
+    if (decoded && (decoded.type === 'chat_unlocked' || decoded.type === 'account_pin_unlocked') && decoded.id === req.user.id) {
       return next();
     }
   } catch (_) {}
-  return res.status(403).json({ error: 'Chat security PIN verification required or session expired', locked: true });
+  return res.status(403).json({ error: 'Security PIN verification required or session expired', locked: true });
 }
 
 app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}}));
@@ -5985,8 +5973,7 @@ const PORT = process.env.PORT || 4000;
     console.log('• Payment ledger startup backfill disabled (new OTPs are recorded normally)');
   }
   console.log('• API Integration poller disabled (HTTP incoming only)');
-  /* P12: AI Assistant (independent limits, ASSISTANT_ENABLED kill-switch) */
-    app.listen(PORT, () => console.log(`\n✅ Galaxy SMS backend running: http://localhost:${PORT}\n`));
+  app.listen(PORT, () => console.log(`\n✅ Galaxy SMS backend running: http://localhost:${PORT}\n`));
 
   /* ===== P19k #5: one-time startup stats reconciliation =====
      Owner report: purane deletes (pre-fix code) ke baad dashboard (SMS This Month /

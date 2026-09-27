@@ -397,8 +397,7 @@
       <div class="nav-item" data-page="payMgmt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span>Payment Mgmt</span></div>
 
       <div class="sb-section">Communication</div>
-      <div class="nav-item" data-page="chat"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Chats</span><span class="gx-nav-badge" id="gxChatBadge" style="display:none"></span></div>
-      <div class="nav-item" data-page="chatAccounts"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Chat Accounts</span></div>
+      <div class="nav-item" data-page="chatAccounts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Agent Account PIN</span></div>
       <div class="nav-item" data-page="complaints"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Complaints</span><span class="gx-nav-badge" id="gxCompBadge" style="display:none"></span></div>
 
       <div class="sb-section">Users</div>
@@ -504,8 +503,8 @@
         </div>
         <div class="toolbar">
           <div class="filter-row">
-            <select class="sel-lg" id="numRange"><option value="">Select Range</option></select>
-            <select class="sel-lg" id="numClient"><option value="">Select Owner</option></select>
+            <div id="numRangeContainer" style="display:inline-block;min-width:180px"></div>
+            <div id="numClientContainer" style="display:inline-block;min-width:180px"></div>
             <button type="button" class="gx-btn gx-blue"  onclick="applyNumFilter()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
             <button type="button" class="gx-btn"  onclick="clearNumFilter()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
           </div>
@@ -593,7 +592,6 @@
       </section>
 
       <!-- P19e: INTERNAL CHAT + COMPLAINTS (GXChat builds UI at runtime) -->
-      <section class="page" id="page-chat"></section>
       <section class="page" id="page-chatAccounts"></section>
       <section class="page" id="page-complaints"></section>
 
@@ -609,7 +607,7 @@
           </div>
         </div>
         <div class="toolbar"><div class="filter-row">
-          <select class="sel-lg" id="testRange"><option value="">Select Range</option></select>
+          <div id="testRangeContainer" style="display:inline-block;min-width:180px"></div>
           <input type="text" id="testCliFilter" placeholder="Filter by CLI (e.g. TikTok)" oninput="renderTest()" style="min-width:220px"/>
           <button type="button" class="gx-btn gx-blue"  onclick="renderTest()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
           <button type="button" class="gx-btn"  onclick="document.getElementById('testCliFilter').value='';document.getElementById('testRange').value='';renderTest()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
@@ -634,7 +632,7 @@
             <div class="table-wrap" style="padding:14px 16px;margin-top:0"><div class="table-controls">
               <div class="tc-left"><label>Show Records:</label><select id="testNumLen" onchange="renderTest()"><option>10</option><option selected>25</option><option>50</option></select>
                 <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
-              <div class="tc-right"><label>Range:</label><select id="testNumRange" onchange="renderTest()" style="min-width:150px"><option value="">All</option></select><label>Search:</label><input type="text" id="testNumSearch" oninput="renderTest()" placeholder="Search..."/></div>
+              <div class="tc-right"><label>Range:</label><div id="testNumRangeContainer" style="display:inline-block;min-width:150px"></div><label>Search:</label><input type="text" id="testNumSearch" oninput="renderTest()" placeholder="Search..."/></div>
             </div></div>
             <div class="table-wrap"><div class="tscroll"><table>
               <thead><tr><th>Range</th><th>Test Number</th></tr></thead>
@@ -765,7 +763,7 @@
 /* auth guard — admin only */
 if(window.API){ API.guard('admin'); }
 window.PX_PANEL_MODE='admin_ops';
-const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','payMgmt','chat','chatAccounts','complaints','panelRequests']);
+const ADMIN_ALLOWED_PAGES=new Set(['dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','payMgmt','chatAccounts','complaints','panelRequests']);
 function normalizePanelPage(id){ id=String(id||'dashboard'); return ADMIN_ALLOWED_PAGES.has(id)?id:'dashboard'; }
 function applyPanelSplitUi(){
   if(window.PX_PANEL_MODE!=='admin_light') return;
@@ -839,8 +837,22 @@ function ownerNamesForAdmin(){
 }
 function fillAdminOwnerSelects(){
   const owners=ownerNamesForAdmin();
-  fillSelect('numClient', owners);
-  const s=document.getElementById('numClient'); if(s && s.children[0]) s.children[0].textContent='Select Owner';
+  if (window.renderSearchSelect && document.getElementById('numClientContainer')) {
+    const items = owners.map(o => ({ value: o, label: o }));
+    window.renderSearchSelect('numClientContainer', {
+      id: 'numClient',
+      placeholder: 'Select Owner',
+      items: items,
+      value: numClientFilter || '',
+      onChange: (val) => {
+        numClientFilter = val;
+        renderNumbers();
+      }
+    });
+  } else {
+    fillSelect('numClient', owners);
+    const s=document.getElementById('numClient'); if(s && s.children[0]) s.children[0].textContent='Select Owner';
+  }
 }
 function agentsOf(m){
   let list=(usersData.agent||[]).filter(a=>!m || (usersData.manager||[]).find(mm=>mm.username===m && mm.id===a.parent_id)).map(a=>a.username);
@@ -997,8 +1009,25 @@ function sortNumbers(key){if(numSort.key===key)numSort.dir*=-1;else{numSort.key=
   renderNumbers();}
 function cycleClientFilter(){clientFilterMode=(clientFilterMode+1)%3;
   document.getElementById('clientSortHint').textContent=clientFilterMode===0?'⇅':(clientFilterMode===1?'Unallocated ▾':'Allocated ▾');renderNumbers();}
-function applyNumFilter(){numRangeFilter=document.getElementById('numRange').value;numClientFilter=document.getElementById('numClient').value;renderNumbers();}
-function clearNumFilter(){numRangeFilter='';numClientFilter='';document.getElementById('numRange').value='';document.getElementById('numClient').value='';document.getElementById('numSearch').value='';clientFilterMode=0;document.getElementById('clientSortHint').textContent='⇅';renderNumbers();}
+function applyNumFilter(){
+  const nr=document.getElementById('numRange'); if(nr) numRangeFilter=nr.value;
+  const nc=document.getElementById('numClient'); if(nc) numClientFilter=nc.value;
+  renderNumbers();
+}
+function clearNumFilter(){
+  numRangeFilter='';
+  numClientFilter='';
+  if (window.setSearchDropdownValue) {
+    window.setSearchDropdownValue('numRange', '', 'Select Range');
+    window.setSearchDropdownValue('numClient', '', 'Select Owner');
+  }
+  const nr=document.getElementById('numRange'); if(nr) nr.value='';
+  const nc=document.getElementById('numClient'); if(nc) nc.value='';
+  document.getElementById('numSearch').value='';
+  clientFilterMode=0;
+  document.getElementById('clientSortHint').textContent='⇅';
+  renderNumbers();
+}
 function renderNumbers(){
   const len=document.getElementById('numLen').value,q=(document.getElementById('numSearch').value||'').toLowerCase();
   let rows=(numbersData||[]).map(r=>({
@@ -1315,9 +1344,9 @@ function buildSmsReport(){
     <label>From</label><input type="date" id="srFrom" onchange="renderSmsReport();populateSmsReportFilterLists()"/>
     <label>To</label><input type="date" id="srTo" onchange="renderSmsReport();populateSmsReportFilterLists()"/>
     <label>Time</label><input type="time" id="srTFrom" onchange="renderSmsReport()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="srTTo" onchange="renderSmsReport()"/>
-    <label>Range</label><select id="srRange" onchange="renderSmsReport()"><option value="">All Ranges</option></select>
+    <label>Range</label><div id="srRangeContainer" style="display:inline-block;min-width:160px"></div>
     <label>Number</label><input type="text" id="srNumber" list="srNumDl" placeholder="92300…" style="min-width:150px" oninput="clearTimeout(window.__srNT);window.__srNT=setTimeout(renderSmsReport,450)"/>
-    <label>Manager</label><select id="srManager" onchange="renderSmsReport()"><option value="">All Managers</option></select>
+    <label>Manager</label><div id="srManagerContainer" style="display:inline-block;min-width:160px"></div>
     <button type="button" class="gx-btn gx-blue"  onclick="renderSmsReport()" data-tip="Apply filters" title="Apply" aria-label="Apply"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
     <button type="button" class="gx-btn"  onclick="srFrom.value=todayStr();srTo.value=todayStr();renderSmsReport()" data-tip="Today" title="Today" aria-label="Today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
     <button type="button" class="gx-btn"  onclick="srResetFilters()" data-tip="Reset filters" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
@@ -1335,9 +1364,36 @@ function buildSmsReport(){
 /* P14: report filter lists (Range/Manager from loaded data, CLI from role-scoped API) */
 async function populateSmsReportFilterLists(){
   try{
-    const rs=document.getElementById('srRange'), ms=document.getElementById('srManager');
-    if(rs && rs.options.length<=1){ let names=(typeof rangeNames!=='undefined'&&rangeNames.length)?rangeNames.slice():[]; if(!names.length){ try{ const rj=await API.get('/ranges'); const arr=Array.isArray(rj)?rj:(rj.ranges||[]); names=arr.map(x=>x.name).filter(Boolean);}catch(e){} } rs.innerHTML='<option value="">All Ranges</option>'+names.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
-    if(ms && ms.options.length<=1){ const ms2=(typeof usersData!=='undefined'&&(usersData.manager||[]).length)?usersData.manager.map(x=>x.username||x.name).filter(Boolean):[]; ms.innerHTML='<option value="">All Managers</option>'+ms2.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
+    let names=(typeof rangeNames!=='undefined'&&rangeNames.length)?rangeNames.slice():[];
+    if(!names.length){ try{ const rj=await API.get('/ranges'); const arr=Array.isArray(rj)?rj:(rj.ranges||[]); names=arr.map(x=>x.name).filter(Boolean);}catch(e){} }
+    if (window.renderSearchSelect && document.getElementById('srRangeContainer')) {
+      const items = [{ value: '', label: 'All Ranges' }].concat(names.map(n => ({ value: n, label: n })));
+      window.renderSearchSelect('srRangeContainer', {
+        id: 'srRange',
+        placeholder: 'All Ranges',
+        items: items,
+        value: (document.getElementById('srRange')?.value) || '',
+        onChange: () => renderSmsReport()
+      });
+    } else {
+      const rs=document.getElementById('srRange');
+      if(rs && rs.options.length<=1){ rs.innerHTML='<option value="">All Ranges</option>'+names.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
+    }
+
+    const ms2=(typeof usersData!=='undefined'&&(usersData.manager||[]).length)?usersData.manager.map(x=>x.username||x.name).filter(Boolean):[];
+    if (window.renderSearchSelect && document.getElementById('srManagerContainer')) {
+      const items = [{ value: '', label: 'All Managers' }].concat(ms2.map(n => ({ value: n, label: n })));
+      window.renderSearchSelect('srManagerContainer', {
+        id: 'srManager',
+        placeholder: 'All Managers',
+        items: items,
+        value: (document.getElementById('srManager')?.value) || '',
+        onChange: () => renderSmsReport()
+      });
+    } else {
+      const ms=document.getElementById('srManager');
+      if(ms && ms.options.length<=1){ ms.innerHTML='<option value="">All Managers</option>'+ms2.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join(''); }
+    }
     /* P19: SMS Report (SMS Support) se CLI filter hata diya — CLI filtering ab sirf SMS Detailed Report me.
        Rollback: srCli select + API.smsClis(srListArgs()) wala block yahan wapas aa sakta hai. */
     /* P18: Number input par click => available numbers (current dataset, counts) */
@@ -1346,7 +1402,16 @@ async function populateSmsReportFilterLists(){
     if(dl){ const rn=await API.smsNumbers(srListArgs()); dl.innerHTML=(rn.items||[]).map(x=>`<option value="${String(x.number).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${x.count!=null?x.count+' OTPs':''}</option>`).join(''); }
   }catch(e){}
 }
-function srResetFilters(){window.__srSort={k:'',d:''};gxResetSortHeads('srSort_'); ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); renderSmsReport(); }
+function srResetFilters(){
+  window.__srSort={k:'',d:''};gxResetSortHeads('srSort_');
+  ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
+  if (window.setSearchDropdownValue) {
+    window.setSearchDropdownValue('srRange', '', 'All Ranges');
+    window.setSearchDropdownValue('srManager', '', 'All Managers');
+  }
+  ['srRange','srManager'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
+  renderSmsReport();
+}
 async function loadSmsRecords(){
   try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; }
   // manager summary from real data
@@ -1397,11 +1462,11 @@ function buildSmsDetail(){
     </div>
     <div class="filter-row" style="margin-top:6px">
       <label style="min-width:34px">Filters</label>
-      <select class="sel-lg" id="sdSelRange" onchange="sdSelPick('range',this.value)"><option value="">All Ranges</option></select>
-      <select class="sel-lg" id="sdSelManager" onchange="sdSelPick('manager',this.value)"><option value="">All Managers</option></select>
-      <select class="sel-lg" id="sdSelAgent" onchange="sdSelPick('agent',this.value)"><option value="">All Agents</option></select>
-      <select class="sel-lg" id="sdSelClient" onchange="sdSelPick('client',this.value)"><option value="">All Clients</option></select>
-      <select class="sel-lg" id="sdSelProvider" onchange="sdSelPick('provider',this.value)"><option value="">All Providers</option></select>
+      <div id="sdSelRangeContainer" style="display:inline-block;min-width:150px"></div>
+      <div id="sdSelManagerContainer" style="display:inline-block;min-width:150px"></div>
+      <div id="sdSelAgentContainer" style="display:inline-block;min-width:150px"></div>
+      <div id="sdSelClientContainer" style="display:inline-block;min-width:150px"></div>
+      <div id="sdSelProviderContainer" style="display:inline-block;min-width:150px"></div>
       <button class="btn btn-red" onclick="renderSmsDetail()">Apply Filter</button>
       <button type="button" class="gx-btn"  onclick="sdReset()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
     </div>
@@ -1439,7 +1504,12 @@ function sdUnpick(dim){
   const sel=(window.__sdSel=window.__sdSel||sdSelAll());
   sel[dim]='';
   const map={cli:'sdCliSearch',number:'sdNumSearch',range:'sdSelRange',manager:'sdSelManager',agent:'sdSelAgent',client:'sdSelClient',provider:'sdSelProvider'};
-  const el=map[dim]?document.getElementById(map[dim]):null; if(el) el.value='';
+  const phMap={range:'All Ranges',manager:'All Managers',agent:'All Agents',client:'All Clients',provider:'All Providers'};
+  const el=map[dim]?document.getElementById(map[dim]):null;
+  if(el) el.value='';
+  if(window.setSearchDropdownValue && phMap[dim]) {
+    window.setSearchDropdownValue(map[dim], '', phMap[dim]);
+  }
   renderSmsDetail();
 }
 function sdChipsHtml(){
@@ -1470,6 +1540,13 @@ function sdReset(){
   const nsd=document.getElementById('sdSearch'); if(nsd) nsd.value='';
   const _nsr=document.getElementById('sdNumSearch'),_csr=document.getElementById('sdCliSearch');
   if(_nsr)_nsr.value=''; if(_csr)_csr.value='';
+  if (window.setSearchDropdownValue) {
+    window.setSearchDropdownValue('sdSelRange', '', 'All Ranges');
+    window.setSearchDropdownValue('sdSelManager', '', 'All Managers');
+    window.setSearchDropdownValue('sdSelAgent', '', 'All Agents');
+    window.setSearchDropdownValue('sdSelClient', '', 'All Clients');
+    window.setSearchDropdownValue('sdSelProvider', '', 'All Providers');
+  }
   sdSyncFilterSelects();
 }
 /* P20: group-by column formatting (dim ke hisab se tag/mono/period) */
@@ -1817,55 +1894,6 @@ async function delCliLimit(id){if(confirm('Remove this limit?')){try{await API.d
 
 /* =============== LIMIT MANAGEMENT =============== */
 let limitOverview={ranges:[],clis:[]};
-/* =============== P12: AI KNOWLEDGE MANAGEMENT =============== */
-let aiKbData={rows:[],settings:{}};
-function aiEsc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-async function loadAiKnowledge(){
-  try{ aiKbData=await API.get('/assistant/knowledge'); }catch(e){ aiKbData={rows:[],settings:{}}; }
-  const pay=document.getElementById('aiPayEnabled'); if(pay) pay.checked=aiKbData.settings.payment_enabled==='1';
-  const am=document.getElementById('aiAllocMax'); if(am) am.value=aiKbData.settings.alloc_max||'100';
-  const tb=document.getElementById('aiKbBody'); if(!tb) return;
-  tb.innerHTML=(aiKbData.rows||[]).map(r=>`<tr>
-    <td><input type="checkbox" ${r.enabled?'checked':''} onchange="toggleAiKb(${r.id},this.checked)" aria-label="Enable"></td>
-    <td><span class="tag ${r.category==='payment'?'tag-gold':'tag-blue'}">${aiEsc(r.category)}</span></td>
-    <td style="max-width:280px"><b>${aiEsc(r.question)}</b></td>
-    <td class="muted" style="max-width:340px">${aiEsc(r.answer)}</td>
-    <td><button type="button" class="gx-btn gx-blue" onclick="editAiKb(${r.id})" data-tip="Edit" title="Edit">✎</button>
-        <button type="button" class="gx-btn gx-red" onclick="delAiKb(${r.id})" data-tip="Delete" title="Delete">🗑</button></td>
-  </tr>`).join('')||`<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">No knowledge yet — add your first entry above</td></tr>`;
-  const info=document.getElementById('aiKbInfo');
-  if(info) info.textContent=`${(aiKbData.rows||[]).length} questions · payment answers ${aiKbData.settings.payment_enabled==='1'?'ENABLED (assistant can answer)':'DISABLED (assistant will not give payment dates)'}`;
-}
-async function addAiKb(){
-  const category=document.getElementById('aiKbCat').value,q=document.getElementById('aiKbQ').value.trim(),a=document.getElementById('aiKbA').value.trim();
-  if(!q||!a){alert('Please enter both a question and an answer.');return;}
-  try{ await API.post('/assistant/knowledge',{category,question:q,answer:a,enabled:true}); document.getElementById('aiKbQ').value=''; document.getElementById('aiKbA').value=''; alert('✅ Question added'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);}
-}
-async function toggleAiKb(id,on){ try{ await API.put('/assistant/knowledge/'+id,{enabled:on}); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
-async function toggleAiPay(on){ try{ await API.put('/assistant/knowledge-settings',{payment_enabled:on}); alert(on?'✅ Payment knowledge ENABLED':'Payment knowledge DISABLED'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
-/* P19: AI allocation limit — admin configurable, backend enforced */
-async function saveAiAllocMax(){
-  const el=document.getElementById('aiAllocMax'); if(!el) return;
-  const v=parseInt(el.value,10);
-  if(!v||v<1||v>5000){ alert('Enter a whole number between 1 and 5000.'); return; }
-  try{ const r=await API.put('/assistant/knowledge-settings',{alloc_max:v}); alert('✅ AI allocation limit set: '+(r.settings&&r.settings.alloc_max||v)+' numbers per range.'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);}
-}
-async function delAiKb(id){ if(!confirm('Delete this question?'))return; try{ await API.del('/assistant/knowledge/'+id); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);} }
-async function editAiKb(id){
-  const r=(aiKbData.rows||[]).find(x=>x.id===id); if(!r)return;
-  const q=prompt('Question:',r.question); if(q===null)return;
-  const a=prompt('Answer:',r.answer); if(a===null)return;
-  try{ await API.put('/assistant/knowledge/'+id,{question:q,answer:a}); alert('✅ Updated'); loadAiKnowledge(); }catch(e){alert('❌ '+e.message);}
-}
-async function exportAiKbTxt(){
-  try{
-    const t=sessionStorage.getItem('ms_token')||localStorage.getItem('ms_token');
-    const r=await fetch('/api/assistant/knowledge/export.txt',{headers:{Authorization:'Bearer '+t}});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const b=await r.blob(); const u=URL.createObjectURL(b);
-    const el=document.createElement('a'); el.href=u; el.download='galaxy-ranges-rates.txt'; document.body.appendChild(el); el.click(); el.remove(); URL.revokeObjectURL(u);
-  }catch(e){alert('❌ '+e.message);}
-}
 async function loadLimitManagement(){
   try{ limitOverview=await API.get('/limit-management/overview'); }catch(e){ limitOverview={ranges:[],clis:[]}; }
   renderLimitManagement();
@@ -1973,11 +2001,47 @@ function rebuildAllocData(){
 async function loadRates(){ try{ ratesData=await API.get('/ranges'); }catch(e){ ratesData=[]; }
   const liveRanges=(ratesData||[]).map(r=>r.name);
   fillSelect('allocRange',liveRanges);
-  fillSelect('numRange',liveRanges);
+  if (window.renderSearchSelect && document.getElementById('numRangeContainer')) {
+    const items = liveRanges.map(r => ({ value: r, label: r }));
+    window.renderSearchSelect('numRangeContainer', {
+      id: 'numRange',
+      placeholder: 'Select Range',
+      items: items,
+      value: numRangeFilter || '',
+      onChange: (val) => {
+        numRangeFilter = val;
+        renderNumbers();
+      }
+    });
+  } else {
+    fillSelect('numRange',liveRanges);
+  }
   fillSelect('importRange',liveRanges);
   fillSelect('testImportRange',liveRanges);
-  fillSelect('testRange',liveRanges);
-  fillSelect('testNumRange',liveRanges);
+  if (window.renderSearchSelect && document.getElementById('testRangeContainer')) {
+    const items = liveRanges.map(r => ({ value: r, label: r }));
+    window.renderSearchSelect('testRangeContainer', {
+      id: 'testRange',
+      placeholder: 'Select Range',
+      items: items,
+      value: (document.getElementById('testRange')?.value)||'',
+      onChange: (val) => { renderTest(); }
+    });
+  } else {
+    fillSelect('testRange',liveRanges);
+  }
+  if (window.renderSearchSelect && document.getElementById('testNumRangeContainer')) {
+    const items = [{ value: '', label: 'All Ranges' }].concat(liveRanges.map(r => ({ value: r, label: r })));
+    window.renderSearchSelect('testNumRangeContainer', {
+      id: 'testNumRange',
+      placeholder: 'All Ranges',
+      items: items,
+      value: (document.getElementById('testNumRange')?.value)||'',
+      onChange: (val) => { renderTest(); }
+    });
+  } else {
+    fillSelect('testNumRange',liveRanges);
+  }
   const delSel=document.getElementById('deleteRangeSelect');
   if(delSel) delSel.innerHTML='<option value="">Select Range</option>'+((ratesData||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join(''));
   if(document.getElementById('ratesBody')) renderRates();
@@ -2786,20 +2850,20 @@ function buildChatAccounts(){
   page.innerHTML = `
   <div class="page-head">
     <div>
-      <h2>Chat Accounts & Security</h2>
-      <div class="breadcrumb"><b>Communication</b> › Separate Chat Authentication Management</div>
+      <h2>Agent Account PIN & Security</h2>
+      <div class="breadcrumb"><b>Security</b> › Agent Payment &amp; Account PIN Management</div>
     </div>
     <div class="head-actions" style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost" onclick="initAllChatAccounts()" style="font-size:12.5px" title="Initialize credentials for any users without chat records">⚡ Init Missing Accounts</button>
+      <button class="btn btn-ghost" onclick="initAllChatAccounts()" style="font-size:12.5px" title="Initialize credentials for any users without chat records">⚡ Init Missing PINs</button>
       <button class="btn btn-blue" onclick="loadChatAccounts()" style="font-size:12.5px">↻ Refresh</button>
     </div>
   </div>
 
   <div class="stats-grid" style="margin-bottom:18px">
     <div class="stat-card dash-metric d-blue"><div class="stat-info"><p>Total Users</p><h3 id="caTotUsers">0</h3><span>System Accounts</span></div><div class="dash-go">👥</div></div>
-    <div class="stat-card dash-metric d-green"><div class="stat-info"><p>Chat Enabled</p><h3 id="caTotEnabled">0</h3><span>Active Chat Access</span></div><div class="dash-go">💬</div></div>
-    <div class="stat-card dash-metric d-pink"><div class="stat-info"><p>Chat Disabled</p><h3 id="caTotDisabled">0</h3><span>Access Revoked</span></div><div class="dash-go">🔒</div></div>
-    <div class="stat-card dash-metric d-orange"><div class="stat-info"><p>Passwords Configured</p><h3 id="caTotPwSet">0</h3><span>Ready for Login</span></div><div class="dash-go">🔑</div></div>
+    <div class="stat-card dash-metric d-green"><div class="stat-info"><p>PIN Enabled</p><h3 id="caTotEnabled">0</h3><span>Active PIN Security</span></div><div class="dash-go">💬</div></div>
+    <div class="stat-card dash-metric d-pink"><div class="stat-info"><p>PIN Disabled</p><h3 id="caTotDisabled">0</h3><span>PIN Suspended</span></div><div class="dash-go">🔒</div></div>
+    <div class="stat-card dash-metric d-orange"><div class="stat-info"><p>PINs Configured</p><h3 id="caTotPwSet">0</h3><span>Ready for Unlock</span></div><div class="dash-go">🔑</div></div>
   </div>
 
   <div class="table-wrap" style="padding:14px 18px;margin-bottom:12px">
@@ -2818,7 +2882,7 @@ function buildChatAccounts(){
       </div>
       <div>
         <select id="caStatusSelect" onchange="chatAccStatus=this.value;renderChatAccounts();" style="width:auto">
-          <option value="">All Chat Status</option>
+          <option value="">All PIN Status</option>
           <option value="enabled">Enabled Only</option>
           <option value="disabled">Disabled Only</option>
         </select>
@@ -3019,7 +3083,7 @@ function openSetChatPasswordModal(userId, username){
       </div>
       <div class="modal-body">
         <p class="muted" style="margin-bottom:14px;font-size:13px">
-          Set the user's <b>dedicated 6-digit chat password</b> for mobile app messaging. The user's web panel password remains completely unaffected.
+          Set the user's <b>dedicated 6-digit Account Security PIN</b> used to protect the Payment section and account operations. The web panel login password remains completely unaffected.
         </p>
         <div style="margin-bottom:14px;text-align:right">
           <button type="button" class="btn btn-ghost" id="btnGen6Digit" style="font-size:12px;padding:4px 10px;color:var(--accent)">🎲 Generate Random 6-Digit</button>

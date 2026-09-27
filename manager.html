@@ -533,8 +533,8 @@
     </div>
     <div class="toolbar">
       <div class="filter-row">
-        <select class="sel-lg" id="numRange"><option value="">Select Range</option></select>
-        <select class="sel-lg" id="numAgent"><option value="">Select Agent</option></select>
+        <div id="numRangeContainer" style="display:inline-block;min-width:180px"></div>
+        <div id="numAgentContainer" style="display:inline-block;min-width:180px"></div>
         <button type="button" class="gx-btn gx-blue"  onclick="renderNumbers()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
         <button type="button" class="gx-btn"  onclick="resetNum()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
       </div>
@@ -611,7 +611,6 @@
 
   <!-- ========== TEST PANEL (full CLI) ========== -->
   <!-- P19e: INTERNAL CHAT + COMPLAINTS (GXChat builds UI at runtime) -->
-  <section class="page" id="page-chat"></section>
   <section class="page" id="page-complaints"></section>
 
   <section class="page" id="page-test">
@@ -781,7 +780,16 @@ function renderRateCard(){const len=document.getElementById('rcLen').value,q=(do
 let nSort={k:null,d:1},agFilter=0,rangeF='',agentF='';
 function sortNum(k){if(nSort.k===k)nSort.d*=-1;else{nSort.k=k;nSort.d=1;}if(k==='number')document.getElementById('nSortHint').textContent=nSort.d===1?'▲':'▼';renderNumbers();}
 function cycleAgentFilter(){agFilter=(agFilter+1)%3;document.getElementById('aSortHint').textContent=agFilter===0?'⇅':(agFilter===1?'Unallocated ▾':'Allocated ▾');renderNumbers();}
-function resetNum(){rangeF='';agentF='';document.getElementById('numRange').value='';document.getElementById('numAgent').value='';document.getElementById('numSearch').value='';agFilter=0;document.getElementById('aSortHint').textContent='⇅';renderNumbers();}
+function resetNum(){
+  rangeF='';agentF='';
+  if (window.setSearchDropdownValue) {
+    window.setSearchDropdownValue('numRange', '', 'Select Range');
+    window.setSearchDropdownValue('numAgent', '', 'Select Agent');
+  }
+  const nr=document.getElementById('numRange'); if(nr) nr.value='';
+  const na=document.getElementById('numAgent'); if(na) na.value='';
+  document.getElementById('numSearch').value='';agFilter=0;document.getElementById('aSortHint').textContent='⇅';renderNumbers();
+}
 async function loadTestNumbers(){try{const data=await API.get('/test-numbers?paged=1&page=1&limit=100');const rows=data.rows||data;testNumbers=(rows||[]).map(t=>({range:t.range_name,num:t.number,payout:t.payout||'Ask'}));}catch(e){testNumbers=[];}}
 
 async function loadNumbers(){ return renderNumbers(); }
@@ -938,7 +946,7 @@ function buildSmsReport(){document.getElementById('page-smsReport').innerHTML=`
     <label>From</label><input type="date" id="srFrom" onchange="renderSmsReport();gxPopSmsFilterLists()"/>
     <label>To</label><input type="date" id="srTo" onchange="renderSmsReport();gxPopSmsFilterLists()"/>
     <label>Time</label><input type="time" id="srTFrom" onchange="renderSmsReport()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="srTTo" onchange="renderSmsReport()"/>
-    <label>Range</label><select id="srRange" onchange="renderSmsReport()"><option value="">All Ranges</option></select>
+    <label>Range</label><div id="srRangeContainer" style="display:inline-block;min-width:160px"></div>
     <label>Number</label><input type="text" id="srNumber" list="srNumDl" placeholder="92300…" style="min-width:150px" oninput="clearTimeout(window.__srNT);window.__srNT=setTimeout(renderSmsReport,450)"/>
     <button type="button" class="gx-btn"  onclick="srResetFilters()" data-tip="Reset filters" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
   </div></div>
@@ -955,14 +963,23 @@ function setDefaultDates(fromId,toId){const uk=todayStr();const f=document.getEl
   if(!document.__gxAutoDateHook){ document.__gxAutoDateHook=1; document.addEventListener('change',e=>{ if(e.target&&e.target.matches&&e.target.matches('input[type=date]')) e.target.dataset.gxAuto='0'; }); }
 }
 async function gxPopSmsFilterLists(){
-  /* P19: srCli/sdCli/sdRange filling removed — SMS Report me CLI filter nahi, SMS Detail
-     ab facet (click-to-filter) design hai (dropdowns nahi). srRange + number datalist qayam. */
   try{
-    const rs=document.getElementById('srRange');
     let names=[];
     try{ const rj=await API.get('/ranges'); const arr=Array.isArray(rj)?rj:(rj.ranges||[]); names=arr.map(x=>x.name).filter(Boolean); }catch(e){}
-    const opt=(arr,all)=>all+arr.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join('');
-    if(rs&&rs.options.length<=1) rs.innerHTML=opt(names,'<option value="">All Ranges</option>');
+    if (window.renderSearchSelect && document.getElementById('srRangeContainer')) {
+      const items = [{ value: '', label: 'All Ranges' }].concat(names.map(n => ({ value: n, label: n })));
+      window.renderSearchSelect('srRangeContainer', {
+        id: 'srRange',
+        placeholder: 'All Ranges',
+        items: items,
+        value: (document.getElementById('srRange')?.value) || '',
+        onChange: () => renderSmsReport()
+      });
+    } else {
+      const rs=document.getElementById('srRange');
+      const opt=(arr,all)=>all+arr.map(n=>`<option>${String(n).replace(/</g,'&lt;')}</option>`).join('');
+      if(rs&&rs.options.length<=1) rs.innerHTML=opt(names,'<option value="">All Ranges</option>');
+    }
     let dl=document.getElementById('srNumDl');
     if(!dl){ dl=document.createElement('datalist'); dl.id='srNumDl'; const inp=document.getElementById('srNumber'); if(inp&&inp.parentNode) inp.parentNode.appendChild(dl); }
     if(dl){ try{ const rn=await API.smsNumbers(srListArgs()); dl.innerHTML=(rn.items||[]).map(x=>`<option value="${String(x.number).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${x.count!=null?x.count+' OTPs':''}</option>`).join(''); }catch(e){} }
@@ -996,9 +1013,9 @@ function buildSmsDetail(){
          admin-only hain (backend bhi enforce karta hai — silently ignored). -->
     <div class="filter-row" style="margin-top:6px">
       <label style="min-width:34px">Filters</label>
-      <select class="sel-lg" id="sdSelRange" onchange="sdSelPick('range',this.value)"><option value="">All Ranges</option></select>
-      <select class="sel-lg" id="sdSelAgent" onchange="sdSelPick('agent',this.value)"><option value="">All Agents</option></select>
-      <select class="sel-lg" id="sdSelClient" onchange="sdSelPick('client',this.value)"><option value="">All Clients</option></select>
+      <div id="sdSelRangeContainer" style="display:inline-block;min-width:150px"></div>
+      <div id="sdSelAgentContainer" style="display:inline-block;min-width:150px"></div>
+      <div id="sdSelClientContainer" style="display:inline-block;min-width:150px"></div>
     </div>
     <div class="filter-row" style="margin-top:6px;flex-wrap:wrap">
       <span class="gx-gb-lab">Group by</span>
@@ -1263,10 +1280,42 @@ async function loadRateCard(){
   try{ rateCard=(await API.get('/rate-card')).map(r=>({range:r.name,prefix:r.prefix,cur:r.currency,r1:r.rate_1_1,r2:r.rate_7_1,r3:r.rate_7_7,r4:r.rate_30_45,payment_type:r.payment_type})); }catch(e){ rateCard=[]; }
   renderRateCard();
   try{ const scoped=await API.get('/ranges'); rangeNames=(scoped||[]).map(r=>r.name); }catch(e){ rangeNames=[]; }
-  fillSel('numRange',rangeNames); fillSel('testRange',rangeNames);
+  if (window.renderSearchSelect && document.getElementById('numRangeContainer')) {
+    const items = rangeNames.map(r => ({ value: r, label: r }));
+    window.renderSearchSelect('numRangeContainer', {
+      id: 'numRange',
+      placeholder: 'Select Range',
+      items: items,
+      value: rangeF || '',
+      onChange: (v) => { rangeF = v; renderNumbers(); }
+    });
+  } else {
+    fillSel('numRange',rangeNames);
+  }
+  fillSel('testRange',rangeNames);
 }
 async function loadNumbers(){ return renderNumbers(); }
-async function loadAgents(){ try{ agentsData=await API.get('/users/agent'); }catch(e){ agentsData=[]; } refreshAgentClientMaps(); fillSel('numAgent',myAgents);fillSel('bulkAgent',myAgents);fillSel('baAgent',myAgents); renderAgents(); if(document.getElementById('clBody')) renderClients(); if(document.getElementById('sdAgent')){fillSel('sdAgent',myAgents);document.getElementById('sdAgent').children[0].textContent='Filter Agent';} }
+async function loadAgents(){
+  try{ agentsData=await API.get('/users/agent'); }catch(e){ agentsData=[]; }
+  refreshAgentClientMaps();
+  if (window.renderSearchSelect && document.getElementById('numAgentContainer')) {
+    const items = myAgents.map(a => ({ value: a, label: a }));
+    window.renderSearchSelect('numAgentContainer', {
+      id: 'numAgent',
+      placeholder: 'Select Agent',
+      items: items,
+      value: agentF || '',
+      onChange: (v) => { agentF = v; renderNumbers(); }
+    });
+  } else {
+    fillSel('numAgent',myAgents);
+  }
+  fillSel('bulkAgent',myAgents);
+  fillSel('baAgent',myAgents);
+  renderAgents();
+  if(document.getElementById('clBody')) renderClients();
+  if(document.getElementById('sdAgent')){fillSel('sdAgent',myAgents);document.getElementById('sdAgent').children[0].textContent='Filter Agent';}
+}
 async function loadClients(){ try{ clientsData=await API.get('/users/client'); }catch(e){ clientsData=[]; } refreshAgentClientMaps(); if(document.getElementById('clBody')) {buildClients();} }
 async function loadSms(){ try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; } cdr=(smsRecords||[]).map(smsToCdr); recentTests=(smsRecords||[]).slice(0,50).map(r=>({date:(r.received_at||'').slice(0,19),range:r.range_name||'—',num:r.number||'',cli:r.cli||'',msg:r.message||''})); refreshAgentClientMaps(); const b=document.getElementById('agSumBody');if(b){const byAgt={};smsRecords.forEach(r=>{const a=r.agent_name||'—';byAgt[a]=(byAgt[a]||0)+1;});b.innerHTML=Object.keys(byAgt).map(a=>`<tr><td><span class="tag tag-agt">${a}</span></td><td><span class="tag tag-cli">${(agentClients[a]||[]).length}</span></td><td class="cell-money">${byAgt[a]}</td><td class="cell-money" style="color:#6ee7b7">$ ${sumPay((smsRecords||[]).filter(r=>r.agent_name===a))}</td></tr>`).join('')||`<tr><td colspan="4" class="muted" style="text-align:center;padding:16px">No records found</td></tr>`;} if(document.getElementById('srBody'))renderSmsReport(); if(document.getElementById('sdBody'))renderSmsDetail(); ['client','agent'].forEach(k=>{if(document.getElementById(k+'Body')){buildEntTot(k);renderEntity(k);}}); ['range','number'].forEach(k=>{if(document.getElementById(k+'Body')){buildDrillTot(k);renderDrill(k);}}); }
 function baRow(i){const q=parseInt(document.getElementById('bq'+i).value),a=document.getElementById('ba'+i).value;if(!q||!a){alert('Select agent and quantity.');return;}const row=baData[i],ag=(agentsData||[]).find(x=>x.username===a);if(!row||!ag)return;API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[ag.id],qty:q,payterm:(document.getElementById('baPayterm')?.value||'weekly_7_1')}).then(res=>{alert(`✅ ${res.total||0} numbers allocated.`);loadNumberSummaryForBulk();renderNumbers();}).catch(e=>alert('❌ '+e.message));}

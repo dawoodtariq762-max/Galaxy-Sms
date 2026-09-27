@@ -408,7 +408,6 @@
       </div>
 
       <div class="rsec">Communication</div>
-      <div class="ritem" data-page="chat"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="lbl">Chat</span><span class="gx-nav-lock" id="chatNavLock" style="margin-left:auto;font-size:12px;opacity:0.85">🔒</span><span class="gx-nav-badge" id="gxChatBadge" style="display:none"></span></div>
       <div class="ritem" data-page="complaints"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="lbl">Complaints</span><span class="gx-nav-badge" id="gxCompBadge" style="display:none"></span></div>
       <div class="ritem" data-page="clients"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg><span class="lbl">Client Management</span></div>
 
@@ -534,8 +533,8 @@
         </div>
         <div class="toolbar">
           <div class="filter-row">
-            <select class="sel-lg" id="numRange"><option value="">Select Range</option></select>
-            <select class="sel-lg" id="numClient"><option value="">Select Client</option></select>
+            <div id="numRangeContainer" style="display:inline-block;min-width:180px"></div>
+            <div id="numClientContainer" style="display:inline-block;min-width:180px"></div>
             <button type="button" class="gx-btn gx-blue"  onclick="renderNumbers()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
             <button type="button" class="gx-btn"  onclick="resetNum()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
             <div class="gx-numbers-count-badge" style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;color:var(--text,#e6ecfb);background:rgba(255,255,255,.06);padding:6px 12px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,.1))">
@@ -581,24 +580,6 @@
       </section>
 
       <!-- P19e: INTERNAL CHAT + COMPLAINTS (GXChat builds UI at runtime) -->
-      <section class="page" id="page-chat">
-        <!-- IN-PAGE CHAT SECURITY LOCK -->
-        <div id="chatLockView" style="display:block;padding:50px 16px;text-align:center">
-          <div class="card" style="max-width:440px;margin:20px auto;padding:40px 32px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.55);border:1px solid rgba(48,171,237,.3);border-radius:22px;background:linear-gradient(180deg,rgba(20,24,48,.96),rgba(12,16,36,.98))">
-            <div style="width:68px;height:68px;border-radius:34px;background:rgba(48,171,237,.14);border:1px solid rgba(48,171,237,.35);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#30ABED">
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            </div>
-            <h2 style="font-size:24px;margin:0 0 8px;font-weight:720;color:#FFFFFF">Chat Security</h2>
-            <p style="color:var(--text-2,#C9CCD2);font-size:14.5px;margin:0 0 24px">Enter your Security PIN</p>
-            <div style="max-width:300px;margin:0 auto">
-              <input type="password" id="chatPinInput" placeholder="Security PIN" maxlength="32" autocomplete="off" style="font-size:22px;letter-spacing:6px;text-align:center;padding:12px 14px;width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')unlockSectionWithPin('chat')">
-              <div id="chatPinErr" style="color:#FF5C7A;font-size:13px;margin-top:10px;min-height:20px;display:none"></div>
-              <button class="btn btn-blue" id="btnUnlockChat" style="width:100%;margin-top:18px;height:46px;font-size:15px;font-weight:700" onclick="unlockSectionWithPin('chat')">Unlock</button>
-            </div>
-          </div>
-        </div>
-        <div id="chatContentView" style="display:none"></div>
-      </section>
       <section class="page" id="page-complaints"></section>
 
       <!-- CLIENTS -->
@@ -1131,7 +1112,7 @@ function buildSmsReport(){document.getElementById('page-smsReport').innerHTML=`
     <label>From</label><input type="date" id="srFrom" onchange="renderSmsReport();gxPopSmsFilterLists()"/>
     <label>To</label><input type="date" id="srTo" onchange="renderSmsReport();gxPopSmsFilterLists()"/>
     <label>Time</label><input type="time" id="srTFrom" onchange="renderSmsReport()"/> <span class="muted" style="align-self:center">–</span> <input type="time" id="srTTo" onchange="renderSmsReport()"/>
-    <label>Range</label><select id="srRange" onchange="renderSmsReport()"><option value="">All Ranges</option></select>
+    <label>Range</label><div id="srRangeContainer" style="display:inline-block;min-width:160px"></div>
     <label>Number</label><input type="text" id="srNumber" list="srNumDl" placeholder="92300…" style="min-width:150px" oninput="clearTimeout(window.__srNT);window.__srNT=setTimeout(renderSmsReport,450)"/>
     <button type="button" class="gx-btn"  onclick="srResetFilters()" data-tip="Reset filters" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
   </div></div>
@@ -1187,8 +1168,8 @@ function buildSmsDetail(){
          admin-only hain (backend bhi enforce karta hai — silently ignored). -->
     <div class="filter-row" style="margin-top:6px">
       <label style="min-width:34px">Filters</label>
-      <select class="sel-lg" id="sdSelRange" onchange="sdSelPick('range',this.value)"><option value="">All Ranges</option></select>
-      <select class="sel-lg" id="sdSelClient" onchange="sdSelPick('client',this.value)"><option value="">All Clients</option></select>
+      <div id="sdSelRangeContainer" style="display:inline-block;min-width:150px"></div>
+      <div id="sdSelClientContainer" style="display:inline-block;min-width:150px"></div>
     </div>
     <div class="filter-row" style="margin-top:6px;flex-wrap:wrap">
       <span class="gx-gb-lab">Group by</span>

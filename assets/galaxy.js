@@ -451,7 +451,9 @@ window.renderSearchSelect = function(containerId, config) {
   const container = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
   if (!container) return;
 
-  const ddId = config.id || ('sd_' + Math.random().toString(36).substring(2, 9));
+  const rawId = config.id || ('sd_' + Math.random().toString(36).substring(2, 9));
+  const wrapId = 'dd_wrap_' + rawId;
+  const inputId = config.inputName || config.id || ('input_' + rawId);
   const placeholder = config.placeholder || 'Select Option';
   const searchPlaceholder = config.searchPlaceholder || 'Search...';
   const items = config.items || [];
@@ -465,20 +467,20 @@ window.renderSearchSelect = function(containerId, config) {
   if (initialItem) selectedLabel = initialItem.label;
 
   container.innerHTML = `
-    <div class="searchable-dropdown" id="${ddId}" style="${config.style || ''}">
-      <div class="sd-trigger" onclick="toggleSearchDropdown('${ddId}')">
-        <span class="sd-label" id="${ddId}-label">${escapeHtml(selectedLabel)}</span>
+    <div class="searchable-dropdown" id="${wrapId}" data-raw-id="${rawId}" style="${config.style || ''}">
+      <div class="sd-trigger" onclick="toggleSearchDropdown('${wrapId}')">
+        <span class="sd-label" id="${rawId}-label">${escapeHtml(selectedLabel)}</span>
         <span class="sd-caret">▾</span>
       </div>
-      <div class="sd-menu" id="${ddId}-menu" style="display:none">
+      <div class="sd-menu" id="${rawId}-menu" style="display:none">
         <div class="sd-search-box" onclick="event.stopPropagation()">
-          <input type="text" placeholder="${escapeHtml(searchPlaceholder)}" oninput="filterSearchDropdown('${ddId}', this.value)" autocomplete="off">
+          <input type="text" placeholder="${escapeHtml(searchPlaceholder)}" oninput="filterSearchDropdown('${wrapId}', this.value)" autocomplete="off">
         </div>
-        <div class="sd-options" id="${ddId}-options">
+        <div class="sd-options" id="${rawId}-options">
           ${items.map(it => {
             const isSel = String(it.value) === initialValue;
             const searchKey = escapeHtml((it.search || it.label || '').toLowerCase());
-            return `<div class="sd-option ${isSel ? 'selected' : ''}" data-value="${escapeHtml(String(it.value))}" data-search="${searchKey}" onclick="onSelectSearchDropdownItem('${ddId}', '${escapeHtml(String(it.value))}', '${escapeHtml(it.label)}')">
+            return `<div class="sd-option ${isSel ? 'selected' : ''}" data-value="${escapeHtml(String(it.value))}" data-search="${searchKey}" onclick="onSelectSearchDropdownItem('${wrapId}', '${escapeHtml(String(it.value))}', '${escapeHtml(it.label)}')">
               <span>${escapeHtml(it.label)}</span>
               ${it.badge ? `<span class="tag" style="font-size:10px;margin-left:6px">${escapeHtml(it.badge)}</span>` : ''}
             </div>`;
@@ -486,39 +488,40 @@ window.renderSearchSelect = function(containerId, config) {
           ${!items.length ? '<div class="sd-no-results">No options available</div>' : ''}
         </div>
       </div>
-      <input type="hidden" id="${config.inputName || config.id}" value="${escapeHtml(initialValue)}">
+      <input type="hidden" id="${inputId}" value="${escapeHtml(initialValue)}">
     </div>
   `;
 
-  // Store callback
-  window.GX_DROPDOWNS[ddId] = {
+  // Store callback under both keys for instant retrieval
+  const entry = {
     config: config,
+    rawId: rawId,
+    wrapId: wrapId,
     items: items,
     onChange: config.onChange,
     onSelect: config.onSelect
   };
+  window.GX_DROPDOWNS[wrapId] = entry;
+  window.GX_DROPDOWNS[rawId] = entry;
 };
 
-window.onSelectSearchDropdownItem = function(ddId, val, label) {
-  const meta = window.GX_DROPDOWNS[ddId] || {};
+window.onSelectSearchDropdownItem = function(wrapId, val, label) {
+  const meta = window.GX_DROPDOWNS[wrapId] || {};
   if (meta.onSelect) {
-    // Multi-select or custom select handler
     const item = (meta.items || []).find(it => String(it.value) === String(val)) || { value: val, label: label };
     meta.onSelect(item);
-    // Keep menu open or close based on config
     if (meta.config && meta.config.keepOpenOnSelect) {
-      // Clear search input and restore full list
-      const menu = document.getElementById(ddId + '-menu');
+      const menu = document.getElementById(meta.rawId + '-menu');
       if (menu) {
         const inp = menu.querySelector('input');
         if (inp) inp.value = '';
-        window.filterSearchDropdown(ddId, '');
+        window.filterSearchDropdown(wrapId, '');
       }
       return;
     }
   }
 
-  window.setSearchDropdownValue(ddId, val, label);
+  window.setSearchDropdownValue(wrapId, val, label);
   if (meta.onChange) {
     const item = (meta.items || []).find(it => String(it.value) === String(val)) || { value: val, label: label };
     meta.onChange(val, item);

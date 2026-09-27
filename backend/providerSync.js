@@ -192,7 +192,7 @@ const CONNECTORS = {
     // normal one; it can be overridden per provider if a provider requires it.
     const headers = {
       'Accept': 'application/json',
-      'User-Agent': String(cfg.user_agent || 'Mozilla/5.0 (compatible; Power XSMS-Sync/1.0)'),
+      'User-Agent': String(cfg.user_agent || 'Mozilla/5.0 (compatible; GalaxySMS-Sync/1.0)'),
     };
     const params = new URLSearchParams();
 

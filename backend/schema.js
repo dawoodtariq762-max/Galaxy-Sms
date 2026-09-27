@@ -236,52 +236,7 @@ function createTables() {
   )`);
   try { db.run("ALTER TABLE sharing_forward_logs ADD COLUMN connection_type TEXT DEFAULT 'activity'"); } catch(_) {}
 
-/* ============ P12: AI ASSISTANT TABLES (additive) ============ */
-  db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT DEFAULT 'general',
-    question TEXT NOT NULL,
-    answer TEXT NOT NULL,
-    enabled INTEGER DEFAULT 1,
-    sort_order INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-  )`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_assistant_kb_cat ON assistant_knowledge(category, enabled)`);
-  db.run(`CREATE TABLE IF NOT EXISTS assistant_settings (
-    key TEXT PRIMARY KEY,
-    value TEXT DEFAULT '',
-    updated_at TEXT DEFAULT (datetime('now'))
-  )`);
-  /* Payment knowledge section: DISABLED by default (Admin enable kare ga) */
-  if (!db.get("SELECT value FROM assistant_settings WHERE key='payment_enabled'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('payment_enabled','0')");
-  if (!db.get("SELECT value FROM assistant_settings WHERE key='general_enabled'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('general_enabled','1')");
-  /* P19: AI number-allocation limit (per range request). Default 100 (pehle hardcoded 500 tha).
-     Admin AI Assistant page se change hota hai — backend enforce karta hai. */
-  if (!db.get("SELECT value FROM assistant_settings WHERE key='alloc_max'")) db.run("INSERT INTO assistant_settings (key,value) VALUES ('alloc_max','100')");
-  if (!db.get('SELECT id FROM assistant_knowledge LIMIT 1')) {
-    const insKb = (c,q,a,e,so) => db.run('INSERT INTO assistant_knowledge (category,question,answer,enabled,sort_order) VALUES (?,?,?,?,?)',[c,q,a,e,so]);
-    insKb('general', 'What is Galaxy SMS?', 'Galaxy SMS is an SMS management platform — for managing panels, numbers, allocations, traffic and rates.', 1, 1);
-    insKb('general', 'How can I get numbers?', 'Allocate numbers by selecting ranges on the Numbers page, or simply type "I need numbers" — I will guide you through the allocation.', 1, 2);
-    insKb('payment', 'When are payments made?', 'Payments are processed according to your payment cycle. The exact schedule is configured in the Admin panel payment settings.', 0, 1);
-    insKb('payment', 'What does weekly mean?', 'The Weekly cycle calculates payments on 7-day cycles starting every Tuesday.', 0, 2);
-    insKb('payment', 'What does daily mean?', 'On the Daily cycle, each day\'s earnings become eligible the next day.', 0, 3);
-    insKb('payment', 'What does monthly mean?', 'The Monthly (30x45) cycle uses a 30-day work cycle that becomes eligible after 30+45 days.', 0, 4);
-  }
-  /* P19j language task: existing databases still carry the OLD Roman-Urdu seed answers.
-     Idempotent migration — rewrites ONLY rows that still match the original seed text EXACTLY
-     (any answer the admin has edited/customised is left untouched). Previous behaviour: Urdu seed text. */
-  {
-    const reKb = (oldA, newA) => db.run('UPDATE assistant_knowledge SET answer=?, updated_at=datetime(\'now\') WHERE answer=?', [newA, oldA]);
-    reKb('Galaxy SMS ek SMS management platform hai — panels, numbers, allocation, traffic aur rates manage karne ke liye.', 'Galaxy SMS is an SMS management platform — for managing panels, numbers, allocations, traffic and rates.');
-    reKb('Numbers page se ranges select kar ke allocate karein, ya mujhe likhen "I need numbers" — main guided allocation karwa dunga.', 'Allocate numbers by selecting ranges on the Numbers page, or simply type "I need numbers" — I will guide you through the allocation.');
-    reKb('Payments aap ke payment cycle ke mutabiq process hote hain. Exact schedule Admin panel ke payment settings me configured hai.', 'Payments are processed according to your payment cycle. The exact schedule is configured in the Admin panel payment settings.');
-    reKb('Weekly cycle har Tuesday se shuru hone wale 7-din ke cycle par payments calculate hoti hain.', 'The Weekly cycle calculates payments on 7-day cycles starting every Tuesday.');
-    reKb('Daily cycle par har din ki earning agle din eligible hoti hai.', 'On the Daily cycle, each day\'s earnings become eligible the next day.');
-    reKb('Monthly (30x45) cycle me 30-din ka work cycle hota hai jo 30+45 din baad eligible hota hai.', 'The Monthly (30x45) cycle uses a 30-day work cycle that becomes eligible after 30+45 days.');
-  }
-
-  db.run(`CREATE TABLE IF NOT EXISTS payment_notifications_v2 (
+db.run(`CREATE TABLE IF NOT EXISTS payment_notifications_v2 (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id INTEGER NOT NULL,
     request_id INTEGER,
@@ -473,29 +428,6 @@ function createTables() {
   ensureColumn('users', 'chat_display_name', "TEXT DEFAULT ''");
 
   /* Galaxy SMS Official Channel */
-  db.run(`CREATE TABLE IF NOT EXISTS channel_posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    admin_id INTEGER NOT NULL,
-    title TEXT DEFAULT '',
-    body TEXT NOT NULL,
-    media_path TEXT DEFAULT '',
-    media_type TEXT DEFAULT '',
-    media_name TEXT DEFAULT '',
-    media_size INTEGER DEFAULT 0,
-    is_pinned INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (admin_id) REFERENCES users(id)
-  )`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_channel_posts_created ON channel_posts(created_at DESC)`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS channel_reads (
-    user_id INTEGER PRIMARY KEY,
-    last_read_post_id INTEGER DEFAULT 0,
-    read_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )`);
-
   const cs = db.get('SELECT COUNT(*) AS c FROM carrier_settings');
   if (!cs || cs.c === 0) {
     db.run(`INSERT INTO carrier_settings (integration_status,carrier_ip,http_callback_url,notes)
@@ -807,34 +739,6 @@ function createTables() {
   db.run(`CREATE INDEX IF NOT EXISTS idx_numbers_agent_alloc_source ON numbers(agent_id, range_id, alloc_source)`);
 
   // 5) Version counters for cache invalidation (numbers_ver / sms_ver / users_ver)
-  /* ===== P19e: INTERNAL CHAT + COMPLAINTS (isolated, reversible feature) =====
-     chat_conversations: 1:1 pairwise (user_a < user_b, UNIQUE pair) — permission matrix
-     client<->agent, agent<->manager, manager<->admin, admin<->anyone backend-enforced.
-     chat_messages: sender reference only (users se identity aati hai — no duplication). */
-  db.run(`CREATE TABLE IF NOT EXISTS chat_conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_a INTEGER NOT NULL,
-    user_b INTEGER NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    last_message_at TEXT,
-    last_message_text TEXT DEFAULT ''
-  )`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_pair ON chat_conversations(user_a, user_b)`);
-  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_conv_pair ON chat_conversations(user_a, user_b)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_a ON chat_conversations(user_a, last_message_at)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_b ON chat_conversations(user_b, last_message_at)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_conv_last ON chat_conversations(last_message_at)`);
-  db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id INTEGER NOT NULL,
-    sender_id INTEGER NOT NULL,
-    body TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    read_at TEXT
-  )`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_conv ON chat_messages(conversation_id, id)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_sender ON chat_messages(sender_id, read_at)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_read ON chat_messages(read_at)`);
   /* complaints: manager/agent/client -> admin; replies = thread; status history via
      status_updated_* + audit_logs (logAction). */
   db.run(`CREATE TABLE IF NOT EXISTS complaints (
@@ -982,40 +886,7 @@ function createTables() {
       SELECT id, password, 1, datetime('now') FROM users WHERE role != 'admin'`);
   } catch (_) {}
 
-  db.run(`CREATE TABLE IF NOT EXISTS chat_device_tokens (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     INTEGER NOT NULL,
-    token       TEXT NOT NULL,
-    platform    TEXT DEFAULT 'android',
-    app_version TEXT DEFAULT '',
-    updated_at  TEXT DEFAULT (datetime('now')),
-    UNIQUE(user_id, token),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  )`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_device_user ON chat_device_tokens(user_id)`);
-
   ensureColumn('password_setup_tokens', 'token_purpose', "TEXT DEFAULT 'panel_password'");
-
-  /* ============ P21 PHASE-2: MESSAGE DELETION (DELETE FOR ME & DELETE FOR EVERYONE) ============ */
-  ensureColumn('chat_messages', 'deleted_for_everyone', 'INTEGER DEFAULT 0');
-  ensureColumn('chat_messages', 'deleted_at', 'TEXT DEFAULT NULL');
-  ensureColumn('chat_messages', 'deleted_by', 'INTEGER DEFAULT NULL');
-  ensureColumn('chat_messages', 'attachment_path', 'TEXT DEFAULT NULL');
-  ensureColumn('chat_messages', 'attachment_type', 'TEXT DEFAULT NULL');
-  ensureColumn('chat_messages', 'attachment_name', 'TEXT DEFAULT NULL');
-  ensureColumn('chat_messages', 'attachment_size', 'INTEGER DEFAULT NULL');
-
-  db.run(`CREATE INDEX IF NOT EXISTS idx_chat_msg_attachment ON chat_messages(attachment_path)`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS chat_message_deletions (
-    message_id INTEGER NOT NULL,
-    user_id    INTEGER NOT NULL,
-    deleted_at TEXT DEFAULT (datetime('now')),
-    PRIMARY KEY (message_id, user_id),
-    FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  )`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_cmd_user ON chat_message_deletions(user_id, message_id)`);
 
   /* ============ MIGRATION: RE-LINK NUMBERS FROM DELETED RANGES TO ACTIVE RANGES ============ */
   try {

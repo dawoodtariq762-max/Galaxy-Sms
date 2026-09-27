@@ -679,7 +679,7 @@ function onPeerSession(conn, session) {
         setTimeout(() => { try { session.close(); } catch (_) {} }, 50);
         return;
       }
-      session.send(pdu.response({ system_id: 'PowerX' }));
+      session.send(pdu.response({ system_id: 'GalaxySMS' }));
       st.sessions.add(session);
       markConnection(conn.id, { status: 'bound', last_error: '', last_connected_at: nowSql(), last_activity_at: nowSql(), consecutive_failures: 0 });
       logEvent(conn, 'bind', 'info', `peer bound as ${kind} (system_id=${okId})`, peer);
