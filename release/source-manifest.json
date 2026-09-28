@@ -1,5 +1,5 @@
 {
-  "note": "Current Lamix-style UI source, 2026-09-28. Code/documentation only; excludes own hash. Earlier cleanup records are historical. Runtime omissions are NOT deletion instructions.",
+  "note": "Current Lamix-style UI source incl. 2026-09-28 final colour/copy pass. Code/documentation only; excludes own hash. Earlier cleanup records are historical. Runtime omissions are NOT deletion instructions.",
   "files": [
     {
       "path": ".env.example",
@@ -23,13 +23,13 @@
     },
     {
       "path": "admin.html",
-      "bytes": 269696,
-      "sha256": "5e6547b0207955814993661eac4cda5411b7069e7419f96eaf54e804207bce4e"
+      "bytes": 269761,
+      "sha256": "0f9358b3249ee9758e8f058526da2c110b1374def39f99fd57ebf75f0487140a"
     },
     {
       "path": "agent.html",
-      "bytes": 165079,
-      "sha256": "e13874c2c4d1c95c128f9ad0194293b5da6ab7fcde9a54fc061bb56a1176084c"
+      "bytes": 165144,
+      "sha256": "acdc25b524d592eba9bf1f461a981c823ec08145c8cf5d533028a30f394e7d48"
     },
     {
       "path": "api.js",
@@ -48,8 +48,8 @@
     },
     {
       "path": "assets/dashboard-ui.js",
-      "bytes": 14337,
-      "sha256": "1939b71246cbf2fed39014c3126a0daf89992c0acfcd082594771ac26137f599"
+      "bytes": 14840,
+      "sha256": "ffe06ced9bb52f82d04c10cc426b42d512b9a37068af9b1743dd27d8cce3cbe4"
     },
     {
       "path": "assets/galaxy-favicon.png",
@@ -73,8 +73,13 @@
     },
     {
       "path": "assets/lamix-light.css",
-      "bytes": 17925,
-      "sha256": "fdb4bb5e2acd411529657f46df42feb653bfad41b0e5599ab788c92737de844a"
+      "bytes": 24881,
+      "sha256": "ab9a6edb5b48ec99c88015f6fa2c1aa8de01c071b39fe983ca00a6d0cf339924"
+    },
+    {
+      "path": "assets/number-copy.js",
+      "bytes": 5559,
+      "sha256": "03147e811149344e08dcf87bf21f83bb8d6ff1b243408928fec4012978753066"
     },
     {
       "path": "assets/world.svg",
@@ -163,8 +168,8 @@
     },
     {
       "path": "client.html",
-      "bytes": 67241,
-      "sha256": "214acb71020ff68983b7294552b66a54dff43dc2b871e8ed3e67f66a607d5530"
+      "bytes": 67306,
+      "sha256": "0270e8f5bad377d1a9e2d21f83f0f3b5e537453080c62f7515c6d95668242845"
     },
     {
       "path": "deploy.sh",
@@ -228,8 +233,8 @@
     },
     {
       "path": "docs/UI-THEME-IMPLEMENTATION.md",
-      "bytes": 7859,
-      "sha256": "33dc03a93e5ac9af29854a6f2654a68913ef6564d57f9b1185690ff014014e74"
+      "bytes": 11957,
+      "sha256": "a7d191bf645ef402a7fad1a97e28eff4a597f0fa96357dfd7e8c0fdc437c44ec"
     },
     {
       "path": "ecosystem.config.js",
@@ -253,8 +258,8 @@
     },
     {
       "path": "manager.html",
-      "bytes": 165286,
-      "sha256": "f8a3daa5f61ee0864b48cdd5f46be26dad4ad3335abfb243d2dc137c20f44354"
+      "bytes": 165351,
+      "sha256": "3e51c1da2c2bd869c8930cced363d41843e3f449b2458d51aa11306bc933325a"
     },
     {
       "path": "package-lock.json",
@@ -303,8 +308,8 @@
     },
     {
       "path": "release/ui-verification.json",
-      "bytes": 4671,
-      "sha256": "2cbc4c2f1a3206a66d9c7399b909a7c59cee384129b80f41d04991547e785812"
+      "bytes": 4970,
+      "sha256": "44c020c8e773b354bec7008dab798f8faba3f6402d25c354f511ef0d9b7c8d72"
     },
     {
       "path": "release/verification-summary.json",
@@ -363,8 +368,8 @@
     },
     {
       "path": "tests/ui-theme.test.js",
-      "bytes": 4051,
-      "sha256": "aec4ab58339536e5d6bbfc41ef71ba829039dc568a52315a75155fd81266d281"
+      "bytes": 6034,
+      "sha256": "acfc72f9705bb474bb4b1ce6a2ed1592a2430df3b799f71487fadb2915874156"
     },
     {
       "path": "tests/verify-galaxy-cleanup-and-security.js",

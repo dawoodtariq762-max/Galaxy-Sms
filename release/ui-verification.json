@@ -1,10 +1,52 @@
 {
   "date": "2026-09-28",
-  "scope": "Local UI implementation; isolated fixture tests; no deployment",
+  "scope": "Local UI implementation incl. final colour/copy pass; isolated fixture tests; no deployment",
   "backend_changes": false,
   "bonus_included": false,
-  "ui_contract_tests_passed": 23,
+  "ui_contract_tests_passed": 27,
   "browser_layout_navigation_passed": 77,
+  "color_copy_browser_groups": [
+    {
+      "name": "admin: blue sidebar, light top bar, logo visible, colourful cards",
+      "ok": true
+    },
+    {
+      "name": "manager: blue sidebar, light top bar, logo visible, colourful cards",
+      "ok": true
+    },
+    {
+      "name": "agent: blue sidebar, light top bar, logo visible, colourful cards",
+      "ok": true
+    },
+    {
+      "name": "client: blue sidebar, light top bar, logo visible, colourful cards",
+      "ok": true
+    },
+    {
+      "name": "admin: copy icon beside every number copies the exact number",
+      "ok": true
+    },
+    {
+      "name": "manager: copy icon beside every number copies the exact number",
+      "ok": true
+    },
+    {
+      "name": "agent: copy icon beside every number copies the exact number",
+      "ok": true
+    },
+    {
+      "name": "client: copy icon beside every number copies the exact number",
+      "ok": true
+    },
+    {
+      "name": "Copy control does not appear on login or non-number pages",
+      "ok": true
+    },
+    {
+      "name": "Existing critical flows still respond after the colour/copy changes",
+      "ok": true
+    }
+  ],
   "additional_browser_checks": [
     {
       "name": "admin ranking values, responsive cards and no duplicated components",
@@ -107,39 +149,7 @@
   ],
   "credit_notes_tests_passed": 10,
   "security_cleanup_tests_passed": 6,
-  "protected_files_unchanged": {
-    "api.js": true,
-    "login.html": true,
-    "management-login.html": true,
-    "package-lock.json": true,
-    "package.json": true,
-    "panel-sharing-login.html": true,
-    "payment-login.html": true,
-    "test-login.html": true,
-    "assets/chat.js": true,
-    "assets/credit-notes.js": true,
-    "assets/galaxy.css": true,
-    "assets/galaxy.js": true,
-    "backend/PROVIDER-SYNC.md": true,
-    "backend/README.md": true,
-    "backend/auth.js": true,
-    "backend/backup.js": true,
-    "backend/chat.js": true,
-    "backend/creditNotes.js": true,
-    "backend/data.sqlite": true,
-    "backend/data.sqlite-shm": true,
-    "backend/data.sqlite-wal": true,
-    "backend/db.js": true,
-    "backend/e164-country.json": true,
-    "backend/exportWorker.js": true,
-    "backend/fts.js": true,
-    "backend/providerSync.js": true,
-    "backend/schema.js": true,
-    "backend/seed.js": true,
-    "backend/server.js": true,
-    "backend/smppServer.js": true,
-    "backend/smppService.js": true
-  },
+  "protected_files_unchanged": 31,
   "original_inline_handlers_unchanged_except_dashboard_hooks": {
     "admin.html": true,
     "agent.html": true,
@@ -155,10 +165,11 @@
     "test-login.html": true,
     "test.html": true
   },
+  "otb_cards": "Absent in Galaxy (Lamix-only identifiers); not added, no new data or logic created.",
   "limitations": [
     "Admin real earning API fields absent: displayed as Unavailable, no calculation invented.",
     "Client restricted shortcut positions remain unavailable.",
-    "Management renderAlloc missing-control error reproduced before and after.",
+    "Management renderAlloc missing-control error reproduced before and after; pre-existing.",
     "No external provider/SMPP, production load or cross-browser certification."
   ]
 }

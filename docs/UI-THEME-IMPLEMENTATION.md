@@ -79,3 +79,38 @@ Updated `release/source-manifest.json` so the existing local source-copy helper 
 The updated workspace is `/home/user/Galaxy-Sms`. The source ZIP excludes the database/WAL/SHM, `.git`, dependencies, environment secrets, browser sessions, private inspection evidence and test fixtures. Its omission of runtime data is **not** permission to remove production data.
 
 Use your existing reviewed local-clone/update process and `docs/SAFE-UPDATE.md`; GitHub/VPS/deployment remain your responsibility. Do not replace production wholesale with a source ZIP. Review changed files and back up persistent data before any separately approved deployment.
+
+---
+
+## Addendum — final UI adjustments (28 September 2026, second pass)
+
+Approved follow-up work only. No backend, database, permission, route or business-logic change.
+
+### 1. Sidebar and top bar colours (Admin, Manager, Agent, Client)
+- Sidebar and app-bar navigation now use a professional deep-blue gradient (`#155177 → #103f61 → #0b2f4c`) with light-blue labels, white active rows and a light-blue active marker. The white Galaxy logo keeps a white plate, so it stays legible.
+- Top bar/header now uses a white-to-light-blue gradient (`#ffffff → #eef6fb`) with a `#c3daeb` rule, deep-blue title/clock text and white icon buttons with blue icons.
+- The same tokens apply through the shared stylesheet, so Management, Panel Sharing, Payment and Test inherit the same balance. No black/gray Lamix chrome was copied. Login pages are untouched.
+- Clock markup, position and behavior are unchanged.
+
+### 2. Per-number copy icon (SMS Numbers — Admin, Manager, Agent, Client)
+- New `assets/number-copy.js` adds a small copy button to each rendered number row, inline next to the number (`447700900001 ⧉`), including Admin's Numbers table.
+- Reads only the number already printed in the row; **no** number, filter, allocation, ownership, API or database change. No network request is made by the module.
+- Uses the async Clipboard API with a hidden-textarea `execCommand` fallback for non-secure contexts, then shows a check-mark for ~1.3 s, reverts the icon, and announces "Number copied" through a polite live region.
+- The button stops click propagation, so existing row click/selection handlers are unaffected, and it is only attached to the numbers tables (`numBody`, `numbersBody`) — never to reports, logins or other tables.
+- Sized 22 px on desktop/tablet and 30 px on phones for a comfortable target.
+
+### 3. Dashboard card colour accents (all four roles)
+- Shortcut tiles and KPI cards now use a muted six-tone professional palette built on blue (`#1a6ba8`, `#12776c`, `#3d4fa4`, `#9a6a12`, `#2f7a37`, `#0f6f96`) with matching light tints and top edge accents.
+- Colours are presentation-only classes re-applied on each render; values, sources, order, destinations and permissions are unchanged. Client's three unavailable positions stay neutral and non-clickable.
+- No random bright colours, no gradient backgrounds behind text, no contrast regressions.
+
+### 4. "2 Day OTB / 3 Day OTB"
+These cards **do not exist in Galaxy** — the identifiers are absent from every HTML file, script and backend route, and the API returns no OTB field. They are a Lamix-only element, so nothing was added; inventing them would have required new data or business logic, which this work explicitly excludes. Existing Galaxy volume/count cards cover the same period information (today, yesterday, 7 days, month, year).
+
+### 5. Verification for this pass
+- 27 presentation contract checks (4 new for the copy control and colour/addendum rules) — passed.
+- 10 new browser groups: computed sidebar/top-bar gradients, logo load, distinct accent classes/backgrounds on tiles and KPI cards, responsive fit at 1440/1024/768/390, copy-button presence, real clipboard content equality, copied-state feedback, filter/selection neutrality, and absence on reports/logins — all passed for **all four roles**.
+- 13 isolated API regression groups re-run against a freshly prepared fixture — all passed (allocation, unallocation, Self Allocate, Smart Divide, ingest + duplicate protection, CDR, PIN gates, wallet/request/reject/pay/ledger, sharing).
+- 81 layout/navigation checks and 11 further browser groups re-run — passed; the pre-existing Management `renderAlloc` error still reproduces in baseline and updated HTML.
+- 10 Credit Notes tests and 6 cleanup/PIN/Complaints/security tests passed in isolated/in-memory environments.
+- All original inline scripts in the 13 HTML files remain byte-identical after removing only the added dashboard hooks; 31 protected files (backend, database/WAL/SHM, logins, shared API/security/theme code, dependency manifests) match their pre-implementation hashes.

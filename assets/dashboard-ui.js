@@ -51,6 +51,11 @@
         }
       }
     }
+    let accent = 0;
+    nav.querySelectorAll('.gx-shortcut').forEach(tile => {
+      if (tile.classList.contains('lm-unavailable')) return;
+      tile.classList.add('lm-acc-' + ((accent++ % 6) + 1));
+    });
     root.querySelectorAll('.gx-shortcut[href]').forEach(a => {
       const route = a.getAttribute('href');
       const key = /numbers$/.test(route) ? 'numbers' : /clients$|agents$|managers$/.test(route) ? 'clients' : /smsDetail$|stats$/.test(route) ? 'report' : /creditNotes$/.test(route) ? 'credit' : 'ranges';
@@ -121,6 +126,11 @@
     if (summary) summary.innerHTML = summaries.map(([icon,label,value,note,key])=>'<div class="lm-summary" data-source="'+key+'"><span class="lm-summary-icon">'+svg(icon)+'</span><div><strong>'+esc(value)+'</strong><span>'+label+'</span><small>'+note+'</small></div></div>').join('');
     const chart = root.querySelector('#wk, #weekChart'); if (chart) drawVolume(chart, data);
     root.querySelectorAll('.dash-metric .dash-go').forEach((el,i)=> { el.innerHTML = svg(/payout/i.test(el.closest('.dash-metric').querySelector('.stat-info p')?.textContent || '') ? 'money' : 'volume'); });
+    // Colour accents for the existing KPI cards; re-applied on every render, values untouched.
+    root.querySelectorAll('#page-dashboard .dash-metric').forEach((card,i)=> {
+      for (let n=1;n<=6;n++) card.classList.remove('lm-acc-'+n);
+      card.classList.add('lm-acc-'+((i%6)+1));
+    });
   }
   // Additional approved dashboard views reuse existing scoped GET endpoints.
   // The 30-day date window is a UI filter, not a new aggregation/calculation.

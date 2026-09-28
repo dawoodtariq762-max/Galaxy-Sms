@@ -66,6 +66,45 @@ test('Seven-day backend rows, accessible chart and five summary fields',()=>{
   for(const field of ['sms_yesterday','payout_week','payout_month','numbers','clients'])assert.ok(js.includes('data.'+field));
   assert.match(js,/esc\(r.key\)/);assert.match(js,/esc\(r.range_name\)/);
 });
+test('Numbers pages load the per-number copy control; logins do not',()=>{
+  for(const role of ['admin','manager','agent','client']){
+    const s=read(role+'.html');
+    assert.equal((s.match(/src="\/assets\/number-copy\.js/g)||[]).length,1);
+  }
+  for(const name of ['login','management-login','panel-sharing-login','payment-login','test-login']) {
+    assert.doesNotMatch(read(name+'.html'),/number-copy/);
+  }
+});
+const copyJs=read('assets/number-copy.js');
+test('Copy control is frontend-only, reads the rendered row and never mutates data',()=>{
+  assert.match(copyJs,/'numBody', 'numbersBody'/);
+  assert.match(copyJs,/digitsOf\(probe\) >= 7/);
+  assert.match(copyJs,/found\.host\.appendChild/);
+  assert.match(copyJs,/navigator\.clipboard/);
+  assert.match(copyJs,/execCommand\('copy'\)/);
+  assert.match(copyJs,/dataset\.copy/);
+  assert.match(copyJs,/:is-copied|is-copied/);
+  assert.match(copyJs,/aria-live/);
+  assert.match(copyJs,/stopPropagation/);
+  assert.doesNotMatch(copyJs,/fetch\(|XMLHttpRequest|API\.(get|post|put|del|upload)|localStorage|sessionStorage/);
+  assert.doesNotMatch(copyJs,/\/api\//);
+  assert.doesNotMatch(copyJs,/(cell|source|row)\.(innerHTML|textContent|dataset\.copy)\s*=/);
+  assert.match(copyJs,/btn\.innerHTML = GLYPH_COPY/);
+});
+test('Blue sidebar and top bar tokens plus muted card accents are scoped',()=>{
+  const css=read('assets/lamix-light.css');
+  assert.match(css,/#155177/);assert.match(css,/#0b2f4c/);
+  assert.match(css,/linear-gradient\(#ffffff 0%,#eef6fb 100%\)/);
+  for(let n=1;n<=6;n++)assert.ok(css.includes('.lm-acc-'+n),'lm-acc-'+n);
+  assert.match(css,/\.gx-copy-inline/);
+  assert.doesNotMatch(css,/gx-login|gx-portal-login/);
+});
+test('Dashboard module colours existing cards without changing their values',()=>{
+  assert.match(js,/lm-acc-/);
+  assert.match(js,/nav\.querySelectorAll\('\.gx-shortcut'\)/);
+  assert.match(js,/contains\('lm-unavailable'\)\) return/);
+  assert.match(js,/page-dashboard \.dash-metric/);
+});
 test('Responsive rules remain scoped and provide focus/overflow treatment',()=>{
   const css=read('assets/lamix-light.css');
   assert.match(css,/body.gx-light.gx-lamix/);assert.match(css,/:focus-visible/);
