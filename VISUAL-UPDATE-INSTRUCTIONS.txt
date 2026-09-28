@@ -1,0 +1,10 @@
+Galaxy SMS — approved visual rebrand update
+
+Contains 15 frontend source files, with paths relative to the existing project root.
+Back up your current files, then extract into the existing Galaxy-Sms project root, allowing these files to be replaced. This is an update package, not a standalone installation.
+Do not extract into backend/ or assets/ alone. Keep the existing backend, database, .env, API helper, images and other assets.
+Hard-refresh the browser after installing. If a saved dark preference exists, use the existing theme toggle to select Light.
+
+Only visual presentation and the default theme preference were changed in this task. Files include the workspace's pre-existing frontend code; compare against your deployed version before replacing files if that version differs.
+
+Validation: isolated Chromium rendering/interaction checks, not live backend acceptance tests. A pre-existing Management renderAlloc missing-element error remains unchanged.

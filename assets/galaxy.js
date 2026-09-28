@@ -217,7 +217,7 @@ try{
 /* ---------------- LIGHT/DARK THEME TOGGLE (visual only, localStorage) ---------------- */
 GX.theme = {
   apply(t){ document.body.classList.toggle('gx-light', t==='light'); try{ document.documentElement.classList.toggle('gx-light', t==='light'); }catch(e){} },
-  current(){ try{ return localStorage.getItem('gx-theme')||'dark'; }catch(e){ return 'dark'; } },
+  current(){ try{ return localStorage.getItem('gx-theme')||'light'; }catch(e){ return 'light'; } },
   init(){
     this.apply(this.current());
     const build=()=>{
