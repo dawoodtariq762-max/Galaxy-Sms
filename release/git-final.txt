@@ -1,0 +1,121 @@
+ M .env.example
+ M README.md
+ M admin.html
+ M agent.html
+ M api.js
+ M assets/chat.js
+ D assets/galaxy-appicon.png
+ M assets/galaxy-favicon.png
+ D assets/galaxy-icon.png
+ D assets/galaxy-light.css
+ M assets/galaxy-logo.png
+ M assets/galaxy.css
+ M assets/galaxy.js
+ D assets/powerx-favicon.png
+ D assets/powerx-login.css
+ D assets/powerx-logo-192.png
+ D assets/powerx-logo.png
+ D assets/powerx-theme.css
+ D backend/assistant.js
+ M backend/chat.js
+ M backend/providerSync.js
+ D backend/pubreq.js
+ M backend/schema.js
+ M backend/server.js
+ M backend/smppService.js
+ M client.html
+ D data/chat_uploads/.gitkeep
+ D data/chat_voice/.gitkeep
+ M ecosystem.config.js
+ D galaxy-chat-v1.apk
+ D galaxy-chat-v1.apk.idsig
+ M login.html
+ M management-login.html
+ M management.html
+ M manager.html
+ D mobile-app/AndroidManifest.xml
+ D mobile-app/assets/index.html
+ D mobile-app/build-apk.sh
+ D mobile-app/galaxy-release.keystore
+ D mobile-app/res/drawable/ic_launcher.png
+ D mobile-app/res/layout/activity_main.xml
+ D mobile-app/res/values/colors.xml
+ D mobile-app/res/values/strings.xml
+ D mobile-app/res/values/styles.xml
+ D mobile-app/res/xml/network_security_config.xml
+ D mobile-app/src/com/galaxysms/chat/MainActivity.java
+ D mobile-app/src/com/galaxysms/chat/R.java
+ M package-lock.json
+ M package.json
+ M panel-sharing-login.html
+ M panel-sharing.html
+ M payment-login.html
+ M payment.html
+ D public-request.html
+ D set-password.html
+ M test-login.html
+ M test.html
+ D tests/assistant_ranges.json
+ D tests/assistant_ranges.txt
+ M tests/p19-verify.js
+ D tests/p19i-verify.js
+ D tests/p21-phase2-chat.js
+?? AI-HANDOVER-README.md
+?? CHAT-DUPLICATES-AND-FILE-PICKER-FIX-REPORT.md
+?? GALAXY-SMS-CAPACITY-AUDIT-REPORT.md
+?? RELEASE-LIGHT-20260928.md
+?? assets/credit-notes.js
+?? audit-results.json
+?? backend/creditNotes.js
+?? bypass-audit-results.json
+?? release/deletions.json
+?? release/git-before.txt
+?? release/git-counts.json
+?? release/git-final.txt
+?? release/phase-delta.json
+?? release/preservation-checks.json
+?? release/server-phase.diff
+?? release/source-manifest.json
+?? scripts/audit-runner.js
+?? scripts/run-all-audit-phases.js
+?? scripts/run-rate-bypass-audit.js
+?? scripts/seed-audit-data.js
+?? tests/credit-notes.test.js
+?? tests/test-live-range-allocation-http.js
+?? tests/verify-all-30-points.js
+?? tests/verify-all-roles-allocation.js
+?? tests/verify-final-allocation-and-csv-fixes.js
+?? tests/verify-galaxy-cleanup-and-security.js
+?? tests/verify-hierarchy-rates.js
+?? tests/verify-number-import-robustness.js
+?? tests/verify-payterm-allocation-fix.js
+?? tests/verify-production-fixes.js
+?? tests/verify-regression-full-audit.js
+?? tests/verify-sections-31-to-55.js
+?? tests/verify-self-allocate-and-readability.js
+?? tests/verify-sms-range-filter-restoration.js
+?? tests/verify-super-manager-and-channel.js
+?? visual-rebrand/APPROVED-SCOPE.md
+?? visual-rebrand/IMPLEMENTATION-REPORT.md
+?? visual-rebrand/VISUAL-REVIEW.html
+?? visual-rebrand/baseline-hashes.json
+?? visual-rebrand/baseline/admin.html
+?? visual-rebrand/baseline/agent.html
+?? visual-rebrand/baseline/assets/galaxy.js
+?? visual-rebrand/baseline/client.html
+?? visual-rebrand/baseline/login.html
+?? visual-rebrand/baseline/management-login.html
+?? visual-rebrand/baseline/management.html
+?? visual-rebrand/baseline/manager.html
+?? visual-rebrand/baseline/panel-sharing-login.html
+?? visual-rebrand/baseline/panel-sharing.html
+?? visual-rebrand/baseline/payment-login.html
+?? visual-rebrand/baseline/payment.html
+?? visual-rebrand/baseline/test-login.html
+?? visual-rebrand/baseline/test.html
+?? visual-rebrand/browser-check.cjs
+?? visual-rebrand/browser-results.json
+?? visual-rebrand/interaction-check.cjs
+?? visual-rebrand/interaction-results.json
+?? visual-rebrand/preview.py
+?? visual-rebrand/source-integrity.json

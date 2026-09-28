@@ -1,0 +1,200 @@
+[
+  {
+    "path": "Galaxy-Sms/assets/galaxy-light.css",
+    "bytes": 12511,
+    "sha256": "b8e3ca3b9fb92fad5e631dcffc45655e1d37675e8467f1e681486af4cab7626b",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/galaxy-rebrand.css",
+    "bytes": 20383,
+    "sha256": "2fcaf39c381a0f872e0a3172a2cd1d7600cb6214e46f6e9f2b733ff23e342f3e",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/galaxy-icon.png",
+    "bytes": 215412,
+    "sha256": "d3d1a6f5f725492e0d4af7dec0a64b8857714caa5cbe30b55d1eee722323f57f",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/galaxy-appicon.png",
+    "bytes": 69759,
+    "sha256": "cb6b21c0655003d1f65ec04c5098a98f8860fd1893e6bb72a69007dc97ba3a36",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/powerx-logo.png",
+    "bytes": 180484,
+    "sha256": "ac7938bd078e0c9eebea26286efd7abc91bc6ab5a8c67dfca3d9bdc03bb09853",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/powerx-logo-192.png",
+    "bytes": 36160,
+    "sha256": "8413830636bd64126affa5a2b344698bf5af115b134e7005dd4d7353db33f8d6",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/powerx-favicon.png",
+    "bytes": 6385,
+    "sha256": "2f0dd73d700d939252b4341c8ce5c11fe7c00fb5a9c7d7cb508f6dea6f166aaf",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/powerx-theme.css",
+    "bytes": 21625,
+    "sha256": "cd23425307fe1369ac45a6bc6fd00a40771f2e8b83e86dd2ce29b6c2edb1877a",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/assets/powerx-login.css",
+    "bytes": 7580,
+    "sha256": "e5dd2eeb2c9b9230e1e9c1816437faad168bf0ba0437f0314757dcd88b716995",
+    "reason": "Retired presentation/mobile asset; no active HTML/JS/build/import references; light theme consolidated in galaxy.css"
+  },
+  {
+    "path": "Galaxy-Sms/tests/verify-app-update.js",
+    "bytes": 2078,
+    "sha256": "614d05869e12113d6f96fee80e31de6ce012b3d62c4c92762b2b0a379369e2f2",
+    "reason": "Exclusive retired APK/chat-conversation test; active PIN/Complaints tests and modules retained"
+  },
+  {
+    "path": "Galaxy-Sms/tests/p21-phase2-chat.js",
+    "bytes": 18154,
+    "sha256": "09b19d35210b4985fd8dc4bd2cca122ce96b8e5724e23477ec9eed24ccb1dcee",
+    "reason": "Exclusive retired APK/chat-conversation test; active PIN/Complaints tests and modules retained"
+  },
+  {
+    "path": "Galaxy-SMS-Visual-Rebrand-Updated-Files.zip",
+    "bytes": 331864,
+    "sha256": "9b9b63d9a1fa57b623cf0e7d1738220ac602201317ae97a7ad68837f83c94af7",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-chat-v1.apk",
+    "bytes": 62155,
+    "sha256": "121dfeb3855201706443d49b699075fc71791bcddc15e708aaef238d16dcc779",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-chat-v2.apk",
+    "bytes": 66251,
+    "sha256": "2ed9941a4eb9aa8e46c046b567eefbc48dd0fd1d32111f9b3293d9c39edf4335",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-chatapp-updated.zip",
+    "bytes": 230719,
+    "sha256": "ef674660751080d8fb41f6858c4b9e234e0dc873123c56aaabf2c616f338c6ee",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-30-enhancements-update.zip",
+    "bytes": 2204410,
+    "sha256": "7c25b709a8d43cdf9ebecba6d280ffd40fb99c1c2b26342c83f639e5b418caa0",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-chat-v2-apk-and-update.zip",
+    "bytes": 131712,
+    "sha256": "c77cf35fd8f68b5e7179533ddf2a32583bfce5d28ef3e4ec0e02f948cb0ad4a3",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-complete-system-update.zip",
+    "bytes": 1876135,
+    "sha256": "13620f39178c5787fd0208a6ce52a013922a4c102615811c97e7bde1a56c7ae2",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-direct-root-update.zip",
+    "bytes": 1872487,
+    "sha256": "8f90798abb7a4d99aff9b499e0ea533a6afd81dca7a20987610c619a6d0437cf",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-multi-part-update.zip",
+    "bytes": 401365,
+    "sha256": "5bca2c73af0d21ae7b92e778adb29f1238a129e612a77e9eb5cbdc1238561886",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-multi-tier-rates-update.zip",
+    "bytes": 372701,
+    "sha256": "e16e847bddbeeea7e0fef00acd18eb2dd545d24915f72ce642f4916680fb51e2",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-p19-fixes.tar.gz",
+    "bytes": 442450,
+    "sha256": "ce9ac27d4609feccd719a5a9dad186adc9d5f8f1582c96c77fede2766bdbdfc2",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-p19k-fixes.tar.gz",
+    "bytes": 435044,
+    "sha256": "69dc3591a70f5bb1d16e3173e0094fbac4d2840cdd22ac7f2b96ca7f489b01b8",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-p20-cdr.tar.gz",
+    "bytes": 281477,
+    "sha256": "d5b109527e943b2f891f3801c874e2103b1b42cc8cfef6502fdbffeeddbbed01",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-p21-phase2-update.zip",
+    "bytes": 4038571,
+    "sha256": "536d7b4a55c8845e618b7bffab3ef4be5db66a12c98910c4c11bd5fb3128f762",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-p21-update.zip",
+    "bytes": 1758346,
+    "sha256": "1b700f5149503e67a28f62d1a8f990a84864967c583ee54a7a8c68cf3734c91c",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-sms-super-manager-and-channel-update.zip",
+    "bytes": 236193,
+    "sha256": "0545a5380b2eea763cf32b0fdeaf8c0bfbb924435144bcf5eaee9d627237f1f3",
+    "reason": "Superseded historical distribution package or discontinued mobile APK; not referenced by active runtime/deployment"
+  },
+  {
+    "path": "galaxy-chatapp-updated/admin.html",
+    "bytes": 319895,
+    "sha256": "63d0c623de5f12b89aa0ce53fa1958ee6136f665b0de7c133183cf94d5a55a13",
+    "reason": "Discontinued external Chat/mobile duplicate; six legacy source files only, no active DB or deployment reference"
+  },
+  {
+    "path": "galaxy-chatapp-updated/assets/chat.js",
+    "bytes": 82949,
+    "sha256": "5c2872c1b6d56610481a184db2d11ca5e87c43b3668c9da312a26979988ad76f",
+    "reason": "Discontinued external Chat/mobile duplicate; six legacy source files only, no active DB or deployment reference"
+  },
+  {
+    "path": "galaxy-chatapp-updated/backend/chat.js",
+    "bytes": 73282,
+    "sha256": "bd4fd30750daf2a4b1b60561d75048db05c910b94a8c27d720d1ffcc2f0ef7c8",
+    "reason": "Discontinued external Chat/mobile duplicate; six legacy source files only, no active DB or deployment reference"
+  },
+  {
+    "path": "galaxy-chatapp-updated/backend/schema.js",
+    "bytes": 49366,
+    "sha256": "e202261d719e32103bbde051130496758f373c3518a13d92aaa54cc490af7160",
+    "reason": "Discontinued external Chat/mobile duplicate; six legacy source files only, no active DB or deployment reference"
+  },
+  {
+    "path": "galaxy-chatapp-updated/backend/server.js",
+    "bytes": 342427,
+    "sha256": "33c74dbe942c2d08c05ebdfed31207ceca01d67e33d969f3c70ddc100357e7bc",
+    "reason": "Discontinued external Chat/mobile duplicate; six legacy source files only, no active DB or deployment reference"
+  },
+  {
+    "path": "galaxy-chatapp-updated/mobile-app/assets/index.html",
+    "bytes": 64298,
+    "sha256": "276c26fbd44112064ef34eb1b5f2729348952fb72f9218d786c337abc15e79d4",
+    "reason": "Discontinued external Chat/mobile duplicate; six legacy source files only, no active DB or deployment reference"
+  }
+]

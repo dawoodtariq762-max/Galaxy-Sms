@@ -1,0 +1,43 @@
+{
+  "added": [
+    "RELEASE-LIGHT-20260928.md",
+    "assets/credit-notes.js",
+    "backend/creditNotes.js",
+    "tests/credit-notes.test.js"
+  ],
+  "modified": [
+    "README.md",
+    "admin.html",
+    "agent.html",
+    "api.js",
+    "client.html",
+    "login.html",
+    "management-login.html",
+    "management.html",
+    "manager.html",
+    "panel-sharing-login.html",
+    "panel-sharing.html",
+    "payment-login.html",
+    "payment.html",
+    "test-login.html",
+    "test.html",
+    "assets/galaxy-favicon.png",
+    "assets/galaxy-logo.png",
+    "assets/galaxy.css",
+    "assets/galaxy.js",
+    "backend/server.js"
+  ],
+  "deleted": [
+    "assets/galaxy-appicon.png",
+    "assets/galaxy-icon.png",
+    "assets/galaxy-light.css",
+    "assets/galaxy-rebrand.css",
+    "assets/powerx-favicon.png",
+    "assets/powerx-login.css",
+    "assets/powerx-logo-192.png",
+    "assets/powerx-logo.png",
+    "assets/powerx-theme.css",
+    "tests/p21-phase2-chat.js",
+    "tests/verify-app-update.js"
+  ]
+}

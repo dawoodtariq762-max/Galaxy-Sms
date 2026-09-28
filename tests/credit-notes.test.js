@@ -1,0 +1,27 @@
+'use strict';
+const assert=require('node:assert/strict');
+const Database=require('better-sqlite3');
+const {statements,addDecimal}=require('../backend/creditNotes');
+const sql=new Database(':memory:');
+sql.exec(`CREATE TABLE users(id INTEGER,username TEXT,role TEXT,parent_id INTEGER);
+CREATE TABLE payment_ledger(id INTEGER PRIMARY KEY,sms_record_id INTEGER UNIQUE,agent_id INTEGER,manager_id INTEGER,range_id INTEGER,payment_type TEXT,amount TEXT,earned_at TEXT,cycle_key TEXT,eligible_at TEXT,status TEXT,request_id INTEGER);
+INSERT INTO users VALUES(1,'Admin','admin',NULL),(2,'Manager','manager',1),(3,'Agent','agent',2),(4,'Other Agent','agent',7),(5,'Client','client',3);`);
+const insert=sql.prepare('INSERT INTO payment_ledger VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
+insert.run(1,1,3,2,1,'weekly','0.1','2026-09-01 10:00:00','2026-08-31','2026-09-08 00:00:00','open',null);
+insert.run(2,2,3,2,1,'weekly','0.2','2026-09-02 10:00:00','2026-08-31','2026-09-08 00:00:00','paid',2);
+insert.run(3,3,3,2,1,'weekly','0.00123','2026-09-27 10:00:00','2026-09-21','2026-10-01 00:00:00','requested',3);
+insert.run(4,4,4,7,1,'daily','500','2026-09-01 10:00:00','2026-09-01','2026-09-02 00:00:00','open',null);
+insert.run(5,5,3,2,1,'daily','10.01','2026-09-27 10:00:00','2026-09-27','','open',null);
+const db={get:(s,p=[])=>sql.prepare(s).get(...p),all:(s,p=[])=>sql.prepare(s).all(...p),iterate:(s,p=[])=>sql.prepare(s).iterate(...p)};
+const now=new Date('2026-09-28T12:00:00Z');const before=sql.serialize();let n=0;function test(name,fn){fn();n++;console.log('PASS',name)}
+test('Exact decimal totals',()=>{assert.equal(addDecimal('0.1','0.2'),'0.3');assert.equal(addDecimal('10.99','-0.99'),'10');assert.equal(addDecimal('9007199254740993','0.0001'),'9007199254740993.0001')});
+test('Agent scope and stored totals',()=>{const d=statements(db,{id:3,role:'agent'},{},now);assert.equal(d.total,3);assert.ok(d.rows.every(r=>r.agent_id===3));const r=d.rows.find(r=>r.cycle_key==='2026-08-31');assert.equal(r.total_amount,'0.3');assert.equal(r.open_amount,'0.1');assert.equal(r.paid_amount,'0.2');assert.equal(r.cdr_count,2);assert.equal(r.maturity,'matured');assert.equal(r.currency,null);assert.equal(d.issued,false)});
+test('No Agent IDOR',()=>assert.throws(()=>statements(db,{id:3,role:'agent'},{agent_id:4},now),/Forbidden/));
+test('Manager direct-child scope',()=>{const d=statements(db,{id:2,role:'manager'},{},now);assert.equal(d.total,3);assert.equal(statements(db,{id:2,role:'manager'},{agent_id:4},now).total,0)});
+test('Admin all, Client denied',()=>{assert.equal(statements(db,{id:1,role:'admin'},{},now).total,4);assert.throws(()=>statements(db,{id:5,role:'client'},{},now),/Forbidden/)});
+test('Cycle date filters',()=>assert.equal(statements(db,{id:3,role:'agent'},{from:'2026-09-01',to:'2026-09-26'},now).total,1));
+test('Maturity uses stored eligibility not current settings',()=>{assert.equal(statements(db,{id:3,role:'agent'},{maturity:'upcoming'},now).rows[0].total_amount,'0.00123');assert.equal(statements(db,{id:3,role:'agent'},{maturity:'unknown'},now).total,1)});
+test('Pagination stable and bounded',()=>{const d=statements(db,{id:1,role:'admin'},{limit:1,page:2},now);assert.equal(d.rows.length,1);assert.equal(d.totalPages,4);assert.equal(d.page,2)});
+test('Invalid inputs rejected',()=>{for(const q of [{from:'2026-02-31'},{from:'2026-09-28',to:'2026-09-01'},{agent_id:"1 OR 1=1"},{payment_type:'invented'},{maturity:'paid'}])assert.throws(()=>statements(db,{id:1,role:'admin'},q,now))});
+test('No writes after all reads and errors',()=>assert.deepEqual(sql.serialize(),before));
+console.log(`${n} tests passed; in-memory test database only.`);sql.close();

@@ -15,7 +15,7 @@ const jwt = require('jsonwebtoken');
 const db = require('./db');
 const { createTables } = require('./schema');
 const { seed } = require('./seed');
-const { sign, signChat, authRequired, chatAuthRequired, requireRole, descendantIds, SECRET } = require('./auth');
+const { sign, authRequired, chatAuthRequired, requireRole, descendantIds, SECRET } = require('./auth');
 const backup = require('./backup');
 const providerSync = require('./providerSync');
 const smsFts = require('./fts');
@@ -429,9 +429,8 @@ app.get('/test/:page', (req, res) => sendFrontendPage(res, 'test.html'));
 // serve frontend assets and static files from project root
 app.use(express.static(FRONTEND_ROOT));
 
-/* ===== P19e + P21: INTERNAL CHAT + SEPARATE CHAT AUTH (isolated module — is line ko hata kar feature
-   poora disable/revert ho jata hai; kisi existing route/behaviour ko touch nahi karta) ===== */
-require('./chat')(app, { authRequired, chatAuthRequired, requireRole, logAction, signChat, SECRET });
+/* Account PIN and Complaints; legacy route names remain for compatibility. */
+require('./chat')(app, { authRequired, chatAuthRequired, requireRole, logAction, SECRET });
 
 
 
@@ -4240,6 +4239,9 @@ function requireAgentChatUnlock(req, res, next) {
   } catch (_) {}
   return res.status(403).json({ error: 'Security PIN verification required or session expired', locked: true });
 }
+
+// Approved read-only live settlement statements; existing payment paths stay unchanged.
+require('./creditNotes').mount(app, { db, authRequired, requireRole, requireAgentChatUnlock });
 
 app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}}));
 app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json(db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}));

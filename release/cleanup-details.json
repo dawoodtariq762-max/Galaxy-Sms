@@ -1,0 +1,728 @@
+[
+  {
+    "path": "bench-toolkit/USAGE-URDU.md",
+    "bytes": 9483,
+    "sha256": "e79f485a06b8a02fc200119ced83cafddd965b94e57c9005e3d8749d04d0d598",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/bench.config.json",
+    "bytes": 391,
+    "sha256": "c06138fad753537e686bca21afb7ca00a10c8aae8c9280d0a73fba6276f40a90",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/install.sh",
+    "bytes": 1447,
+    "sha256": "c8ef4357fef141bf94d12087ed5ed84e2f43b926640496753ed818d3762866d7",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/monitor.js",
+    "bytes": 3450,
+    "sha256": "6e1346db6ae40abfa32437b5f840929a12b5b225774e96801f6d818f6c3f2503",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/package.json",
+    "bytes": 924,
+    "sha256": "151d34250e264465c443a1ee08fb664511218816ec65890a9962b048ea4f4064",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/pwbench",
+    "bytes": 160,
+    "sha256": "e5b1790784f8747e74e9a09f162af552cebcc45d0bfae5dfebc7a7d715ee2367",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/pwbench.js",
+    "bytes": 5319,
+    "sha256": "9b59b186eb739c44e40d8e623e81b63d33967c45179f47e056387abca733df6c",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/uninstall.sh",
+    "bytes": 619,
+    "sha256": "8828b80d3c468c2522993ff13e47429ca3dd402a6f0069e312cf507f4a4c9630",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/api.js",
+    "bytes": 2778,
+    "sha256": "dd0d0dd4e862fefb24821bc8de91201b70c5b23d2896f61976719cf36750d5c7",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/audit.js",
+    "bytes": 2946,
+    "sha256": "62ae9d42e3bcc6593b741c0a846202f954117c8860a3f12547540757372529ac",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/guard.js",
+    "bytes": 2150,
+    "sha256": "0ee45379979a3e16ecc3dcf01fe6c4bd568cc24c85f1445bc74ea8a58a605e5a",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/hist.js",
+    "bytes": 685,
+    "sha256": "8210af017b9c6a134334bf46b11a87b52a14c46848a3783a3978fea50a3e5260",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/report.js",
+    "bytes": 4421,
+    "sha256": "abe0da932d4f751bc07569679bfe9be9b62960503c8af027ddee62ec0a9e5c2d",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/srv.js",
+    "bytes": 3883,
+    "sha256": "41c2064a16504a8775b2739231e80afea377959339e99040dc7169be3e248d3e",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/users.js",
+    "bytes": 4641,
+    "sha256": "eefa6af8def4f5cb8c8e5d00e54358c754b2fae3e4231478af101a1663dc2216",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/lib/workload.js",
+    "bytes": 2653,
+    "sha256": "b65dbf5aacfc647a82f27a95616887488ff4cac0c44c7ef715d289b1ade9f654",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m1.js",
+    "bytes": 3951,
+    "sha256": "809ee07d4b0a6c630dc9936c1bdb7904e84f857cd1dd346d822649a917f739e4",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m1x.js",
+    "bytes": 3472,
+    "sha256": "db3a3a8439f5ca59d9b3a5717d76dec08f89455569dd73741754be89527f2656",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m2.js",
+    "bytes": 5026,
+    "sha256": "108dccade7305a9dfb8c31ef5a987f0ddab7183cdce08b2e83f2398a81173e94",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m3.js",
+    "bytes": 2672,
+    "sha256": "dbe617d8faec32d0a4dfe1a55e061a3b8e5236362ddee24f51d875aeb97cc3a3",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m4.js",
+    "bytes": 3604,
+    "sha256": "e1fe242ec2d6084c9a85f16391236be95bb3afa9047ca2b8d549cff3873f5eab",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m5.js",
+    "bytes": 6298,
+    "sha256": "ca36d1f872de42e1ccba7357d5055dd0240a3b68bfcea96c5d12e4c7e71d5552",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m6.js",
+    "bytes": 4223,
+    "sha256": "458ceb9b7d2630682f2dc9c26ad4160e80afe463aa658aee00545646c6c380c9",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m7.js",
+    "bytes": 4389,
+    "sha256": "09bf62815ea6769e07b0e57f165506f1f2d7a43701ba52e3e7a88f715e9b5216",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m8.js",
+    "bytes": 4793,
+    "sha256": "304d139f5a68e361e26faf8301c2660cbbb957079f732a1ae33860765e8e2c10",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/m9.js",
+    "bytes": 4700,
+    "sha256": "714ce29616ba345316f2cbb41f11547da45e9fe1de1bafafa4dee838f1cb0920",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "bench-toolkit/modes/selftest.js",
+    "bytes": 4181,
+    "sha256": "e0cf13e17b80c660939124d9b1fef9a606b5b6d30c1456bcd299de05ac569675",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/APPROVED-SCOPE.md",
+    "bytes": 1094,
+    "sha256": "b2838c200192a5951299a6a739f168fe3c0fc47d6c7c9d2b39ce2192953c7e36",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/VISUAL-REVIEW.html",
+    "bytes": 2881674,
+    "sha256": "6a74eee913c56d74448f38857fd39979f518450c7608436eb358ef094ff80197",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/IMPLEMENTATION-REPORT.md",
+    "bytes": 6895,
+    "sha256": "e67234ee7c8bb10fcf9fc80e9bf924ffdeaa2e2ab8caf21eae871444e51de33b",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline-hashes.json",
+    "bytes": 2695,
+    "sha256": "c812dd08b84c8224e3b9607de104dcb62c93ac0e6e71094c183b55122a6d07f8",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/browser-check.cjs",
+    "bytes": 2745,
+    "sha256": "adbf3dc619094d2bff2d8cd31c9be944d24120b4d01d850042b03fb4b26c07a9",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/browser-results.json",
+    "bytes": 23877,
+    "sha256": "fd3ada693262d7a2f150dcb034bcd704d1b440f3cba5e66e22fb5b4445ff1acc",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/interaction-check.cjs",
+    "bytes": 6655,
+    "sha256": "c112d67a1828bc98419597e1571ad992f04237c4aa27ac8663d7ca81403ad2d7",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/interaction-results.json",
+    "bytes": 6635,
+    "sha256": "03d1315ea06b14a16951bd3425e8124a50828c040842787c4c8a53dff7ff6b69",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/preview.py",
+    "bytes": 1251,
+    "sha256": "903d87612a55d4bff22a53880c13561f961280326fa1602b22a302c5098964d7",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/source-integrity.json",
+    "bytes": 3026,
+    "sha256": "9382525141cc9f3727e994744f2942e4adfabfa321f331166be16bb8c884988a",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/admin.html",
+    "bytes": 315692,
+    "sha256": "58ebc39e1fee9aa03b642af4c43c64281d071a694911c34079ee92dd5a2c854f",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/agent.html",
+    "bytes": 202411,
+    "sha256": "14fd1d8870e89bdf853edc1ed4cc3ca8ed3d709d7252ef005cc2d4bf9367d53f",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/client.html",
+    "bytes": 103332,
+    "sha256": "53586013500e61046967b8f9519a323e1734aa4732044ed61698adb014df5712",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/login.html",
+    "bytes": 23380,
+    "sha256": "d0bba414199e03b46f1e0f22e50dbc884610bc263e75d442da05abe7b9857097",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/management-login.html",
+    "bytes": 11754,
+    "sha256": "2501f87df734ee6248b859041ac1b69be0fffca55557309e9a6d5837f2e4b16f",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/management.html",
+    "bytes": 300468,
+    "sha256": "454b7181aa360c5b17b8d3f511868959e3d6aad0b07fddfabe9007da66801892",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/manager.html",
+    "bytes": 203675,
+    "sha256": "1e56bf5f3d632c773b2a6c1f5a2a67f988958ca2923fe8e84cf13f150b95ab49",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/panel-sharing-login.html",
+    "bytes": 10493,
+    "sha256": "e3475b39ec6d1ed39c99167e5da73fba159ab2fc674ae6617919658e80baa7c4",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/panel-sharing.html",
+    "bytes": 106630,
+    "sha256": "2271ee60832aad5f13234e656fcf44a566eb517b686721bd742bceeae356c166",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/payment-login.html",
+    "bytes": 10470,
+    "sha256": "4bcd53675603526754bdf13b42c135228c00277e49b58ed839f419d49046e976",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/payment.html",
+    "bytes": 35915,
+    "sha256": "ea9d62d285d03339ab6806d970cf82164b5cd1d399d196e3f691378ed4e2f5a8",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/test-login.html",
+    "bytes": 11643,
+    "sha256": "dc1c64dfd90800dc86b1bb7d2833e40d999560abed5495699cab72dd352479d3",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/test.html",
+    "bytes": 35229,
+    "sha256": "55c408163e2806a5ec58ca67b6dc2151f6353d1624314329d0e2ab6c8014564a",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "visual-rebrand/baseline/assets/galaxy.js",
+    "bytes": 34184,
+    "sha256": "e618cd61b7a0e92e8e7e819177e063cbf496f47c0e75ec70ee87bdc41a946800",
+    "reason": "Explicitly retired benchmark / historical UI tooling"
+  },
+  {
+    "path": "scripts/audit-runner.js",
+    "bytes": 6629,
+    "sha256": "503ac0700e0c879a07856d4a26b6af1612176d4eb082026567ba8a96acd30185",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/bench-20m.js",
+    "bytes": 14774,
+    "sha256": "37a6e09d5fa16dd98f91a04a5f39f8fb2922f8f948a4bebcc937a31bbf7d02ec",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/bench-bulkload.js",
+    "bytes": 1689,
+    "sha256": "e10d0b4e8f4848ffb59927f41d31d8f39c1704ae3ab828d087fb4a0f0bb27652",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/panel-audit.py",
+    "bytes": 6124,
+    "sha256": "119672b2286b7928fec1b10ac1703c8a94afc0c432817391b1e2f9d3234b0e45",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/run-all-audit-phases.js",
+    "bytes": 28678,
+    "sha256": "6d3771db9af9525ce16338fc1501e172dcf432f750b24b6e0cf0d1f24cbe989c",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/run-rate-bypass-audit.js",
+    "bytes": 20493,
+    "sha256": "ba1b00f7777adb2fd091ca8ce7a1abd6ae483a55426559a5b343a37cbb2b9f37",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/seed-audit-data.js",
+    "bytes": 6545,
+    "sha256": "96f825bd80cc0b24e9370a846a7d37ef3c08dbb0f2a0d4f4c2a0ae8e12e46883",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/smoke-phase1.js",
+    "bytes": 12881,
+    "sha256": "c19f82b054fe64dbb6e430e9ccc7abbeadbba3f534c4a7f974c7832b70a18ea3",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "scripts/verify-chat-deploy.sh",
+    "bytes": 3324,
+    "sha256": "f46ee93d267c8c6adaae04c2cdc5cb84e9b6f292fe7a8bf6ea27bc9b77045aca",
+    "reason": "Historical benchmark, crash/load/mutation or obsolete Chat deployment tool; not required by runtime"
+  },
+  {
+    "path": "tests/final-targeted-fixes-test.js",
+    "bytes": 22785,
+    "sha256": "410da46728b9c7d73496959038e252e19c9995aff9c92e0e9fc7435586935f2c",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p12-regression.js",
+    "bytes": 21603,
+    "sha256": "1a3a20ba29f01bc6b4616dad0f09d9ef24ae52c4696c6346c6fa7d4ad42b9d7c",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19-ui-verify.js",
+    "bytes": 17431,
+    "sha256": "83cbe44b9460e33b3f2e528f82fe357a6ed1812c692820e842ea81e036fbbcc4",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19-verify.js",
+    "bytes": 40960,
+    "sha256": "b7750275e5b28ad6db10deafeedebded38c55819798788ee8ea60647bd23673c",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19b-verify.js",
+    "bytes": 16785,
+    "sha256": "c6a80a0c84308e0db13fc08d25507d75a3e57c8eec749ec7086695ef3a9b19e8",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19c-verify.js",
+    "bytes": 23155,
+    "sha256": "515b562bc3a4883f738e2704b0c00cca55a1154d80356d2f6cc68713d1e69024",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19d-repro.js",
+    "bytes": 9217,
+    "sha256": "2b1b948e52b9d24a7c4c49766aecf7b20e89f6bf19c7c477944e02bb207382d8",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19d-verify.js",
+    "bytes": 25999,
+    "sha256": "29dd01f06868ac3f5873c215fa560bb003bf55c2b88d4aee840fb58d5967b480",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19e-chat-verify.js",
+    "bytes": 32702,
+    "sha256": "a896e530cc72e287ff424cc6fed278157cfe30ca1d90579f5a6c8fc39add3e1c",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19f-verify.js",
+    "bytes": 14639,
+    "sha256": "79eb7587ec20b1dbfee45a8a982174b8b03734d46473192b388ae975508013e9",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19g-repro.js",
+    "bytes": 10538,
+    "sha256": "34e5030fb75aa08a7016c67a2f0b214ff9ce0b606697c9cf5795d955c8cc722a",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19g-verify.js",
+    "bytes": 20956,
+    "sha256": "cfd399e81a3c11ba049b477aec264104785e0506aef5815d314caafc532e8d1f",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19j-verify.js",
+    "bytes": 31061,
+    "sha256": "146ee4f6fecc01a76c9ec0af199b2b92c1aeea3dcd92b2e6120836f0c0ed0e24",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p19k-verify.js",
+    "bytes": 37515,
+    "sha256": "c2aacac06e09cb0a450b9555a7d0ea07ca72dba2b51f186981a99a373ddaca61",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p20-cdr-verify.js",
+    "bytes": 30811,
+    "sha256": "c0ea1cb780c5e08e41ab9dcc91893dd70ec0556ef04e5ed34efd6ac99b05e8bf",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p21-chat-auth.js",
+    "bytes": 20531,
+    "sha256": "06af8292871d6fa02a7e71afc7559fff32ca417578c19291f4808c976cfe2973",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p21-corrections-verify.js",
+    "bytes": 9356,
+    "sha256": "0c0f33404cc536ebdde83736614beddd46cc460dc89d0f0d1a0dc9c38ffb8db5",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p21-full-suite-verify.js",
+    "bytes": 23996,
+    "sha256": "c1c344d72b51d19145a7a450127a08a237d07344239ba975c95b6b4d30e71a6e",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p21-lock-and-delete-verify.js",
+    "bytes": 13156,
+    "sha256": "163521f176c56d492565f175ce98d2cef9c2a46e43d0a87734bff2bf4ffd9203",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/p21_test.sqlite-shm",
+    "bytes": 32768,
+    "sha256": "9bcd84f37c651d0865316a14700cb2286ccaf01b6486568471cf651fcdc4314e",
+    "reason": "Historical test DB artifact relocated intact outside final project; not discarded"
+  },
+  {
+    "path": "tests/p21_test.sqlite-wal",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "reason": "Historical test DB artifact relocated intact outside final project; not discarded"
+  },
+  {
+    "path": "tests/test-live-range-allocation-http.js",
+    "bytes": 5101,
+    "sha256": "232e71e05b7d0b5a5a3cbdb57b7bf64233e7af788c1db725b505c54cb2391804",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/test-self-alloc.sqlite",
+    "bytes": 704512,
+    "sha256": "ff1a64b7ec9eebe1643c2c1305b49668ab355e644374c3f7e1b468518af84e54",
+    "reason": "Historical test DB artifact relocated intact outside final project; not discarded"
+  },
+  {
+    "path": "tests/test-self-alloc.sqlite-shm",
+    "bytes": 32768,
+    "sha256": "bc7138cca2aa2adf976f8c47cd8f2e75566a5e41ebf680318337716db4b97261",
+    "reason": "Historical test DB artifact relocated intact outside final project; not discarded"
+  },
+  {
+    "path": "tests/test-self-alloc.sqlite-wal",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "reason": "Historical test DB artifact relocated intact outside final project; not discarded"
+  },
+  {
+    "path": "tests/verify-all-30-points.js",
+    "bytes": 20586,
+    "sha256": "aa4172afcc6a917e33cb6e015e53adfe1081fbae44284d3e562acf78c2a309f8",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-all-roles-allocation.js",
+    "bytes": 8510,
+    "sha256": "489536f597c047ff75727ebeaab6f546abd5f92556ee584188a6362e849fa343",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-chat-duplicates-and-file-picker.js",
+    "bytes": 18618,
+    "sha256": "718d4c4ba5ecaf23b96c02bff43251fb65c7077d1560f6d8ca49f4dad85c3a87",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-final-allocation-and-csv-fixes.js",
+    "bytes": 9932,
+    "sha256": "c9f343b74ce79ee22a6a3406862e55a508a2654a7fad585f87cda0b61de35b53",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-hierarchy-rates.js",
+    "bytes": 22369,
+    "sha256": "c0ad1f95f5d18d1331f5386b5c39675b2a62e0f16194fc027327aa3380d24eec",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-number-import-robustness.js",
+    "bytes": 5723,
+    "sha256": "b292c6aa1b74cf936c6a7f75b47481000ecb9c3023bbaebe412c0f8094c4ce61",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-numbers-copy-feature.js",
+    "bytes": 21097,
+    "sha256": "1c82cc29047d9e429707cce9f7d23be81b3821cfcb08f54f8a5b05036ec1b20b",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-payterm-allocation-fix.js",
+    "bytes": 4218,
+    "sha256": "9939984343fd28b7f49b574213ea0a054fe22e07a158128ebdd92436255bd564",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-production-fixes.js",
+    "bytes": 9634,
+    "sha256": "6ab109ee06fc0cefb819e482adf144e36206b3a91e51e2aa8d404e9a2071afe4",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-regression-full-audit.js",
+    "bytes": 22851,
+    "sha256": "e4b92172d804635300eb9d40e3ee1002b9ff1784cbf60e0d3b9ba508fb914e00",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-sections-31-to-55.js",
+    "bytes": 14350,
+    "sha256": "fa082b6fcc5499b6abe5721d8b8709d682b83891cdced885f200fb1a39d324d9",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-self-allocate-and-readability.js",
+    "bytes": 17439,
+    "sha256": "482a1d14653623a704c8fc1208083c58593e7145ab1de2373ec1baa2c5e01978",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-sms-range-filter-restoration.js",
+    "bytes": 12978,
+    "sha256": "bf10f846838721d91b0fdc6c116a6d7d147527f84045e94f39ee87dde8247141",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "tests/verify-super-manager-and-channel.js",
+    "bytes": 20885,
+    "sha256": "1676025458980032c190ce6190248b604a6b0911d563f04abf2fdb1add0c00da",
+    "reason": "Historical one-off regression/reproduction/retired feature suite; current isolated PIN/Complaints and decimal suites retained"
+  },
+  {
+    "path": "AI-HANDOVER-README.md",
+    "bytes": 44182,
+    "sha256": "d3b4b3f3e2261e473beba38959994652993d1a9ad53034f2933eb2ee31f02384",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "CHAT-DUPLICATES-AND-FILE-PICKER-FIX-REPORT.md",
+    "bytes": 10536,
+    "sha256": "ccc91221a0b892eeef2c42ee3cb2632b882d96542a9e8eb079c6661994095f06",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "GALAXY-SMS-CAPACITY-AUDIT-REPORT.md",
+    "bytes": 33330,
+    "sha256": "4784abce4a40a38018f96190f19c5e09ee73f3e1382aabd68f78bc2c81d4be28",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P19-FINAL-REPORT.md",
+    "bytes": 91367,
+    "sha256": "50d0dd9f8f6386bbcca4f3731783114328bdab72147b503aedb93517b961f72b",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P19K-FINAL-REPORT.md",
+    "bytes": 7880,
+    "sha256": "98dd2e731b61d220a86ad54871a42707d2a51eff1e0f2674ed80b6a73c8460e5",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P20-CDR-FINAL-REPORT.md",
+    "bytes": 13068,
+    "sha256": "367cab02af13c389080025fc66e137e202a706d579b12d69762cd1a236befd6b",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P21-CHAT-AUTH-AUDIT-REPORT.md",
+    "bytes": 33467,
+    "sha256": "563f26c04bd58450b97c090a765de40ecc39f17d5823b4cb1e055e23fa033c53",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P21-CHAT-SECURITY-AND-FEATURES-REPORT.md",
+    "bytes": 5828,
+    "sha256": "0e84b28e055051cbec5e8d0cbaeca2a5b801393d7be45559d5a76e0a61077044",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P21-IMPLEMENTATION-REPORT.md",
+    "bytes": 11435,
+    "sha256": "884f67f99d2b6363bfb0eb288d7ddd1dfd5d147a5a86cb80787298a54d0ac283",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P21-PHASE2-COMPLETION-REPORT.md",
+    "bytes": 8295,
+    "sha256": "5de9075acf8f939a2736214698af52be95512fefc7bc31c207b78b169e15118f",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "P21-PHASE2-FINAL-REPORT.md",
+    "bytes": 7284,
+    "sha256": "31ae6b31ef144fd4b9fc25b6dddf54574db53d37a55d7cd73d0c49ec93954de8",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "RELEASE-LIGHT-20260928.md",
+    "bytes": 9793,
+    "sha256": "dbc0a32018ba47de691b8e965ea1ab83c781823628a74513cd76bcef529edaa3",
+    "reason": "Superseded historical feature/audit report; replaced by current finalization documentation"
+  },
+  {
+    "path": "audit-results.json",
+    "bytes": 25993,
+    "sha256": "ddb194250fbfcd3ad9d02280f60fd9adb5f96f71040a0a25abc07af3a983ef04",
+    "reason": "Historical benchmark result, not production data"
+  },
+  {
+    "path": "bypass-audit-results.json",
+    "bytes": 16596,
+    "sha256": "a8cda90280f17b242e8e54960e5a86c9b40679e24da5fe44ef0c3cf51d18e8db",
+    "reason": "Historical benchmark result, not production data"
+  },
+  {
+    "path": "release/phase-delta.json",
+    "bytes": 995,
+    "sha256": "8fc3388d548a80a08c485f931466dc276988b354b4c5201440d6de4ed3d2ea48",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  },
+  {
+    "path": "release/git-before.txt",
+    "bytes": 3206,
+    "sha256": "e128a56df3d7d7f9ca5babe16302e5dcb2c208a524d8c35cd0387e43efd3d93b",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  },
+  {
+    "path": "release/git-final.txt",
+    "bytes": 3791,
+    "sha256": "7f4c61dbb7ca2bf4f582df57b77877ad7633dd3497a463ddb3ba2fc67bbf229f",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  },
+  {
+    "path": "release/git-counts.json",
+    "bytes": 37,
+    "sha256": "cc0fea7f66396a83c37543ebf25c93d84e57e626791489496d2070c52f099d24",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  },
+  {
+    "path": "release/deletions.json",
+    "bytes": 9623,
+    "sha256": "ef37543b520d31be7581adfef680016448eecd978fe41c33ae50430e51ca508c",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  },
+  {
+    "path": "release/server-phase.diff",
+    "bytes": 1046,
+    "sha256": "10dc6757ed45f7067e4de31654e5ce1de17fc5d2afae2c976f3ddbf1fec446c6",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  },
+  {
+    "path": "release/preservation-checks.json",
+    "bytes": 166,
+    "sha256": "a2729edd72bc0db930686d5607886629458ceeb2984455268989fd5dfc4616e9",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  },
+  {
+    "path": "release/source-manifest.json",
+    "bytes": 25803,
+    "sha256": "07e841f3c9445810ae89cabf05d1d91c3a399a813af902ec8d4ee93efdd3420d",
+    "reason": "Superseded release and Git reports/manifests; will be replaced with current non-Git source manifests"
+  }
+]

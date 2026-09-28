@@ -1,0 +1,164 @@
+{
+  "date": "2026-09-28",
+  "scope": "Local UI implementation; isolated fixture tests; no deployment",
+  "backend_changes": false,
+  "bonus_included": false,
+  "ui_contract_tests_passed": 23,
+  "browser_layout_navigation_passed": 77,
+  "additional_browser_checks": [
+    {
+      "name": "admin ranking values, responsive cards and no duplicated components",
+      "ok": true
+    },
+    {
+      "name": "manager ranking values, responsive cards and no duplicated components",
+      "ok": true
+    },
+    {
+      "name": "agent ranking values, responsive cards and no duplicated components",
+      "ok": true
+    },
+    {
+      "name": "client ranking values, responsive cards and no duplicated components",
+      "ok": true
+    },
+    {
+      "name": "Dashboard fetch failure visibly reported without fabricated earning",
+      "ok": true
+    },
+    {
+      "name": "Empty dashboard and ranking states",
+      "ok": true
+    },
+    {
+      "name": "Client number search and reset remain bound",
+      "ok": true
+    },
+    {
+      "name": "Agent Self Allocate modal and mobile drawer remain usable",
+      "ok": true
+    },
+    {
+      "name": "All original login layouts remain separate and fit phone/desktop",
+      "ok": true
+    },
+    {
+      "name": "Test-role panel uses common theme without extra permissions",
+      "ok": true
+    },
+    {
+      "name": "Management pre-existing rendering error reproduced in baseline",
+      "ok": true
+    }
+  ],
+  "api_regression_groups": [
+    {
+      "name": "Role-scoped dashboard and chart data",
+      "ok": true
+    },
+    {
+      "name": "Admin-only imports/providers/sharing stay restricted",
+      "ok": true
+    },
+    {
+      "name": "Scoped ranking GETs return real grouped fixture counts",
+      "ok": true
+    },
+    {
+      "name": "Agent client creation and update preserve hierarchy",
+      "ok": true
+    },
+    {
+      "name": "Allocation assigns only permitted client and preserves agent tier",
+      "ok": true
+    },
+    {
+      "name": "Unallocation is not deletion or return of Agent ownership",
+      "ok": true
+    },
+    {
+      "name": "Self Allocate reuses configured period and manager pool",
+      "ok": true
+    },
+    {
+      "name": "Smart Divide existing range allocation handler",
+      "ok": true
+    },
+    {
+      "name": "Inbound SMS ingest and duplicate protection on isolated fixture",
+      "ok": true
+    },
+    {
+      "name": "CDR paging and grouped reports stay connected",
+      "ok": true
+    },
+    {
+      "name": "PIN still gates payment and Credit Notes",
+      "ok": true
+    },
+    {
+      "name": "Existing PIN/wallet/request/reject/pay and ledger rules",
+      "ok": true
+    },
+    {
+      "name": "Sharing user creation preserves existing admin-only API",
+      "ok": true
+    }
+  ],
+  "credit_notes_tests_passed": 10,
+  "security_cleanup_tests_passed": 6,
+  "protected_files_unchanged": {
+    "api.js": true,
+    "login.html": true,
+    "management-login.html": true,
+    "package-lock.json": true,
+    "package.json": true,
+    "panel-sharing-login.html": true,
+    "payment-login.html": true,
+    "test-login.html": true,
+    "assets/chat.js": true,
+    "assets/credit-notes.js": true,
+    "assets/galaxy.css": true,
+    "assets/galaxy.js": true,
+    "backend/PROVIDER-SYNC.md": true,
+    "backend/README.md": true,
+    "backend/auth.js": true,
+    "backend/backup.js": true,
+    "backend/chat.js": true,
+    "backend/creditNotes.js": true,
+    "backend/data.sqlite": true,
+    "backend/data.sqlite-shm": true,
+    "backend/data.sqlite-wal": true,
+    "backend/db.js": true,
+    "backend/e164-country.json": true,
+    "backend/exportWorker.js": true,
+    "backend/fts.js": true,
+    "backend/providerSync.js": true,
+    "backend/schema.js": true,
+    "backend/seed.js": true,
+    "backend/server.js": true,
+    "backend/smppServer.js": true,
+    "backend/smppService.js": true
+  },
+  "original_inline_handlers_unchanged_except_dashboard_hooks": {
+    "admin.html": true,
+    "agent.html": true,
+    "client.html": true,
+    "login.html": true,
+    "management-login.html": true,
+    "management.html": true,
+    "manager.html": true,
+    "panel-sharing-login.html": true,
+    "panel-sharing.html": true,
+    "payment-login.html": true,
+    "payment.html": true,
+    "test-login.html": true,
+    "test.html": true
+  },
+  "limitations": [
+    "Admin real earning API fields absent: displayed as Unavailable, no calculation invented.",
+    "Client restricted shortcut positions remain unavailable.",
+    "Management renderAlloc missing-control error reproduced before and after.",
+    "No external provider/SMPP, production load or cross-browser certification."
+  ]
+}

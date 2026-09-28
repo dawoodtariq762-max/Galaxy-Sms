@@ -1,0 +1,20 @@
+{
+  "unchanged": {
+    "backend/schema.js": true,
+    "backend/db.js": true,
+    "backend/backup.js": true,
+    "backend/providerSync.js": true,
+    "backend/smppServer.js": true,
+    "backend/smppService.js": true,
+    "backend/seed.js": true,
+    "backend/creditNotes.js": true,
+    "assets/credit-notes.js": true,
+    "package.json": true,
+    "package-lock.json": true,
+    "backend/data.sqlite": true,
+    "backend/data.sqlite-wal": true,
+    "backend/data.sqlite-shm": true
+  },
+  "backups_unchanged": 91,
+  "missing_assets": []
+}

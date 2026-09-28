@@ -14,14 +14,6 @@ function sign(user) {
   );
 }
 
-function signChat(user) {
-  return jwt.sign(
-    { id: user.id, username: user.username, role: user.role, type: 'chat' },
-    SECRET,
-    { expiresIn: '30d' }
-  );
-}
-
 // PHASE-1: per-user API rate limit (env API_RATE_PER_MIN, default 1200/min = 20 req/s/user)
 const _userBuckets = new Map();
 function perUserRateLimit(req, res) {
@@ -119,4 +111,4 @@ function descendantIds(userId) {
   return ids;
 }
 
-module.exports = { sign, signChat, authRequired, chatAuthRequired, requireRole, descendantIds, SECRET };
+module.exports = { sign, authRequired, chatAuthRequired, requireRole, descendantIds, SECRET };

@@ -24,7 +24,7 @@
 14. [Operational Tooling & Utility Scripts](#14-operational-tooling--utility-scripts)
 15. [Automated Backup, Storage & Recovery Runbook](#15-automated-backup-storage--recovery-runbook)
 16. [Performance, Capacity Benchmarks & Scale Analysis (~30M Numbers)](#16-performance-capacity-benchmarks--scale-analysis-30m-numbers)
-17. [Current Platform State & Production Bug Fixes (Issues 1 to 5)](#17-current-platform-state--production-bug-fixes-issues-1-to-5)
+17. [Current Platform State & Production Bug Fixes (Issues 1 to 6)](#17-current-platform-state--production-bug-fixes-issues-1-to-5)
 18. [20 Mandatory Rules for Future AI Developers](#18-20-mandatory-rules-for-future-ai-developers)
 
 ---
@@ -650,7 +650,7 @@ pm2 start galaxy-sms
 
 ---
 
-## 17. Current Platform State & Production Bug Fixes (Issues 1 to 5)
+## 17. Current Platform State & Production Bug Fixes (Issues 1 to 6)
 
 ### 17.1 Production Issue 1: SMS Number Individual Allocation Fails (`.pattern` of null)
 - **Problem:** When an operator attempted to allocate an individual SMS number from Panel Sharing (`panel-sharing.html`), the UI displayed `Allocation failed: Cannot read properties of null (reading 'pattern')`.
@@ -703,6 +703,17 @@ pm2 start galaxy-sms
   2. Ensured Numbers-Only CSV contains a standardized `Number` header followed by one number per row.
   3. Ensured Detailed CSV contains `Range Name,Number,Price` with 3 columns per row and RFC 4180 quote escaping.
   4. Verified clipboard copy function (`copyNumbersOnly`) uses native newline (`\n`) for clean pasting into external tools.
+
+---
+
+### 17.6 Production Issue 6: SMS Numbers Allocation Failure — 'reading payterm' on Premature Modal Close
+- **Problem:** In Panel Sharing → SMS Numbers (`panel-sharing.html`), confirming number/range allocation failed with an alert: `Allocation failed — Cannot read properties of null (reading 'payterm')`.
+- **Root Cause:** In `proceedWithConfirmedAllocation()`, `closeAllocConfirmModal()` was invoked immediately after the backend `API.post` returned. `closeAllocConfirmModal()` cleared the global state variable `pendingAllocData = null`. The subsequent lines in `proceedWithConfirmedAllocation()` attempted to interpolate `${pendingAllocData.payterm}` into the success message and evaluate `pendingAllocData.ranges[0]`, resulting in a runtime `TypeError` that aborted the CSV download and table reload.
+- **Permanent Resolution:**
+  1. Scoped the allocation context locally at the entry of `proceedWithConfirmedAllocation()` (`const currentAlloc = pendingAllocData;`).
+  2. Derived `assignedPayterm` safely from `res.payterm || currentAlloc.payterm || 'weekly_7_1'` and `assignedRangeName` from `(currentAlloc.ranges && currentAlloc.ranges[0]) || res.range_name || res.panel_name`.
+  3. Ensured that modal closing and state cleanup never invalidate the completion flow or automatic download.
+  4. In `backend/server.js`, added a defensive guard to `payoutRateForPaymentCycle(row, cycle)` (`if (!row) return '0';`) to eliminate any potential null-row dereference.
 
 ---
 

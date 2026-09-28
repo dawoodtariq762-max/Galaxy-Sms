@@ -1,0 +1,42 @@
+{
+  "standalone_js_syntax": "passed",
+  "html_inline_syntax": "passed, all 13 entries",
+  "missing_local_assets": 0,
+  "decimal_fixture_tests": 10,
+  "pin_complaints_mock_auth_fixture_groups": 6,
+  "real_isolated_browser": [
+    "admin real login + dashboard, no retired navigation",
+    "Admin account/PIN management retained; Chat-only manager controls absent",
+    "manager real login + dashboard, no retired navigation",
+    "agent real login + dashboard, no retired navigation",
+    "Real Agent payment PIN unlock remains functional",
+    "client real login + dashboard, no retired navigation",
+    "Retired route absent: /api/chat/conversations",
+    "Retired route absent: /api/chat/auth/login",
+    "Retired route absent: /api/assistant/status",
+    "Retired route absent: /api/panel-requests",
+    "Retired route absent: /api/chat/app-version",
+    {
+      "panel": "management",
+      "overflow": false,
+      "errors": [
+        "Cannot read properties of null (reading 'value')",
+        "Cannot read properties of null (reading 'value')"
+      ]
+    },
+    {
+      "panel": "panel-sharing",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "panel": "payment",
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "local_copy_helper_fixture_checks": "passed; no Git/network calls",
+  "production_deployed": false,
+  "known_issue": "Existing Management renderAlloc null.value error; not fixed or counted as pass",
+  "database_bootstrap_modified": false
+}

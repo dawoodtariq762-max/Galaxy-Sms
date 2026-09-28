@@ -1,0 +1,380 @@
+{
+  "note": "Current Lamix-style UI source, 2026-09-28. Code/documentation only; excludes own hash. Earlier cleanup records are historical. Runtime omissions are NOT deletion instructions.",
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 1681,
+      "sha256": "be893fe9eb1fc27cdd40c237c8c34a6d77c9270f54512bc9d0bea838787f53f5"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 693,
+      "sha256": "04f35baf2748d21356bd83c0b486516f4041aeedb29015ce5300621263b52247"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3862,
+      "sha256": "c41f689fff96756ae46351df4ccf1f824e2012f042edfb8151eba6c3642cc1bd"
+    },
+    {
+      "path": "add-provider.sh",
+      "bytes": 8623,
+      "sha256": "327f7f6ff15ba99f77ca4495f89a7ae8651e2c00ef2ccf747df058f202590bed"
+    },
+    {
+      "path": "admin.html",
+      "bytes": 269696,
+      "sha256": "5e6547b0207955814993661eac4cda5411b7069e7419f96eaf54e804207bce4e"
+    },
+    {
+      "path": "agent.html",
+      "bytes": 165079,
+      "sha256": "e13874c2c4d1c95c128f9ad0194293b5da6ab7fcde9a54fc061bb56a1176084c"
+    },
+    {
+      "path": "api.js",
+      "bytes": 50386,
+      "sha256": "c8ea7f0813017778f20dae54dcc9dd6ceeb44efee8d62dd88e3e7bcc93860765"
+    },
+    {
+      "path": "assets/chat.js",
+      "bytes": 12183,
+      "sha256": "5a6995b549ebbc6c8468c67dc02957df9a4e51202357a46f2e78d916009e0432"
+    },
+    {
+      "path": "assets/credit-notes.js",
+      "bytes": 6444,
+      "sha256": "f39f4282025addebebaaafd8b17017da2907e2f149c868a59a1bbc634645fc5f"
+    },
+    {
+      "path": "assets/dashboard-ui.js",
+      "bytes": 14337,
+      "sha256": "1939b71246cbf2fed39014c3126a0daf89992c0acfcd082594771ac26137f599"
+    },
+    {
+      "path": "assets/galaxy-favicon.png",
+      "bytes": 5173,
+      "sha256": "08848a0d926a44df9c9a0868edc7e095b573e50c2ffe4ae6e192df35360d5ac7"
+    },
+    {
+      "path": "assets/galaxy-logo.png",
+      "bytes": 60858,
+      "sha256": "aa89cbd7a04987efd28c49a5760e142caa8204bbcb428a4cc02a454e3391682c"
+    },
+    {
+      "path": "assets/galaxy.css",
+      "bytes": 41236,
+      "sha256": "fcb325ca79eae3c56b9b9c9239d6c8adf9a4d97f2b1f8972fbe66c5680e7cdfa"
+    },
+    {
+      "path": "assets/galaxy.js",
+      "bytes": 32315,
+      "sha256": "f79913b236e055bb6b5eae97bc9a47952d7d27c28b51c4c06c4e3a820e4c5029"
+    },
+    {
+      "path": "assets/lamix-light.css",
+      "bytes": 17925,
+      "sha256": "fdb4bb5e2acd411529657f46df42feb653bfad41b0e5599ab788c92737de844a"
+    },
+    {
+      "path": "assets/world.svg",
+      "bytes": 413824,
+      "sha256": "b1b7b27a7c21e13899da598b4c206d90b8f22ddc211b882ab0d711e61731a59f"
+    },
+    {
+      "path": "backend/PROVIDER-SYNC.md",
+      "bytes": 6150,
+      "sha256": "c4b789c14ea4fc98298119902c18e5451af9f6dcd12a83fd2d0b389564aa266b"
+    },
+    {
+      "path": "backend/README.md",
+      "bytes": 3601,
+      "sha256": "eb64c394011cf47a8848509ffd61ef18c73770be7975a808c9b06d30371c6d33"
+    },
+    {
+      "path": "backend/auth.js",
+      "bytes": 4300,
+      "sha256": "202c17f7a2a3d7d2d084650a3ec97833c023b7a7fea9d69a4514105aec6af336"
+    },
+    {
+      "path": "backend/backup.js",
+      "bytes": 5234,
+      "sha256": "e229dbbbd7f0b2649a14195d7c80713aa65a960f97aac19f9c7b4d57fa31ed1f"
+    },
+    {
+      "path": "backend/chat.js",
+      "bytes": 16334,
+      "sha256": "09b4c25c87e7dd1b4a24a140012cdc0b1febc63b9fe7bded7185a91eb05cf6f3"
+    },
+    {
+      "path": "backend/creditNotes.js",
+      "bytes": 6942,
+      "sha256": "d451abd324d6960170f24bc8d7a169819628de2b639a2de8fe9ab4fa38703808"
+    },
+    {
+      "path": "backend/db.js",
+      "bytes": 13158,
+      "sha256": "50befe5253ae7aff439c6187885d9e938cffa2e86a82cfe951778b1a38ef9970"
+    },
+    {
+      "path": "backend/e164-country.json",
+      "bytes": 4477,
+      "sha256": "fb00d369ed3b93fb14f60b02022189bddec2f8d960dc95117b3271ce4f770648"
+    },
+    {
+      "path": "backend/exportWorker.js",
+      "bytes": 5308,
+      "sha256": "999229cf2e1ac9ebafac8908519f1419925b9101e3cbc62658def8d213614304"
+    },
+    {
+      "path": "backend/fts.js",
+      "bytes": 4789,
+      "sha256": "01eaadffb5f133234bf9ab87977452164f78fcd3ff759e873d6ed98587cd5bbe"
+    },
+    {
+      "path": "backend/providerSync.js",
+      "bytes": 32590,
+      "sha256": "fb793f9ac4e299f08c9203acca787bacc9b87c6b6f51f21bf3dfcad74239f817"
+    },
+    {
+      "path": "backend/schema.js",
+      "bytes": 39091,
+      "sha256": "b562bdee8f5ee3f6f110e46f4ca16d485728be9f94de95a342dc51aea296a7f8"
+    },
+    {
+      "path": "backend/seed.js",
+      "bytes": 1423,
+      "sha256": "1c85d156f320244c253dc9a04569deb8cf44b43121fb51632cb602a8dd5d1012"
+    },
+    {
+      "path": "backend/server.js",
+      "bytes": 366209,
+      "sha256": "d99afed82d5a68dd20d9c21ca95617ef83c3bb3c90e9364651e7378e2ea64eea"
+    },
+    {
+      "path": "backend/smppServer.js",
+      "bytes": 476,
+      "sha256": "10c25bf60f17cfe8460dc58f01115e9043f802c59af9320088fa599f2031479a"
+    },
+    {
+      "path": "backend/smppService.js",
+      "bytes": 34693,
+      "sha256": "b4218c34b6c9e21a9a7e5ad90c6ef771c78ecfaf763946fbd9d0d9ab034937bb"
+    },
+    {
+      "path": "client.html",
+      "bytes": 67241,
+      "sha256": "214acb71020ff68983b7294552b66a54dff43dc2b871e8ed3e67f66a607d5530"
+    },
+    {
+      "path": "deploy.sh",
+      "bytes": 343,
+      "sha256": "d76f7b93430cfa6f153ff6c2ed0200a6d0d3c41d711837a7cee9b7b8863a18bf"
+    },
+    {
+      "path": "deploy/DEPLOY-URDU.md",
+      "bytes": 573,
+      "sha256": "5388f6a62d9a9153c195e1ce1e283582b24669c75f22908e29985bbd2957b3f0"
+    },
+    {
+      "path": "deploy/DEPLOY.md",
+      "bytes": 994,
+      "sha256": "cf56bf822e577aba78b779ab51ec76691e860459a3cb802ca81557f54ddde33b"
+    },
+    {
+      "path": "deploy/ecosystem.config.cjs",
+      "bytes": 862,
+      "sha256": "4667ba683acbc85543cc97f13f7e2efd03770f29313cf2fbc7de3067b86924a1"
+    },
+    {
+      "path": "deploy/litestream/install-litestream.sh",
+      "bytes": 697,
+      "sha256": "f6be30e4e3ddb2e8635f0436109d5d5a755f4e833c711eb2aa3f1a0473587869"
+    },
+    {
+      "path": "deploy/litestream/litestream.yml",
+      "bytes": 977,
+      "sha256": "1e679378567bcbe75cf0010bc199aad55992837edf62c5eb5a573d30854989c9"
+    },
+    {
+      "path": "deploy/litestream/powerx-litestream.service",
+      "bytes": 549,
+      "sha256": "9981d5d6533ecab08b7512959234c77856d9f837f679e039b9dbb526e6f46d17"
+    },
+    {
+      "path": "deploy/nginx-powerx.conf",
+      "bytes": 1835,
+      "sha256": "6b0bf0add306fc41b248b26bae9c8049fb4d8f8a3fc833eb9b27b2ff13f742c1"
+    },
+    {
+      "path": "deploy/verify-backups.sh",
+      "bytes": 2029,
+      "sha256": "d48e456e77c4953c6e3551727cfe43588a6bf870d15b9e4e7eff27307bd2956b"
+    },
+    {
+      "path": "docs/FINAL-WORKSPACE.md",
+      "bytes": 9390,
+      "sha256": "dd7ccdbde373b59ad1ff16ead0dd287006ea580aa7f6157cb22add2732cb6c69"
+    },
+    {
+      "path": "docs/SAFE-UPDATE.md",
+      "bytes": 14183,
+      "sha256": "b87d3b54e65689056b8d24eebcdd742f75f67713f43749921f017035e2190a93"
+    },
+    {
+      "path": "docs/SMPP-GUIDE.md",
+      "bytes": 4201,
+      "sha256": "27574af199c6b20800e581cb023ae956b327df2194e9d1faa99862a667a23683"
+    },
+    {
+      "path": "docs/UI-THEME-IMPLEMENTATION.md",
+      "bytes": 7859,
+      "sha256": "33dc03a93e5ac9af29854a6f2654a68913ef6564d57f9b1185690ff014014e74"
+    },
+    {
+      "path": "ecosystem.config.js",
+      "bytes": 1752,
+      "sha256": "bcd82a2fd50d34090686517f569f83c2b78144f52e23e7fb11f62cc7e932b138"
+    },
+    {
+      "path": "login.html",
+      "bytes": 12286,
+      "sha256": "d8522232b1b65e95b4e2f97135709543f1af03fc308a9d79f068ac1eabdc7a3a"
+    },
+    {
+      "path": "management-login.html",
+      "bytes": 3823,
+      "sha256": "f68180e64b7ed42977513ebebc8d07e3864f3ca1c78b94329588a9fbd5b759af"
+    },
+    {
+      "path": "management.html",
+      "bytes": 263064,
+      "sha256": "2198647ea7e7c983099433ab848e4fe103d16dec0df4872d536ba80528c6ceb1"
+    },
+    {
+      "path": "manager.html",
+      "bytes": 165286,
+      "sha256": "f8a3daa5f61ee0864b48cdd5f46be26dad4ad3335abfb243d2dc137c20f44354"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 62285,
+      "sha256": "254738468f98feb3bc2008ee26edf0d2b60cbb7825d8835dfade75d950c80fbf"
+    },
+    {
+      "path": "package.json",
+      "bytes": 608,
+      "sha256": "57b19da654287f7956f2c3a8409947d738f1bffb42b9bd4576fc1a3427a08415"
+    },
+    {
+      "path": "panel-sharing-login.html",
+      "bytes": 2758,
+      "sha256": "73f46e9463e2c692e3d792803aa3bcb906749eafc43cf15d2c6c73b313a949ce"
+    },
+    {
+      "path": "panel-sharing.html",
+      "bytes": 81876,
+      "sha256": "64f8300a08ce2e154c14cb9924189f556f5cad67fb40bbe5d5f35bc09147df40"
+    },
+    {
+      "path": "payment-login.html",
+      "bytes": 2735,
+      "sha256": "0733d8dae80efc560014c8700040f2be8dbd45218e5ceac8e208e8933cf17a7b"
+    },
+    {
+      "path": "payment.html",
+      "bytes": 11387,
+      "sha256": "e4286b805cad51a19b0deb2e603a9890704b53e8b12f671a12a3a53bfb2304af"
+    },
+    {
+      "path": "release/cleanup-details.json",
+      "bytes": 31076,
+      "sha256": "bd72c72ec9220241e8a39123991bc0879be3db14d3a091a317719a00702280d6"
+    },
+    {
+      "path": "release/obsolete-code-paths.txt",
+      "bytes": 4510,
+      "sha256": "79b9338c1b1e4591b64239c023304cc84e266c08948436bdbab019ee8a202847"
+    },
+    {
+      "path": "release/preservation-checks.json",
+      "bytes": 537,
+      "sha256": "ce6dd8da067a7e478c681136179dd5f222f0e597cb1aa98b887069c7b35cde4b"
+    },
+    {
+      "path": "release/ui-verification.json",
+      "bytes": 4671,
+      "sha256": "2cbc4c2f1a3206a66d9c7399b909a7c59cee384129b80f41d04991547e785812"
+    },
+    {
+      "path": "release/verification-summary.json",
+      "bytes": 1484,
+      "sha256": "c8d33e2d498b5f23e9efbe667a31ede7412fc20dd420de737e248bfb9be0e726"
+    },
+    {
+      "path": "scripts/add-crapi-provider.sh",
+      "bytes": 7614,
+      "sha256": "23f11aa2d3cf1115c91017da94b6a497ab99003170cc876fef55586ac916260e"
+    },
+    {
+      "path": "scripts/alert-check.js",
+      "bytes": 2814,
+      "sha256": "d66145cbd62c54eab382be15e05d0a03f5b835f866871fb988751d60d26549c1"
+    },
+    {
+      "path": "scripts/check-html-scripts.js",
+      "bytes": 1009,
+      "sha256": "8e2c6a583f28695bcfc0f88195f86e72c161eb893886c98cccaca52f39c6753a"
+    },
+    {
+      "path": "scripts/install-service.sh",
+      "bytes": 8056,
+      "sha256": "ca4fbec78f6f8162b934193a97569748cbbb2e816df5cf0fa1973befb46bb448"
+    },
+    {
+      "path": "scripts/powerx-diskguard.sh",
+      "bytes": 3554,
+      "sha256": "8a3e63abc22ef97e84ef54190bb843176dd35ea9798b487ca575d3aae7848564"
+    },
+    {
+      "path": "scripts/powerx-watchdog.sh",
+      "bytes": 2666,
+      "sha256": "f49c57aa6cf7f71c2e7c5979f5fc7c44d21d1eb36333b912cf96f3e631a3071a"
+    },
+    {
+      "path": "scripts/verify-setup.sh",
+      "bytes": 14051,
+      "sha256": "9a1aa5874389fa4045bfdc189abf80002ec7131115d63d4116803ed464907f1d"
+    },
+    {
+      "path": "test-login.html",
+      "bytes": 3769,
+      "sha256": "dcab35361e1e75993e4252b4267bdc07c8fa4ae46cc07031a43b8929e09191ba"
+    },
+    {
+      "path": "test.html",
+      "bytes": 12582,
+      "sha256": "558f31f9e7ac7cb220e9c87c0cbdb9ef0316a26132799568f63d448f832d4862"
+    },
+    {
+      "path": "tests/credit-notes.test.js",
+      "bytes": 3671,
+      "sha256": "1e5b4435aad9a29c87af71aec4d5503764f36e0ae06eef021b44b8a9b31d4359"
+    },
+    {
+      "path": "tests/ui-theme.test.js",
+      "bytes": 4051,
+      "sha256": "aec4ab58339536e5d6bbfc41ef71ba829039dc568a52315a75155fd81266d281"
+    },
+    {
+      "path": "tests/verify-galaxy-cleanup-and-security.js",
+      "bytes": 12307,
+      "sha256": "a91ab050317d8bcbe6c3a681968418927bb04734be0ce8d2f903f960a61f9fa0"
+    },
+    {
+      "path": "tools/sync-local-clone.py",
+      "bytes": 6175,
+      "sha256": "d685ad247d5df23e90704ca1650dbdfdd03cf80a2ac34fa9db3dce3df2655c6e"
+    }
+  ]
+}

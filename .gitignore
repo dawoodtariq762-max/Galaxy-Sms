@@ -1,35 +1,54 @@
-# dependencies
+# Installed dependencies and local tooling
 node_modules/
 backend/node_modules/
+__pycache__/
+.venv/
+.cache/
 
-# runtime database (VPS owns this — never commit)
+# Persistent runtime data: never commit or copy over production
 *.sqlite
-*.sqlite-journal
-*.sqlite-wal
-*.sqlite-shm
-backend/data.sqlite
-data.sqlite
+*.sqlite-*
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+data/
+uploads/
+exports/
+backups/
 backend/backups/
-
-# secrets
-.env
-.env.local
-backend/.env
-
-# logs / os
+nova-sms-backups/
+logs/
 *.log
-npm-debug.log*
-.DS_Store
-
-# pm2 / runtime
 .pm2/
 powerx-logs/
 
-# runtime uploads
-data/chat_uploads/*
-!data/chat_uploads/.gitkeep
-data/chat_voice/*
-!data/chat_voice/.gitkeep
+# Secrets / local configuration (examples are source)
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.keystore
+*.p12
+*.pfx
+*.jks
+credentials.json
+secrets.json
 
-# mobile build intermediate artifacts
-mobile-app/bin/
+# Operating system / editor artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+npm-debug.log*
+
+# Downloaded distributions and build artifacts
+*.apk
+*.idsig
+*.zip
+*.tar.gz

@@ -1,0 +1,12 @@
+--- baseline/backend/server.js
++++ current/backend/server.js
+@@ -4241,6 +4241,9 @@
+   return res.status(403).json({ error: 'Security PIN verification required or session expired', locked: true });
+ }
+ 
++// Approved read-only live settlement statements; existing payment paths stay unchanged.
++require('./creditNotes').mount(app, { db, authRequired, requireRole, requireAgentChatUnlock });
++
+ app.get('/api/payment-v2/agent/summary', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json({agent_id:req.user.id, balances:agentPaymentSummary(req.user.id), wallet:db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}}));
+ app.get('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>res.json(db.get('SELECT * FROM agent_wallets WHERE agent_id=?',[req.user.id])||{binance_uid:'',network:'BINANCE_UID'}));
+ app.put('/api/payment-v2/agent/wallet', authRequired, requireRole('agent'), requireAgentChatUnlock, (req,res)=>{
