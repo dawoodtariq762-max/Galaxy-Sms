@@ -558,8 +558,14 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
                 <div class="exp-btns"><button type="button" class="gx-btn gx-blue"  data-tip="Copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button type="button" class="gx-btn gx-blue"  data-tip="Download CSV" title="Download CSV" aria-label="Download CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button><button type="button" class="gx-btn gx-green"  data-tip="Download Excel" title="Download Excel" aria-label="Download Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div></div>
               <div class="tc-right"><label>Range:</label><div id="testNumRangeContainer" style="display:inline-block;min-width:150px"></div><label>Search:</label><input type="text" id="testNumSearch" oninput="renderTest()" placeholder="Search..."/></div>
             </div></div>
+            <div class="bulk-bar" id="testNumBulkBar">
+              <span class="info" id="testNumSelInfo">0 selected</span>
+              <button type="button" class="gx-btn gx-amber" onclick="testNumMoveBackSelected()" data-tip="Move selected test numbers back to live SMS Numbers" title="Move selected test numbers back to live SMS Numbers" aria-label="Move selected test numbers back to live SMS Numbers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><line x1="10" y1="3" x2="10" y2="9"/><line x1="14" y1="3" x2="14" y2="9"/><path d="M10 9L4.6 18a2 2 0 0 0 1.7 3h11.4a2 2 0 0 0 1.7-3L14 9"/></svg><span>Move back to Numbers</span></button>
+              <button type="button" class="gx-btn danger" onclick="testNumDeleteSelected()" data-tip="Delete selected test numbers" title="Delete selected test numbers" aria-label="Delete selected test numbers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>Delete selected</span></button>
+              <button type="button" class="gx-btn danger" id="testNumRangeDeleteBtn" style="display:none" onclick="testNumDeleteRange()" data-tip="Delete every test number of the selected range" title="Delete every test number of the selected range" aria-label="Delete every test number of the selected range"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span id="testNumRangeDeleteLbl">Delete whole range</span></button>
+            </div>
             <div class="table-wrap"><div class="tscroll"><table>
-              <thead><tr><th>Range</th><th>Test Number</th></tr></thead>
+              <thead><tr><th style="width:34px"><input type="checkbox" id="testNumAll" onclick="testNumToggleAll(this)" title="Select all rows on this page" aria-label="Select all rows on this page"/></th><th>Range</th><th>Test Number</th><th style="width:70px">Action</th></tr></thead>
               <tbody id="testNumBody"></tbody>
             </table></div><div class="table-foot"><div class="info" id="testNumInfo"></div><div class="pagination"></div></div></div>
           </div>
@@ -1803,6 +1809,78 @@ async function renderTest(){
   await Promise.all([renderTestNumbersTable(), renderTestRecentTable()]);
 }
 
+/* ============ TEST PANEL NUMBERS: selection + manual management ============
+   Selection survives paging (Map keyed by pool-row id). Actions call the existing
+   number/range ownership rules on the server — this UI never allocates by itself. */
+let testNumSel=new Map();     // id -> {id, number, range_name}
+let testNumPageRows=[];       // rows of the currently rendered page
+let testNumLast={total:0, rangeName:''};
+function testNumToggle(id, cb, row){
+  if(cb.checked) testNumSel.set(id, row); else testNumSel.delete(id);
+  testNumUpdateSelUI();
+}
+function testNumToggleAll(cb){
+  testNumPageRows.forEach(r=>{ if(cb.checked) testNumSel.set(r.id, r); else testNumSel.delete(r.id); });
+  renderTestNumbersTable();
+}
+function testNumUpdateSelUI(){
+  const info=document.getElementById('testNumSelInfo'); if(info) info.textContent=testNumSel.size+' selected';
+  const all=document.getElementById('testNumAll');
+  if(all) all.checked=testNumPageRows.length>0 && testNumPageRows.every(r=>testNumSel.has(r.id));
+}
+function testNumSelDescription(max=10){
+  const rows=[...testNumSel.values()]; const nums=rows.map(r=>r.number);
+  const shown=nums.slice(0,max).join(', ');
+  return shown+(nums.length>max?' … (+'+(nums.length-max)+' more)':'');
+}
+function testNumEsc(s){ return String(s||'').replace(/[^0-9A-Za-z+*#_-]/g,''); }
+async function testNumDeleteSelected(){
+  const rows=[...testNumSel.values()];
+  if(!rows.length){ alert('Please select test numbers first.'); return; }
+  if(!confirm(`Delete ${rows.length} test number(s) from the Test Panel?\n\nThey are removed from the Test Panel list and from their range's test-number list.\nLive SMS Numbers and SMS history are NOT affected.\n\nThis cannot be undone.`)) return;
+  if(rows.length>5 && !confirm(`Please confirm again: permanently delete ${rows.length} test numbers?\n\n${testNumSelDescription()}`)) return;
+  try{
+    const r=await API.post('/test-numbers/delete',{ids:rows.map(x=>x.id)});
+    alert(`✅ Deleted ${r.deleted||0} test number(s).`);
+    await afterTestNumberChange();
+  }catch(e){ alert('❌ '+e.message); }
+}
+async function testNumDeleteRange(){
+  const name=testNumLast.rangeName||''; if(!name){ alert('Choose a Range filter first.'); return; }
+  const n=testNumLast.total||0;
+  if(!confirm(`Delete ALL ${n} test number(s) of range "${name}"?\n\nEvery test number of this range is removed from the Test Panel and from the range's test-number list.\nLive SMS Numbers and SMS history are NOT affected.`)) return;
+  if(!confirm(`Please confirm again: permanently delete all ${n} test numbers of range "${name}"?`)) return;
+  try{
+    const r=await API.post('/test-numbers/delete',{range_name:name});
+    alert(`✅ Deleted ${r.deleted||0} test number(s) from "${name}".`);
+    await afterTestNumberChange();
+  }catch(e){ alert('❌ '+e.message); }
+}
+async function testNumDeleteOne(id, number){
+  if(!confirm(`Delete test number ${number} from the Test Panel?\n\nIt is removed from the Test Panel list and from its range's test-number list.\nLive SMS Numbers and SMS history are NOT affected.`)) return;
+  try{
+    const r=await API.post('/test-numbers/delete',{ids:[id]});
+    alert(`✅ Deleted ${r.deleted||0} test number.`);
+    await afterTestNumberChange();
+  }catch(e){ alert('❌ '+e.message); }
+}
+async function testNumMoveBackSelected(){
+  const rows=[...testNumSel.values()];
+  if(!rows.length){ alert('Please select test numbers first.'); return; }
+  if(!confirm(`Move ${rows.length} selected test number(s) back to live SMS Numbers?\n\nThey leave the Test Panel and become normal SMS Numbers of their range (unallocated, so the usual allocation rules apply).\nSMS history is not changed.`)) return;
+  try{
+    const r=await API.post('/test-numbers/move-to-numbers',{ids:rows.map(x=>x.id)});
+    alert(`✅ Moved ${r.moved||0} test number(s) back to SMS Numbers. Skipped: ${r.skipped||0}${r.duplicates_in_live?` (already in Numbers: ${r.duplicates_in_live})`:''}`);
+    await afterTestNumberChange();
+  }catch(e){ alert('❌ '+e.message); }
+}
+async function afterTestNumberChange(){
+  testNumSel.clear();
+  try{ if(typeof refreshNumberDependentViews==='function') await refreshNumberDependentViews(); }catch(e){}
+  try{ if(typeof loadRates==='function') await loadRates(); }catch(e){}
+  try{ await renderTest(); }catch(e){}
+}
+
 async function renderTestNumbersTable(){
   const body=document.getElementById('testNumBody'); if(!body) return;
   const info=document.getElementById('testNumInfo');
@@ -1821,8 +1899,19 @@ async function renderTestNumbersTable(){
   try{ data=await API.get('/test-numbers?'+params.toString()); }catch(e){ console.warn('test numbers load failed',e); }
   state.page=data.page||1; state.totalPages=data.totalPages||1;
   const rows=data.rows||[];
-  body.innerHTML=rows.map(r=>`<tr><td>${r.range_name||''}</td><td class="mono">${r.number||''}</td></tr>`).join('')
-    ||`<tr><td colspan="2" class="muted" style="text-align:center;padding:24px">No test numbers found</td></tr>`;
+  testNumPageRows=rows; testNumLast={total:data.total||0, rangeName:rangeF};
+  body.innerHTML=rows.map(r=>`<tr><td><input type="checkbox" class="testNumChk" data-id="${r.id}" ${testNumSel.has(r.id)?'checked':''} onclick="testNumToggle(${r.id},this,{id:${r.id},number:'${testNumEsc(r.number)}',range_name:'${String(r.range_name||'').replace(/'/g,'')}'})" title="Select ${testNumEsc(r.number)}" aria-label="Select ${testNumEsc(r.number)}"/></td><td>${r.range_name||''}</td><td class="mono">${r.number||''}</td><td><button type="button" class="icon-btn btn-red" onclick="testNumDeleteOne(${r.id},'${testNumEsc(r.number)}')" title="Delete this test number" aria-label="Delete this test number"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td></tr>`).join('')
+    ||`<tr><td colspan="4" class="muted" style="text-align:center;padding:24px">No test numbers found</td></tr>`;
+  /* Range-wise delete is offered only while a Range filter is active (it then covers
+     exactly the rows the admin is looking at). */
+  const rangeBtn=document.getElementById('testNumRangeDeleteBtn');
+  if(rangeBtn){
+    const show=!!rangeF && (data.total||0)>0;
+    rangeBtn.style.display=show?'':'none';
+    const lbl=document.getElementById('testNumRangeDeleteLbl');
+    if(lbl) lbl.textContent=`Delete all in "${rangeF}" (${(data.total||0).toLocaleString()})`;
+  }
+  testNumUpdateSelUI();
   if(info){ info.textContent=`Showing ${smsShownCount(data.page,data.limit,rows.length,data.total)} of ${(data.total||0).toLocaleString()} test numbers`; setServerFoot(info,state,renderTestNumbersTable); }
 }
 

@@ -1855,6 +1855,78 @@ app.delete('/api/test-numbers/:id', authRequired, requireRole('admin'), (req, re
   res.json({ ok: true, deleted: 1 });
 });
 
+/* ============ TEST PANEL POOL: shared helpers + bulk actions (audit fix) ============
+   ranges.test_number is a display mirror of the active test numbers of a range.
+   Every write to range_test_numbers must rebuild it (same query as the existing
+   single-row routes) so Test Panel, range dropdowns and reports stay in sync. */
+function refreshRangeTestMirror(rangeId){
+  if(!rangeId) return;
+  const joined = db.all('SELECT test_number FROM range_test_numbers WHERE range_id=? AND active=1 ORDER BY id', [rangeId]).map(x => x.test_number).join(', ');
+  db.run('UPDATE ranges SET test_number=? WHERE id=?', [joined, rangeId]);
+}
+/* Normalised phone comparison, same expression the existing number/range routes use. */
+function cleanNumExpr(col){ return `REPLACE(REPLACE(REPLACE(REPLACE(${col},'+',''),' ',''),'-',''),'_','')`; }
+
+// Bulk delete of Test Panel numbers (single / multi / one complete range). Admin only.
+// Same rules as DELETE /api/test-numbers/:id, just batched: the pool rows are removed,
+// the range mirror is rebuilt and the action is logged. Live SMS Numbers are never touched.
+app.post('/api/test-numbers/delete', authRequired, requireRole('admin'), (req, res) => {
+  const b = req.body || {};
+  const ids = [...new Set((Array.isArray(b.ids) ? b.ids : []).map(x => parseInt(x, 10)).filter(x => Number.isFinite(x) && x > 0))];
+  const rangeId = (b.range_id != null && b.range_id !== '') ? parseInt(b.range_id, 10) : null;
+  const rangeName = String(b.range_name || '').trim();
+  if (!ids.length && !rangeId && !rangeName) return res.status(400).json({ error: 'ids[] or range required' });
+  let rows = [];
+  if (ids.length) {
+    const ph = ids.map(() => '?').join(',');
+    rows = db.all(`SELECT * FROM range_test_numbers WHERE id IN (${ph})`, ids);
+  } else if (rangeId && Number.isFinite(rangeId)) {
+    rows = db.all('SELECT * FROM range_test_numbers WHERE range_id=?', [rangeId]);
+  } else {
+    rows = db.all('SELECT t.* FROM range_test_numbers t JOIN ranges r ON r.id=t.range_id WHERE r.name=?', [rangeName]);
+  }
+  let deleted = 0; const touched = new Set();
+  for (const row of rows) { deleted += (db.run('DELETE FROM range_test_numbers WHERE id=?', [row.id]).changes || 0); touched.add(row.range_id); }
+  touched.forEach(refreshRangeTestMirror);
+  logAction(req, 'delete_test_numbers', 'test_numbers', { requested: ids.length || null, range_id: rangeId || null, range_name: rangeName || null, deleted, ranges: [...touched] });
+  res.json({ ok: true, deleted, ranges: [...touched] });
+});
+
+// Move selected Test Panel numbers back into live SMS Numbers (Admin only).
+// Reverse of POST /api/numbers/move-to-test. Ownership rules are unchanged: the number
+// is linked to its existing range and stays UNALLOCATED (manager/agent/client empty),
+// so it re-enters the normal allocation flow. No rate is invented: the prefix is copied
+// from the range exactly like the number-import path, payout starts at '0'.
+app.post('/api/test-numbers/move-to-numbers', authRequired, requireRole('admin'), (req, res) => {
+  const b = req.body || {};
+  const ids = [...new Set((Array.isArray(b.ids) ? b.ids : []).map(x => parseInt(x, 10)).filter(x => Number.isFinite(x) && x > 0))];
+  if (!ids.length) return res.status(400).json({ error: 'ids[] required' });
+  const ph = ids.map(() => '?').join(',');
+  const rows = db.all(`SELECT t.*, r.name AS range_name, r.prefix AS range_prefix, r.deleted_at AS range_deleted_at
+                       FROM range_test_numbers t LEFT JOIN ranges r ON r.id=t.range_id
+                       WHERE t.id IN (${ph})`, ids);
+  if (!rows.length) return res.status(404).json({ error: 'No matching test numbers found' });
+  let moved = 0, skipped = 0, duplicatesInLive = 0;
+  const skippedRows = []; const touched = new Set();
+  for (const row of rows) {
+    const number = String(row.test_number || '').trim();
+    const cleaned = cleanPhone(number);
+    if (!number || !row.range_id || String(row.range_deleted_at || '').trim()) {
+      skipped++; skippedRows.push({ id: row.id, number, reason: !row.range_id ? 'range missing' : 'range deleted' }); continue;
+    }
+    const existsLive = db.get(`SELECT id FROM numbers WHERE number=? OR ${cleanNumExpr('number')}=?`, [number, cleaned]);
+    if (existsLive) { duplicatesInLive++; skipped++; skippedRows.push({ id: row.id, number, reason: 'already in live SMS Numbers' }); continue; }
+    db.run(`INSERT INTO numbers (range_id,number,prefix,payterm,payout,import_source,imported_by,imported_at)
+            VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+      [row.range_id, number, row.range_prefix || '', 'Weekly', '0', 'test_panel_move', (req.user && req.user.id) || null]);
+    db.run('DELETE FROM range_test_numbers WHERE id=?', [row.id]);
+    touched.add(row.range_id); moved++;
+  }
+  touched.forEach(refreshRangeTestMirror);
+  logAction(req, 'move_test_numbers_to_numbers', 'numbers', { requested: ids.length, moved, skipped, duplicates_in_live: duplicatesInLive, ranges: [...touched] });
+  res.json({ ok: true, moved, skipped, duplicates_in_live: duplicatesInLive, skipped_rows: skippedRows, ranges: [...touched] });
+});
+
 app.get('/api/test-panel/dashboard', authRequired, requireRole('admin','manager','agent','client','test'), (req, res) => {
   const nums = db.get('SELECT COUNT(*) c FROM range_test_numbers WHERE active=1')?.c || 0;
   const normalTest = 'COALESCE(is_test,0)=1';
@@ -2911,10 +2983,12 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
     .map(r => ({ id: parseInt(r.id, 10), number: String(r.number || '') }))
     .filter(r => Number.isFinite(r.id) && r.id > 0);
   const count = cleanRows.length;
-  if (!count) return { deleted: 0, deleted_sms: 0, preserved_sms: 0, vacuum: false };
+  if (!count) return { deleted: 0, deleted_sms: 0, preserved_sms: 0, test_entries_removed: 0, vacuum: false };
 
   let smsCount = 0;
   let deferredRebuild = false;
+  let orphanTestEntries = 0;
+  const orphanRangeIds = new Set();
   try {
     db.execNoSave('BEGIN TRANSACTION');
     db.execNoSave('DROP TABLE IF EXISTS tmp_delete_numbers');
@@ -2945,6 +3019,23 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
       /* Note: payment_ledger rows jaan-boojh kar rakhi (historical immutability) — balances Sahi rehte hain */
     }
     db.runNoSave('DELETE FROM numbers WHERE id IN (SELECT id FROM tmp_delete_numbers)');
+
+    /* Test Panel consistency (audit fix): a range_test_numbers entry whose number is
+       also present in live `numbers` becomes an orphan as soon as that live row is
+       deleted — the pool is a separate table and this delete path never touched it.
+       Remove exactly those entries and rebuild the ranges.test_number mirror after
+       the commit, so Test Panel / range dropdowns / allocation screens agree.
+       Live numbers that were never in the pool, and all SMS history, are untouched. */
+    try {
+      const orphans = db.all(`SELECT id, range_id FROM range_test_numbers
+        WHERE ${cleanNumExpr('test_number')} IN (SELECT ${cleanNumExpr('number')} FROM tmp_delete_numbers WHERE number<>'')`);
+      for (const o of orphans) {
+        db.runNoSave('DELETE FROM range_test_numbers WHERE id=?', [o.id]);
+        orphanRangeIds.add(o.range_id);
+        orphanTestEntries++;
+      }
+    } catch (e) { console.warn('[DELETE-NUMBERS] test-panel orphan cleanup failed:', e.message); }
+
     db.execNoSave('DROP TABLE IF EXISTS tmp_delete_numbers');
     db.execNoSave('COMMIT');
     db.save();
@@ -2953,12 +3044,17 @@ function deleteNumbersFromRows(rows, req, action, details = {}, deleteSms = fals
     throw e;
   }
   if (deferredRebuild) scheduleStatsFullRebuild('numbers-delete');
+  /* Mirror refresh runs outside the delete transaction so a mirror problem can never
+     roll back (or block) the number deletion itself. */
+  for (const rid of orphanRangeIds) {
+    try { refreshRangeTestMirror(rid); } catch (e) { console.warn('[DELETE-NUMBERS] test-panel mirror refresh failed:', e.message); }
+  }
 
   // Do not VACUUM after every delete; it rewrites the whole DB and makes small delete/range actions feel frozen.
   const vacuum = false;
-  logAction(req, action, 'numbers', { ...details, count, linkedSms: smsCount, deleteSms: !!deleteSms });
+  logAction(req, action, 'numbers', { ...details, count, linkedSms: smsCount, deleteSms: !!deleteSms, testPanelRemoved: orphanTestEntries });
   bumpNumbersVer();
-  return { deleted: count, deleted_sms: deleteSms ? smsCount : 0, preserved_sms: deleteSms ? 0 : smsCount, vacuum };
+  return { deleted: count, deleted_sms: deleteSms ? smsCount : 0, preserved_sms: deleteSms ? 0 : smsCount, test_entries_removed: orphanTestEntries, vacuum };
 }
 function deleteNumbersFromSelect(selectSql, params = [], req, action, details = {}, deleteSms = false) {
   const rows = db.all(selectSql, params);

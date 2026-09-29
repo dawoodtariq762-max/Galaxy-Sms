@@ -193,6 +193,15 @@ body.gx-light.gx-lamix :is(.sub-item,.rsubitem,.dropitem) {background:#10405f!im
 body.gx-light.gx-lamix :is(.sub-item,.rsubitem,.dropitem):hover {background:#17577c!important;color:#fff!important;}
 body.gx-light.gx-lamix :is(.sub-item,.rsubitem,.dropitem).active {background:#1d6892!important;color:#fff!important;}
 body.gx-light.gx-lamix .rail>.logo,body.gx-light.gx-lamix :is(.sb-brand,.side>.brand) .logo {box-shadow:0 1px 6px #041e300f!important;}
+/* Manager navigation surface — 29 September 2026 audit fix (visual only).
+   Manager is the only panel that renders its menu with .navtabs / .dropmenu, and
+   galaxy.css paints both of them white. The menu items inside are styled for the dark
+   sidebar (pale blue text), so the white container left the labels nearly unreadable.
+   Making the menu containers carry the same dark surface as Admin's .sb-nav and Agent's
+   .rail-nav (transparent over the sidebar gradient / the dark submenu surface) restores
+   one consistent colour system. No layout, markup or behaviour change. */
+body.gx-light.gx-lamix .navtabs {background:transparent!important;box-shadow:none!important;}
+body.gx-light.gx-lamix .dropmenu {background:#0f405f!important;border-color:#1b5678!important;box-shadow:none!important;}
 body.gx-light.gx-lamix :is(.nav-item,.ritem,.navtab,.side .item,.sidebar .tab,.sub-item,.rsubitem,.dropitem) :is(.lbl,.chev) {color:currentColor!important;}
 
 body.gx-light.gx-lamix :is(.topbar,.mgr-topbar,.top,.tb1) {

@@ -1,0 +1,246 @@
+{
+  "generated_at": "2026-09-29",
+  "scope": "Isolated synthetic fixture + isolated server copies only; no production data, no production calls.",
+  "fixes_relevant_checks": {
+    "manager_menu_surface": {
+      "browser_checks": {
+        "passed": 4,
+        "total": 4
+      },
+      "assertions": [
+        {
+          "check": "Menu label contrast against the surface it actually sits on",
+          "ok": true,
+          "detail": "{\"itemColor\":\"rgb(214, 232, 244)\",\"containerBg\":\"rgba(0, 0, 0, 0)\",\"parentBg\":\"linear-gradient(rgb(21, 81, 119) 0%, rgb(16, 63, 97) 45%, rgb(11, 47, 76) 100%)\",\"ratio\":6.75}"
+        },
+        {
+          "check": "Submenu opens (existing behaviour) and its items stay readable",
+          "ok": true,
+          "detail": "{\"ok\":true,\"shown\":true,\"menuBg\":\"rgb(15, 64, 95)\",\"itemBg\":\"rgb(16, 64, 95)\",\"itemColor\":\"rgb(197, 220, 236)\",\"ratio\":7.72}"
+        },
+        {
+          "check": "Navigation clicks still switch sections exactly as before",
+          "ok": true,
+          "detail": "{\"before\":\"page-dashboard\",\"after\":\"page-test\",\"sameSection\":false}"
+        },
+        {
+          "check": "Mobile drawer renders the same surface with all menu rows",
+          "ok": true,
+          "detail": "{\"bg\":\"rgba(0, 0, 0, 0)\",\"surface\":\"linear-gradient(rgb(21, 81, 119) 0%, rgb(16, 63, 9\",\"rows\":10}"
+        }
+      ],
+      "measured": {
+        "admin_sidebar_gradient": "linear-gradient(rgb(21,81,119) 0%, rgb(16,63,97) 45%, rgb(11,47,76) 100%)",
+        "manager_menu_uses_same_gradient": true,
+        "manager_menu_container_before": "rgb(255,255,255) (galaxy.css body.gx-light :is(...,.navtabs))",
+        "manager_menu_container_after": "transparent over the sidebar gradient",
+        "menu_label_contrast_after": 6.75,
+        "admin_agent_manager_menu_item_treatment_identical": true
+      }
+    },
+    "test_panel_consistency": {
+      "api_and_db_checks": {
+        "passed": 21,
+        "total": 21
+      },
+      "checks": [
+        {
+          "check": "A1 Fixture has the live+test duplicate (legacy orphan state)",
+          "ok": true
+        },
+        {
+          "check": "B1 Deleting a live number removes its Test Panel twin (single delete)",
+          "ok": true
+        },
+        {
+          "check": "B2 Test Panel list no longer returns the orphan",
+          "ok": true
+        },
+        {
+          "check": "C1 Deleting via \"delete filtered\" also clears the Test Panel twin",
+          "ok": true
+        },
+        {
+          "check": "D1 Deleting a whole range clears matching test entries, keeps the others",
+          "ok": true
+        },
+        {
+          "check": "E1 Moving a test number back creates an unallocated live number in its range",
+          "ok": true
+        },
+        {
+          "check": "E2 Moved number is visible in the live Numbers list",
+          "ok": true
+        },
+        {
+          "check": "E3 Moving again is refused (no duplicate live row, pool row kept)",
+          "ok": true
+        },
+        {
+          "check": "F1 Bulk delete removes exactly the selected rows and refreshes mirrors",
+          "ok": true
+        },
+        {
+          "check": "F2 Range-wise delete clears the whole range list and the mirror",
+          "ok": true
+        },
+        {
+          "check": "G1 Non-admin roles cannot delete or move Test Panel numbers",
+          "ok": true
+        },
+        {
+          "check": "G2 Existing single delete route still works",
+          "ok": true
+        },
+        {
+          "check": "G3 Bad input is rejected without side effects",
+          "ok": true
+        },
+        {
+          "check": "H0 A live number is still available for the SMS regression probes",
+          "ok": true
+        },
+        {
+          "check": "H1 Same provider id delivered 3× still stores exactly one row",
+          "ok": true
+        },
+        {
+          "check": "H2 Identical text without a provider id is still stored (no text-based dedup)",
+          "ok": true
+        },
+        {
+          "check": "H3 Unknown number still goes to the failed queue instead of being lost",
+          "ok": true
+        },
+        {
+          "check": "H4 CDR/OTP rows are untouched by Test Panel operations",
+          "ok": true
+        },
+        {
+          "check": "I1 Every range mirror matches its active test-number list",
+          "ok": true
+        },
+        {
+          "check": "I2 No orphan pool rows remain (no active test entry duplicating a live number)",
+          "ok": true
+        },
+        {
+          "check": "I3 SMS ingestion ledger integrity preserved",
+          "ok": true
+        }
+      ]
+    },
+    "test_panel_ui": {
+      "browser_checks": {
+        "passed": 18,
+        "total": 18
+      },
+      "checks": [
+        {
+          "check": "Nav chrome measured on all three panels",
+          "ok": true
+        },
+        {
+          "check": "Manager nav background matches admin sidebar background",
+          "ok": true
+        },
+        {
+          "check": "Manager menu is the same fixed full-height column as the admin sidebar / agent rail, with content offset by exactly its width",
+          "ok": true
+        },
+        {
+          "check": "Manager menu container itself is not a light surface (labels sit on the sidebar colour)",
+          "ok": true
+        },
+        {
+          "check": "Manager item text is readable on the nav background (contrast >= 4.5)",
+          "ok": true
+        },
+        {
+          "check": "Manager active item matches admin active item treatment",
+          "ok": true
+        },
+        {
+          "check": "No horizontal overflow on the manager panel",
+          "ok": true
+        },
+        {
+          "check": "Mobile drawer uses the same nav background as desktop",
+          "ok": true
+        },
+        {
+          "check": "Test Panel page opens with the managed test-number table",
+          "ok": true
+        },
+        {
+          "check": "Test number rows render with a selection checkbox and a delete action",
+          "ok": true
+        },
+        {
+          "check": "Bulk action bar is visible with both actions labelled",
+          "ok": true
+        },
+        {
+          "check": "Selecting rows updates the selection counter",
+          "ok": true
+        },
+        {
+          "check": "Select-all checkbox reflects the page state",
+          "ok": true
+        },
+        {
+          "check": "Delete asks for an explicit confirmation that names the action and the count",
+          "ok": true
+        },
+        {
+          "check": "Cancelling the confirmation leaves the data untouched",
+          "ok": true
+        },
+        {
+          "check": "Per-row delete also confirms before changing anything",
+          "ok": true
+        },
+        {
+          "check": "Range-wise delete is offered only with a Range filter and shows the affected count",
+          "ok": true
+        },
+        {
+          "check": "Moving a number back through the UI updates Test Panel and live Numbers together (selection: 1 selected)",
+          "ok": true
+        }
+      ]
+    },
+    "sms_ingestion_regression": [
+      "same provider id delivered repeatedly → one stored row (dedup ledger)",
+      "identical text with no provider id → stored (never treated as a duplicate)",
+      "legitimate resend 1 s later with a new event id → separate row",
+      "same CLI+number with a different OTP → separate row",
+      "unknown number → HTTP 404 + failed_sms_queue entry, nothing stored",
+      "two server processes receiving the same provider id simultaneously → one stored row"
+    ]
+  },
+  "high_rate_measurement": {
+    "isolated_config": "API_RATE_PER_MIN raised only on the throwaway audit instance for the measurement; production/default 1200 per minute restored afterwards and unchanged in the source.",
+    "burst_500": {
+      "accepted": 500,
+      "stored": 500,
+      "per_second": 317.9,
+      "p95_ms": 179.7
+    },
+    "sustained_4000": {
+      "accepted": 4000,
+      "stored": 4000,
+      "per_second": 417.4,
+      "p50_ms": 51,
+      "p95_ms": 91.6
+    },
+    "replay_of_4000_ids": "4000/4000 recognised as duplicates, 0 new rows",
+    "integrity_after_load": "PRAGMA quick_check = ok"
+  },
+  "known_limitations": [
+    "The callback channel identifies a message by the provider message id only; when a provider sends no id, identical text is stored again (by design, so genuine resends are never lost).",
+    "The SMPP path uses a 10-second fingerprint bucket when the peer supplies no receipted message id; a retransmission inside that window is suppressed, one after it is stored again.",
+    "api_integration_seen keeps the newest ~50,000 provider ids (default); older ids are pruned, so a very late retransmission of a pruned id is stored again.",
+    "smpp_seen rows are cleared when the SMPP connection record is deleted, so identity history restarts if a connection is recreated."
+  ]
+}

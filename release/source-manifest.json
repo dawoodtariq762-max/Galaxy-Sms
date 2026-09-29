@@ -1,5 +1,5 @@
 {
-  "note": "Current Lamix-style UI source incl. 2026-09-28 final colour/copy pass. Code/documentation only; excludes own hash. Earlier cleanup records are historical. Runtime omissions are NOT deletion instructions.",
+  "note": "Current Lamix-style UI source incl. the 2026-09-28 colour/copy pass and the 2026-09-29 audit fixes (Manager menu surface, Test Panel consistency + manual management, SMS/OTP duplicate audit). Code/documentation only; excludes own hash. Earlier cleanup records are historical. Runtime omissions are NOT deletion instructions.",
   "files": [
     {
       "path": ".env.example",
@@ -12,19 +12,14 @@
       "sha256": "04f35baf2748d21356bd83c0b486516f4041aeedb29015ce5300621263b52247"
     },
     {
-      "path": "README.md",
-      "bytes": 3862,
-      "sha256": "c41f689fff96756ae46351df4ccf1f824e2012f042edfb8151eba6c3642cc1bd"
-    },
-    {
       "path": "add-provider.sh",
       "bytes": 8623,
       "sha256": "327f7f6ff15ba99f77ca4495f89a7ae8651e2c00ef2ccf747df058f202590bed"
     },
     {
       "path": "admin.html",
-      "bytes": 269761,
-      "sha256": "0f9358b3249ee9758e8f058526da2c110b1374def39f99fd57ebf75f0487140a"
+      "bytes": 277573,
+      "sha256": "01f51665533e0268971bb999884bcc46c470ff2c539be637c2154af6bd483672"
     },
     {
       "path": "agent.html",
@@ -73,8 +68,8 @@
     },
     {
       "path": "assets/lamix-light.css",
-      "bytes": 24881,
-      "sha256": "ab9a6edb5b48ec99c88015f6fa2c1aa8de01c071b39fe983ca00a6d0cf339924"
+      "bytes": 25683,
+      "sha256": "24076f22a39237dd9ef8f92533ca50e75e32d4aee5dd5f5410fd25882ec8f3f8"
     },
     {
       "path": "assets/number-copy.js",
@@ -85,16 +80,6 @@
       "path": "assets/world.svg",
       "bytes": 413824,
       "sha256": "b1b7b27a7c21e13899da598b4c206d90b8f22ddc211b882ab0d711e61731a59f"
-    },
-    {
-      "path": "backend/PROVIDER-SYNC.md",
-      "bytes": 6150,
-      "sha256": "c4b789c14ea4fc98298119902c18e5451af9f6dcd12a83fd2d0b389564aa266b"
-    },
-    {
-      "path": "backend/README.md",
-      "bytes": 3601,
-      "sha256": "eb64c394011cf47a8848509ffd61ef18c73770be7975a808c9b06d30371c6d33"
     },
     {
       "path": "backend/auth.js",
@@ -137,9 +122,19 @@
       "sha256": "01eaadffb5f133234bf9ab87977452164f78fcd3ff759e873d6ed98587cd5bbe"
     },
     {
+      "path": "backend/PROVIDER-SYNC.md",
+      "bytes": 6150,
+      "sha256": "c4b789c14ea4fc98298119902c18e5451af9f6dcd12a83fd2d0b389564aa266b"
+    },
+    {
       "path": "backend/providerSync.js",
       "bytes": 32590,
       "sha256": "fb793f9ac4e299f08c9203acca787bacc9b87c6b6f51f21bf3dfcad74239f817"
+    },
+    {
+      "path": "backend/README.md",
+      "bytes": 3601,
+      "sha256": "eb64c394011cf47a8848509ffd61ef18c73770be7975a808c9b06d30371c6d33"
     },
     {
       "path": "backend/schema.js",
@@ -153,8 +148,8 @@
     },
     {
       "path": "backend/server.js",
-      "bytes": 366209,
-      "sha256": "d99afed82d5a68dd20d9c21ca95617ef83c3bb3c90e9364651e7378e2ea64eea"
+      "bytes": 372823,
+      "sha256": "8340b8b76b32adb814eb47c0ebacae5490ab289848445d10f31dfd0a680a2755"
     },
     {
       "path": "backend/smppServer.js",
@@ -290,6 +285,16 @@
       "path": "payment.html",
       "bytes": 11387,
       "sha256": "e4286b805cad51a19b0deb2e603a9890704b53e8b12f671a12a3a53bfb2304af"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3862,
+      "sha256": "c41f689fff96756ae46351df4ccf1f824e2012f042edfb8151eba6c3642cc1bd"
+    },
+    {
+      "path": "release/audit-verification-2026-09-29.json",
+      "bytes": 9015,
+      "sha256": "dd2b7db831797d629dd9fe2bad77b86c85e157b6ee5af2321d510e6fb196ec36"
     },
     {
       "path": "release/cleanup-details.json",
