@@ -251,8 +251,41 @@ window.toggleSearchDropdown = function(id) {
     }
     // Re-filter to show all options
     window.filterSearchDropdown(id, '');
+    // Keep the opened menu inside the window (see helper below).
+    window.fitSearchDropdownMenu(id);
   } else {
     menu.style.display = 'none';
+  }
+};
+
+/* Keeps an open dropdown readable on screen. A Range/filter field that sits low on
+   the page used to open its menu downward, past the bottom edge of the window, so
+   only the first rows were visible and the rest had to be hunted for. The menu now
+   opens upward when there is more room above, and its height is fitted to the space
+   that is actually available - the inner option list scrolls, so every option stays
+   reachable with the menu still aligned to its field. Default behaviour (menu
+   opening downward with the standard height) is unchanged when there is room. */
+window.fitSearchDropdownMenu = function(id) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const menu = dd.querySelector('.sd-menu');
+  const trigger = dd.querySelector('.sd-trigger');
+  if (!menu || !trigger || menu.style.display === 'none') return;
+  menu.style.top = '';
+  menu.style.bottom = '';
+  menu.style.maxHeight = '';
+  const t = trigger.getBoundingClientRect();
+  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  const MAX = 300, MIN = 160;
+  const spaceBelow = vh - t.bottom - 12;
+  const spaceAbove = t.top - 12;
+  const wanted = Math.min(MAX, menu.scrollHeight || MAX);
+  if (spaceBelow < wanted && spaceAbove > spaceBelow) {
+    menu.style.top = 'auto';
+    menu.style.bottom = 'calc(100% + 4px)';
+    menu.style.maxHeight = Math.max(MIN, Math.min(MAX, spaceAbove)) + 'px';
+  } else if (spaceBelow < wanted) {
+    menu.style.maxHeight = Math.max(MIN, Math.min(MAX, spaceBelow)) + 'px';
   }
 };
 

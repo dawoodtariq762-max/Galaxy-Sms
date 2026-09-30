@@ -634,9 +634,30 @@
       if(local){ el.dataset.msUtc=raw; el.textContent=local; el.title='UK time: '+local+' | Stored UTC: '+raw; }
     });
   }
+  /* Rows are appended in a burst of DOM updates (table body + footer + pager), and
+     the pending-nodes list used to be REPLACED on every new mutation batch: only the
+     last batch before the quiet period was ever localised, so report tables that
+     rendered slightly earlier kept showing the raw stored UTC value. During BST that
+     is exactly one hour behind the intended Europe/London reporting time, and it also
+     made freshly received messages look out of order next to their real arrival time.
+     Nodes are now ACCUMULATED and the whole queue is flushed, followed by a document
+     re-scan so a cell whose text was refreshed in place is still corrected.
+     Storage and sorting are untouched: received_at stays UTC in the database and in
+     every query/order clause - only the displayed value is converted. */
+  let tzPending=[];
+  function tzFlush(){
+    const nodes=tzPending; tzPending=[];
+    for(const n of nodes){ try{ localizeTimes(n); }catch(e){} }
+    try{ localizeTimes(document); }catch(e){}
+  }
+  function tzSchedule(node){
+    if(node && node.nodeType===1) tzPending.push(node);
+    clearTimeout(window.__msTzTimer);
+    window.__msTzTimer=setTimeout(tzFlush,120);
+  }
   function initTimeLocalization(){
     localizeTimes(document);
-    const mo=new MutationObserver(muts=>{ clearTimeout(window.__msTzTimer); window.__msTzTimer=setTimeout(()=>muts.forEach(m=>m.addedNodes.forEach(n=>{ if(n.nodeType===1) localizeTimes(n); })),80); });
+    const mo=new MutationObserver(muts=>{ muts.forEach(m=>m.addedNodes.forEach(n=>tzSchedule(n))); });
     mo.observe(document.body,{childList:true,subtree:true});
   }
 

@@ -1,0 +1,169 @@
+{
+ "task": "2026-09-30 targeted fixes: (1) SMS Report message timing, (2) Test Panel Range dropdown clipping",
+ "scope": "Only these two issues. No changes to SMS receiving, HTTP/API behaviour, SMPP, number/range allocation, Test Panel logic, DB schema, payments, rates, users, permissions, dashboards, theme, sidebar, topbar or any other report/filter.",
+ "changed_files": [
+  {
+   "path": "api.js",
+   "bytes": 51493,
+   "sha256": "09eb4edc036fa81f97a23490e92056c95c36f8409c90d449aa1335f12ff1541d"
+  },
+  {
+   "path": "assets/galaxy.js",
+   "bytes": 33959,
+   "sha256": "e038901530b2d464e67fc33cd11877bc350b687f88e5e9ff60968aa2a26a4182"
+  },
+  {
+   "path": "assets/galaxy.css",
+   "bytes": 41980,
+   "sha256": "6a226d0a0937680700ba858e2ae967670493214aa199c64c903601bc84073fa4"
+  }
+ ],
+ "issue1_sms_report_timing": {
+  "symptom": "HTTP-ingested SMS shown ~1 hour behind the real receipt time; report tables rendered early in the page load kept the raw stored value.",
+  "root_cause": "Timestamps were stored and queried correctly in UTC (received_at is UTC; report order is received_at DESC, s.id DESC on that same UTC column; all day/hour bucketing uses the existing UK-local SQL modifiers). The defect was in the front-end localiser api.js: initTimeLocalization() converted the nodes it was handed, but a MutationObserver delivers additions in batches and the code kept only the LAST batch in a single tzPending variable (a setTimeout closure), so nodes added in earlier batches were never converted and stayed as raw UTC text - exactly one hour behind during BST.",
+  "fix": "api.js: the pending set is now an accumulating array (tzPending) flushed once per animation frame window (tzFlush) and each flush re-scans the document for cells that still need conversion, so every batch is localised. Conversion still uses the same existing DB-to-UTC-to-UK-local path; no hardcoded offset anywhere.",
+  "no_hardcoded_offset": true,
+  "http_api_consistency": "Both ingestion paths keep identical timestamp semantics: HTTP callback with no provider date stores datetime('now') (UTC instant); a provider ISO/epoch UTC date is stored as-is; the API-style payload (api_dt) is stored by the same rule. Display now converts for both identically - verified side by side.",
+  "verification": {
+   "harness": "galaxy-ui-work/timing-display-check.cjs",
+   "checks": [
+    {
+     "name": "admin: HTTP-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:21:05\" expected=\"2026-09-30 07:21:05\""
+    },
+    {
+     "name": "admin: API-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:19:05\" expected=\"2026-09-30 07:19:05\""
+    },
+    {
+     "name": "manager: HTTP-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:21:05\" expected=\"2026-09-30 07:21:05\""
+    },
+    {
+     "name": "manager: API-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:19:05\" expected=\"2026-09-30 07:19:05\""
+    },
+    {
+     "name": "agent: HTTP-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:21:05\" expected=\"2026-09-30 07:21:05\""
+    },
+    {
+     "name": "agent: API-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:19:05\" expected=\"2026-09-30 07:19:05\""
+    },
+    {
+     "name": "client: HTTP-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:21:05\" expected=\"2026-09-30 07:21:05\""
+    },
+    {
+     "name": "client: API-ingested message is DISPLAYED in UK local time",
+     "ok": true,
+     "detail": "shown=\"2026-09-30 07:19:05\" expected=\"2026-09-30 07:19:05\""
+    }
+   ],
+   "true_instant_utc": "2026-09-30 06:21:05",
+   "true_instant_europe_london": "30/09/2026 07:21:05",
+   "http_row": {
+    "id": 94,
+    "received_at": "2026-09-30 06:21:05",
+    "cli": "TZDISP"
+   },
+   "api_row": {
+    "id": 95,
+    "received_at": "2026-09-30 06:19:05",
+    "cli": "TZDISPAPI"
+   },
+   "before_fix": "0/8 - every role's report showed the raw stored UTC value, 1 hour behind the real instant",
+   "after_fix": "8/8 - admin/manager/agent/client all display the correct Europe/London time for HTTP-ingested and API-ingested messages; backend/production API responses were always correct, only the browser rendering was wrong",
+   "storage_and_order_unchanged": "timing-repro.cjs re-run: received_at stored as the true UTC instant, /sms/paged ordered received_at DESC, s.id DESC, no DB/schema/query change"
+  }
+ },
+ "issue2_range_dropdown": {
+  "symptom": "Test Panel Range dropdown was cut off by its container; only ~3-4 ranges were reachable, the rest were hidden below the section.",
+  "root_cause": "The dropdown lives inside a card that clips its content. assets/galaxy.css forces overflow-x:auto on .table-wrap/.table/.tscroll and admin.html adds .table-wrap{overflow:hidden}; with overflow hidden on one axis the other computes to a clipping value, so an absolutely positioned, z-index:2000 .sd-menu was clipped to the card box (measured: menu 686-979 px vs card bottom 809 px, 1 of 19 options visible, elementFromPoint at the menu edge returned the table header) - and it also opened downward past the bottom of a scrolled page.",
+  "fix": "1) assets/galaxy.css: a card that hosts a searchable dropdown and contains no table of its own no longer clips (.table-wrap:has(.searchable-dropdown):not(:has(table)), .toolbar/.filter-row variants) - the menu keeps its own max-height and inner scrolling. Table cards, which genuinely need the horizontal-scroll clip, are untouched and were verified still clipping (6/6). 2) assets/galaxy.js: new fitSearchDropdownMenu(), called when a dropdown opens, flips the menu above the field when there is more room above and fits its max-height to the available space, so it stays inside the window and aligned with the Range field. Default downward behaviour with the standard height is unchanged when there is room. No Test Panel logic, no markup, no allocation/API change.",
+  "verification": {
+   "harness": "galaxy-ui-work/dropdown-verify.cjs (61 checks) + dropdown-repro.cjs before/after",
+   "checks_passed": 61,
+   "checks_total": 61,
+   "scenarios": [
+    "admin Test Panel, 19 ranges - desktop 1440x900",
+    "tablet 768x1024",
+    "mobile 390x844",
+    "360x740",
+    "page scrolled to the bottom",
+    "client Test Panel, 2 ranges - desktop + mobile",
+    "admin Numbers page range filter (same shared dropdown component)"
+   ],
+   "measured_after": {
+    "menu_fully_inside_window": true,
+    "clipping_ancestors": [],
+    "aligned_with_range_field": true,
+    "painted_above_the_content_below": true,
+    "options_visible_at_once_desktop": 6,
+    "all_19_ranges_reachable_by_scrolling": true,
+    "search_still_filters_in_dropdown": true,
+    "selecting_a_range_still_filters_the_table": true,
+    "outside_click_still_closes": true
+   },
+   "measured_before": {
+    "trigger": {
+     "top": 756,
+     "bottom": 796,
+     "left": 291,
+     "right": 491,
+     "w": 200,
+     "h": 40
+    },
+    "menu": {
+     "top": 459,
+     "bottom": 752,
+     "left": 291,
+     "right": 531,
+     "w": 240,
+     "h": 293,
+     "display": "flex",
+     "position": "absolute",
+     "zIndex": "2000",
+     "maxHeight": "300px"
+    },
+    "options": {
+     "count": 19,
+     "visibleOptions": 6,
+     "scroll": {
+      "clientH": 240,
+      "scrollH": 694,
+      "overflowY": "auto"
+     }
+    },
+    "clippers": [],
+    "elementAtMenuBottom": "span",
+    "viewport": {
+     "h": 900,
+     "w": 1440
+    },
+    "scrollY": 0,
+    "scrollTest": {
+     "count": 19,
+     "lastText": "Audit Range B",
+     "lastVisibleInMenu": true,
+     "inViewport": true
+    }
+   },
+   "other_suites_rerun": {
+    "audit-ui-check.cjs": "18/18",
+    "final-color-copy.cjs": "10/10",
+    "api-regression.cjs": "13/13 on a fresh fixture state (it consumes fixture numbers, so repeat runs fail on the exhausted pool - no production/API behaviour involved)"
+   }
+  }
+ },
+ "other_changes": "None. diff against the previously delivered source bundle (Galaxy-SMS-Lamix-UI-Source-v3.zip) lists exactly three differing files: api.js, assets/galaxy.js, assets/galaxy.css - all three belong to the two approved fixes.",
+ "generated_utc": "2026-09-30 06:23:30"
+}

@@ -129,6 +129,16 @@ table.gx-cards td.gx-num,table.gx-cards td.gx-num *{font-size:14px!important;fon
 .sd-option{padding: 8px 12px;font-size: 13px;cursor: pointer;border-bottom: 1px solid #ddd;display: flex;align-items: center;justify-content: space-between;transition: background 0.1s ease;}
 .sd-option.selected{font-weight: 600;}
 .sd-no-results{padding: 14px;text-align: center;font-size: 12px;font-style: italic;}
+/* Filter cards clip their content (rounded corners; table cards also clip for their
+   horizontal scroll). That clip also cut an open search dropdown off after the first
+   few rows - the Test Panel Range menu showed only ~3-4 of its ranges and the rest
+   could not be reached. A card that hosts a searchable dropdown and no table of its
+   own now lets the menu open fully; .sd-menu keeps its own max-height and inner
+   scrolling, so a long range list stays scrollable instead of being hidden. Table
+   cards (which really need their horizontal-scroll clip) are not affected. */
+.table-wrap:has(.searchable-dropdown):not(:has(table)),
+.toolbar:has(.searchable-dropdown),
+.filter-row:has(.searchable-dropdown){overflow: visible !important;}
 /* Approved presentation-only rebrand. Loaded after legacy styles.
    Scoped to the light theme: saved dark preferences and existing toggle survive.
    No visibility overrides on pages, security gates or permission-controlled actions. */
