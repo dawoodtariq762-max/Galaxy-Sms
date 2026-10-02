@@ -340,6 +340,7 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
         <div class="sub-item" data-page="managerStats"><span class="dot"></span> Manager Stats</div>
         <div class="sub-item" data-page="rangeStats"><span class="dot"></span> Range Stats</div>
         <div class="sub-item" data-page="numberStats"><span class="dot"></span> Number Stats</div>
+        <div class="sub-item" data-page="providerSummary"><span class="dot"></span> Provider / Range Summary</div>
       </div>
           <div class="nav-item" data-page="creditNotes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 3h10l4 4v14H5z"/><path d="M14 3v5h5M8 12h8M8 16h6"/></svg><span class="lbl">Credit Notes</span></div>
 </nav>
@@ -427,6 +428,8 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
         <div class="toolbar">
           <div class="filter-row">
             <div id="numRangeContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numRange"><option value="">Select Range</option></select></div>
+            <!-- Provider filter (admin only): shows ALL eligible numbers of the provider across all its ranges -->
+            <div id="numProviderContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numProvider"><option value="">Select Provider</option></select></div>
             <div id="numClientContainer" style="display:inline-block;min-width:180px"><select class="sel-lg" id="numClient"><option value="">Select Owner</option></select></div>
             <button type="button" class="gx-btn gx-blue"  onclick="applyNumFilter()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
             <button type="button" class="gx-btn"  onclick="clearNumFilter()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
@@ -461,6 +464,7 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
               <th class="sortable" onclick="cycleClientFilter()">Client <span class="sort" id="clientSortHint">⇅</span></th>
               <th class="sortable" onclick="sortNumbers('myVal')">My Rate <span class="sort">⇅</span></th>
               <th class="sortable" onclick="sortNumbers('payVal')">Payout <span class="sort">⇅</span></th>
+              <th>Provider Rate</th>
               <th>Limits</th>
             </tr></thead>
             <tbody id="numbersBody"></tbody>
@@ -506,6 +510,7 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
       <section class="page" id="page-managerStats"></section>
       <section class="page" id="page-rangeStats"></section>
       <section class="page" id="page-numberStats"></section>
+      <section class="page" id="page-providerSummary"></section>
 
       <!-- ========== PAYMENTS ========== -->
 
@@ -693,7 +698,7 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
 /* auth guard — admin only */
 if(window.API){ API.guard('admin'); }
 window.PX_PANEL_MODE='admin_ops';
-const ADMIN_ALLOWED_PAGES=new Set(['creditNotes','dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','test','payMgmt','chatAccounts','complaints']);
+const ADMIN_ALLOWED_PAGES=new Set(['creditNotes','dashboard','allocation','numbers','managers','agents','clients','smsReport','cliSearch','smsDetail','clientStats','agentStats','managerStats','rangeStats','numberStats','providerSummary','test','payMgmt','chatAccounts','complaints']);
 function normalizePanelPage(id){ id=String(id||'dashboard'); return ADMIN_ALLOWED_PAGES.has(id)?id:'dashboard'; }
 function applyPanelSplitUi(){
   if(window.PX_PANEL_MODE!=='admin_light') return;
@@ -702,7 +707,7 @@ function applyPanelSplitUi(){
   const tr=document.querySelector('#page-numbers thead tr');
   if(tr && !tr.dataset.adminLight){
     tr.dataset.adminLight='1';
-    tr.innerHTML=`<th class="sortable" onclick="sortNumbers('range')">Range <span class="sort">⇅</span></th><th class="sortable" onclick="sortNumbers('prefix')">Prefix <span class="sort">⇅</span></th><th class="sortable" onclick="sortNumbers('number')">Number <span class="sort" id="numSortHint">⇅</span></th><th class="sortable" onclick="sortNumbers('myVal')">My Payout <span class="sort">⇅</span></th><th class="sortable" onclick="cycleClientFilter()">Owner <span class="sort" id="clientSortHint">⇅</span></th><th class="sortable" onclick="sortNumbers('payVal')">Payout <span class="sort">⇅</span></th><th>Limits</th>`;
+    tr.innerHTML=`<th class="sortable" onclick="sortNumbers('range')">Range <span class="sort">⇅</span></th><th class="sortable" onclick="sortNumbers('prefix')">Prefix <span class="sort">⇅</span></th><th class="sortable" onclick="sortNumbers('number')">Number <span class="sort" id="numSortHint">⇅</span></th><th class="sortable" onclick="sortNumbers('myVal')">My Payout <span class="sort">⇅</span></th><th class="sortable" onclick="cycleClientFilter()">Owner <span class="sort" id="clientSortHint">⇅</span></th><th class="sortable" onclick="sortNumbers('payVal')">Payout <span class="sort">⇅</span></th><th>Provider Rate</th><th>Limits</th>`;
   }
   const bulk=document.querySelector('#page-numbers .bulk-bar'); if(bulk) bulk.style.display='none';
 }
@@ -829,6 +834,22 @@ function refreshAdminNumbersFilters(){
   renderAdminNumbersRangeFilter();
   fillAdminOwnerSelects();
   renderAdminNumbersDeleteRangeFilter();
+  renderAdminNumbersProviderFilter();
+}
+/* Admin-only Provider filter source: server aggregation (/api/provider-summary),
+   so no number rows are loaded into the browser to build the list. */
+let adminProviderNames=[];
+async function renderAdminNumbersProviderFilter(){
+  const cont=document.getElementById('numProviderContainer'); if(!cont) return;
+  try{ if(!adminProviderNames.length){ const d=await API.get('/provider-summary'); adminProviderNames=(d.providers||[]).slice(); } }catch(e){ adminProviderNames=[]; }
+  if(window.renderSearchSelect){
+    window.renderSearchSelect('numProviderContainer',{ id:'numProvider', placeholder:'Select Provider', searchPlaceholder:'Search provider...',
+      style:'min-width:180px', items:adminProviderNames.map(p=>({value:p,label:p})), value:numProviderFilter||'',
+      onChange:(val)=>{ numProviderFilter=val||''; renderNumbers(); } });
+  } else {
+    const sel=document.getElementById('numProvider');
+    if(sel){ sel.innerHTML='<option value="">Select Provider</option>'+adminProviderNames.map(p=>`<option>${p}</option>`).join(''); sel.value=numProviderFilter||''; sel.onchange=()=>{ numProviderFilter=sel.value; renderNumbers(); }; }
+  }
 }
 function agentsOf(m){
   let list=(usersData.agent||[]).filter(a=>!m || (usersData.manager||[]).find(mm=>mm.username===m && mm.id===a.parent_id)).map(a=>a.username);
@@ -973,7 +994,7 @@ function doAllocate(){
 }
 
 /* =============== SMS NUMBERS (API-backed) =============== */
-let numSort={key:null,dir:1}, clientFilterMode=0, numRangeFilter='', numClientFilter='';
+let numSort={key:null,dir:1}, clientFilterMode=0, numRangeFilter='', numClientFilter='', numProviderFilter='';
 async function loadTestNumbers(){
   try{ const data=await API.get('/test-numbers?paged=1&page=1&limit=100'); const rows=data.rows||data; testNumbers=(rows||[]).map(t=>({range:t.range_name,prefix:t.prefix||'',num:t.number,payout:t.payout||'Ask',created_at:t.created_at||''})); }
   catch(e){ testNumbers=[]; }
@@ -988,11 +1009,15 @@ function cycleClientFilter(){clientFilterMode=(clientFilterMode+1)%3;
 function applyNumFilter(){
   const nr=document.getElementById('numRange'); if(nr) numRangeFilter=nr.value;
   const nc=document.getElementById('numClient'); if(nc) numClientFilter=nc.value;
+  const np=document.getElementById('numProvider'); if(np) numProviderFilter=np.value;
   renderNumbers();
 }
 function clearNumFilter(){
   numRangeFilter='';
   numClientFilter='';
+  numProviderFilter='';
+  const npc=document.getElementById('numProvider'); if(npc) npc.value='';
+  if (window.setSearchDropdownValue) window.setSearchDropdownValue('numProvider','','Select Provider');
   if (window.setSearchDropdownValue) {
     window.setSearchDropdownValue('numRange', '', 'Select Range');
     window.setSearchDropdownValue('numClient', '', 'Select Owner');
@@ -1026,9 +1051,33 @@ function renderNumbers(){
     <td class="muted">SD : ${r.sd} | SW : ${r.sw}</td></tr>`).join('')||`<tr><td colspan="${window.PX_PANEL_MODE==='admin_light'?7:8}" class="muted" style="text-align:center;padding:24px">No numbers found</td></tr>`;
   document.getElementById('numbersInfo').textContent=`Showing ${rows.length} of ${total} numbers`; updateSelInfo();
 }
-function toggleAll(cb){document.querySelectorAll('.rowchk').forEach(c=>c.checked=cb.checked);updateSelInfo();}
-function updateSelInfo(){document.getElementById('selInfo').textContent=document.querySelectorAll('.rowchk:checked').length+' selected';}
-function getSelectedIds(){return [...document.querySelectorAll('.rowchk:checked')].map(c=>parseInt(c.dataset.id));}
+let selAllFiltered=false, selAllIds=[];
+/* Header checkbox = the rows on screen. When the current filters (e.g. a provider) match more
+   numbers than the page shows, the admin is asked whether to select ALL matching numbers;
+   OK selects every filtered number across pages via a ids-only server query (no row data is
+   streamed into the browser), Cancel keeps the page-only selection. */
+async function toggleAll(cb){
+  const boxes=[...document.querySelectorAll('.rowchk')];
+  if(!cb.checked){ selAllFiltered=false; selAllIds=[]; boxes.forEach(c=>c.checked=false); updateSelInfo(); return; }
+  boxes.forEach(c=>c.checked=true);
+  const state=pagerState('adminNumbersServer');
+  const total=Number(state&&state.total||boxes.length);
+  if(total>boxes.length){
+    const ok=confirm(`Select all ${total.toLocaleString()} numbers matching the current filters?\n\nOK = select all matching numbers (all pages)\nCancel = select only this page (${boxes.length})`);
+    if(ok){
+      try{
+        const params=numberFilterParams(); params.set('ids_only','1');
+        const r=await API.get('/numbers?'+params.toString());
+        selAllIds=(r.ids||[]).map(Number).filter(n=>!isNaN(n));
+        selAllFiltered=selAllIds.length>0;
+        if(r.capped) alert(`Selected the first ${selAllIds.length.toLocaleString()} of ${Number(r.total||0).toLocaleString()} matching numbers (per-action server cap). Narrow the filters to cover the rest.`);
+      }catch(e){ selAllFiltered=false; selAllIds=[]; alert('❌ Could not select all matching numbers: '+e.message); }
+    }
+  }
+  updateSelInfo();
+}
+function updateSelInfo(){const n=getSelectedIds().length;document.getElementById('selInfo').textContent=n.toLocaleString()+' selected'+(selAllFiltered?' (all matching filters)':'');}
+function getSelectedIds(){ if(selAllFiltered&&selAllIds.length) return selAllIds.slice(); return [...document.querySelectorAll('.rowchk:checked')].map(c=>parseInt(c.dataset.id));}
 async function unallocateSelected(){const ids=getSelectedIds();if(!ids.length){alert('Please select numbers first.');return;}
   try{ await API.post('/numbers/unallocate',{ids}); alert(`✅ ${ids.length} numbers unallocated.`); loadNumbers(); }catch(e){ alert('❌ '+e.message); }}
 async function unassignOne(id){if(confirm('Unallocate this number?')){try{await API.post('/numbers/unallocate',{ids:[id]});loadNumbers();}catch(e){alert('❌ '+e.message);}}}
@@ -1177,6 +1226,8 @@ async function exportNumbersCsv(){
     const body={type:'numbers'};
     if(q) body.search=q;
     if(typeof numRangeFilter!=='undefined'&&numRangeFilter) body.range=numRangeFilter;
+    /* provider filter is exported too, so the CSV matches what the table shows */
+    if(typeof numProviderFilter!=='undefined'&&numProviderFilter) body.provider=numProviderFilter;
     if(typeof clientFilterMode!=='undefined'){ if(clientFilterMode===1) body.allocation='unallocated'; if(clientFilterMode===2) body.allocation='allocated'; }
     const r=await API.post('/exports',body);
     alert('📤 Export started in background. The CSV download will start automatically when ready.');
@@ -1360,7 +1411,7 @@ function buildSmsReport(){
     <select id="srLen" onchange="renderSmsReport()"><option>10</option><option selected>25</option><option>50</option><option value="All">All</option></select>${expBtns()}</div>
     <div class="tc-right"><label>Search:</label><input type="text" id="srSearch" oninput="renderSmsReport()" placeholder="Search..."/></div></div></div>
   <div class="table-wrap"><div class="tscroll"><table>
-    <thead><tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSrSort('range')">Range <span class="sort" id="srSort_range">\u21C5</span></th><th class="sortable" onclick="gxSrSort('number')">Number <span class="sort" id="srSort_number">\u21C5</span></th><th class="sortable" onclick="gxSrSort('cli')">CLI <span class="sort" id="srSort_cli">\u21C5</span></th><th class="sortable" onclick="gxSrSort('payout')">Payout Rate <span class="sort" id="srSort_payout">\u21C5</span></th><th>SMS (Message Body)</th></tr></thead><tbody id="srBody"></tbody></table></div>
+    <thead><tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSrSort('range')">Range <span class="sort" id="srSort_range">\u21C5</span></th><th class="sortable" onclick="gxSrSort('number')">Number <span class="sort" id="srSort_number">\u21C5</span></th><th class="sortable" onclick="gxSrSort('cli')">CLI <span class="sort" id="srSort_cli">\u21C5</span></th><th class="sortable" onclick="gxSrSort('payout')">Payout Rate <span class="sort" id="srSort_payout">\u21C5</span></th><th>Provider Rate</th><th>SMS (Message Body)</th></tr></thead><tbody id="srBody"></tbody></table></div>
     <div class="table-foot"><div class="info" id="srInfo"></div><div class="info" id="srPayoutInfo"></div></div></div>`;
   setDefaultDates('srFrom','srTo');
   populateSmsReportFilterLists();
@@ -1648,14 +1699,102 @@ async function renderSmsDetail(){
   let data={rows:[],total:0,page:1,limit:25,totalPages:1,totalPayment:'0'};
   try{ data=await API.get('/sms/paged?'+params.toString()); }catch(e){ console.warn(e); }
   state.page=data.page||1; state.totalPages=data.totalPages||1;
-  sdHead.innerHTML=`<tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSdSort('range')">Range <span class="sort" id="sdSort_range">${gxArr(_sdst,'range')}</span></th><th class="sortable" onclick="gxSdSort('number')">Number <span class="sort" id="sdSort_number">${gxArr(_sdst,'number')}</span></th><th class="sortable" onclick="gxSdSort('cli')">CLI <span class="sort" id="sdSort_cli">${gxArr(_sdst,'cli')}</span></th><th>Currency</th><th class="sortable" onclick="gxSdSort('payout')">Payout Rate <span class="sort" id="sdSort_payout">${gxArr(_sdst,'payout')}</span></th><th>SMS (Message Body)</th></tr>`;
+  sdHead.innerHTML=`<tr><th>Date</th><th>Manager</th><th class="sortable" onclick="gxSdSort('range')">Range <span class="sort" id="sdSort_range">${gxArr(_sdst,'range')}</span></th><th class="sortable" onclick="gxSdSort('number')">Number <span class="sort" id="sdSort_number">${gxArr(_sdst,'number')}</span></th><th class="sortable" onclick="gxSdSort('cli')">CLI <span class="sort" id="sdSort_cli">${gxArr(_sdst,'cli')}</span></th><th>Currency</th><th class="sortable" onclick="gxSdSort('payout')">Payout Rate <span class="sort" id="sdSort_payout">${gxArr(_sdst,'payout')}</span></th><th>Provider Rate</th><th>SMS (Message Body)</th></tr>`;
   const rows=data.rows||[];
-  sdBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-mgr">${r.manager_name||'—'}</span></td><td><span class="tag tag-blue">${r.range_name||'—'}</span></td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td>${r.range_currency?'<span class="tag tag-green">'+r.range_currency+'</span>':'—'}</td><td class="cell-money payout-rate">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+  sdBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-mgr">${r.manager_name||'—'}</span></td><td><span class="tag tag-blue">${r.range_name||'—'}</span></td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td>${r.range_currency?'<span class="tag tag-green">'+r.range_currency+'</span>':'—'}</td><td class="cell-money payout-rate">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="cell-money muted"${r.provider_name?` title="Provider: ${r.provider_name}"`:''}>${r.provider_rate?cleanDec(r.provider_rate):'—'}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
   sdFoot.innerHTML='';
   sdInfo.textContent=`Showing ${smsShownCount(data.page, data.limit, rows.length, data.total)} of ${data.total||0} rows`; sdPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`;
   setServerFoot(sdInfo,state,renderSmsDetail);
 }
 
+
+/* =========================================================================
+ * ADMIN — PROVIDER / RANGE SUMMARY  (new page, nav "Provider / Range Summary")
+ * -------------------------------------------------------------------------
+ * Range Name + Provider + Number Count. Counts come 100% from the server-side
+ * GROUP BY query (/api/provider-summary) — the browser never receives number
+ * rows here, so performance does not depend on the size of the numbers table.
+ * Admin-only page (nav + route + API are all admin-gated).
+ * ========================================================================= */
+let psData=null;
+function buildProviderSummary(){
+  document.getElementById('page-providerSummary').innerHTML=`
+  <div class="page-head"><div><h2>Provider / Range Summary</h2><div class="breadcrumb"><b>SMS Module</b> › Provider / Range Summary</div></div>
+    <div class="head-actions"><button type="button" class="gx-btn gx-blue" onclick="renderProviderSummary(true)" data-tip="Refresh" title="Refresh" aria-label="Refresh">↻ Refresh</button>
+    <button type="button" class="gx-btn" onclick="psExportCsv()" data-tip="Export CSV" title="Export CSV" aria-label="Export CSV">⤓ Export CSV</button></div></div>
+  <div class="toolbar"><div class="filter-row">
+    <label>Provider</label>
+    <div id="psProviderContainer" style="display:inline-block;min-width:200px"><select class="sel-lg" id="psProvider"><option value="">All Providers</option></select></div>
+    <button type="button" class="gx-btn gx-blue" onclick="renderProviderSummary()" data-tip="Apply" title="Apply">Apply Filter</button>
+    <button type="button" class="gx-btn" onclick="psReset()" data-tip="Reset" title="Reset">Reset</button>
+  </div>
+  <div class="hint">Numbers → Range → Provider (existing relationships). Counts are aggregated in the database (GROUP BY), never counted in the browser.</div></div>
+  <div class="stats-grid" id="psTotals"></div>
+  <div class="table-wrap"><div class="tscroll"><table>
+    <thead><tr><th>Provider</th><th>Range Name</th><th style="width:140px">Number Count</th></tr></thead>
+    <tbody id="psBody"></tbody><tfoot id="psFoot"></tfoot></table></div>
+    <div class="table-foot"><div class="info" id="psInfo"></div></div></div>
+  <div class="table-wrap" style="margin-top:14px"><div class="tscroll"><table>
+    <thead><tr><th>Provider</th><th style="width:140px">Ranges</th><th style="width:140px">Numbers</th></tr></thead>
+    <tbody id="psProvBody"></tbody></table></div>
+    <div class="table-foot"><div class="info">All ranges (unfiltered) per provider — providers with no numbers are shown as 0</div></div></div>`;
+  renderProviderSummary(true);
+}
+function psReset(){
+  const el=document.getElementById('psProvider'); if(el) el.value='';
+  if(window.setSearchDropdownValue) window.setSearchDropdownValue('psProvider','','All Providers');
+  renderProviderSummary(true);
+}
+async function renderProviderSummary(forceRefresh){
+  if(!document.getElementById('psBody')) return;
+  const sel=document.getElementById('psProvider');
+  const prov=sel?String(sel.value||''):'';
+  const qs=prov?('?provider='+encodeURIComponent(prov)):'';
+  try{ psData=await API.get('/provider-summary'+qs); }catch(e){ psData={ranges:[],totals:[],grand:{ranges:0,numbers:0},providers:[]}; }
+  const providers=(psData.providers||[]);
+  if(window.renderSearchSelect && document.getElementById('psProviderContainer')){
+    window.renderSearchSelect('psProviderContainer',{ id:'psProvider', placeholder:'All Providers', searchPlaceholder:'Search provider...',
+      style:'min-width:200px', items:providers.map(p=>({value:p,label:p})), value:prov,
+      onChange:(val)=>{ renderProviderSummary(true); } });
+  } else if(sel){
+    sel.innerHTML='<option value="">All Providers</option>'+providers.map(p=>`<option${p===prov?' selected':''}>${p}</option>`).join('');
+  }
+  const grand=psData.grand||{ranges:0,numbers:0};
+  const tot=document.getElementById('psTotals');
+  if(tot) tot.innerHTML=`
+    <div class="stat-card"><div class="stat-info"><h3>${(psData.totals||[]).filter(t=>t.provider).length}</h3><p>Providers</p></div></div>
+    <div class="stat-card"><div class="stat-info"><h3>${grand.ranges}</h3><p>Ranges</p></div></div>
+    <div class="stat-card"><div class="stat-info"><h3>${grand.numbers.toLocaleString()}</h3><p>Numbers</p></div></div>
+    <div class="stat-card"><div class="stat-info"><h3>${(psData.unassigned&&psData.unassigned.numbers||0).toLocaleString()}</h3><p>Numbers with no provider</p></div></div>`;
+  const rows=psData.ranges||[];
+  const body=document.getElementById('psBody');
+  let lastProv=null;
+  body.innerHTML=rows.map(r=>{
+    const head=(r.provider||'— (no provider)');
+    const showHead=(head!==lastProv); lastProv=head;
+    return (showHead?`<tr style="background:rgba(255,255,255,.03)"><td colspan="3" style="font-weight:700">${head}</td></tr>`:'')
+      +`<tr><td class="muted" style="padding-left:22px">${r.provider||'—'}</td><td>${r.range_name}</td><td><b>${(r.numbers||0).toLocaleString()}</b></td></tr>`;
+  }).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:24px">No ranges match this filter</td></tr>`;
+  const filteredTotal=rows.reduce((a,r)=>a+(r.numbers||0),0);
+  const foot=document.getElementById('psFoot');
+  if(foot) foot.innerHTML=rows.length?`<tr><td colspan="2"><b>${prov?'Filtered total ('+prov+')':'Total'} — ${rows.length} range(s)</b></td><td><b>${filteredTotal.toLocaleString()}</b></td></tr>`:'';
+  const info=document.getElementById('psInfo');
+  if(info) info.textContent=`Showing ${rows.length} range(s)`+(prov?` for provider "${prov}"`:'')+` · counts aggregated server-side`;
+  const tbody=document.getElementById('psProvBody');
+  if(tbody) tbody.innerHTML=(psData.totals||[]).map(t=>`<tr><td>${t.provider?t.provider:'<span class="muted">— (no provider)</span>'}</td><td>${t.ranges}</td><td>${(t.numbers||0).toLocaleString()}</td></tr>`).join('')
+    ||`<tr><td colspan="3" class="muted" style="text-align:center;padding:24px">No providers yet</td></tr>`;
+}
+function psExportCsv(){
+  if(!psData){ alert('Nothing to export yet — open the page first.'); return; }
+  const esc=v=>{const x=String(v===undefined||v===null?'':v);return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;};
+  const lines=[['Section','Provider','Range Name','Numbers']];
+  (psData.ranges||[]).forEach(r=>lines.push(['Range',r.provider,r.range_name,r.numbers]));
+  (psData.totals||[]).forEach(t=>lines.push(['Provider total',t.provider,'',t.numbers]));
+  const csv=lines.map(l=>l.map(esc).join(',')).join('\r\n')+'\r\n';
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='provider-range-summary.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
 
 /* ---- Generic entity stats (client/agent/manager) ---- */
 function buildEntityStats(kind){
@@ -2510,33 +2649,47 @@ async function refreshNumberDependentViews(){
   if(typeof refreshNumberDbTools==='function') refreshNumberDbTools();
 }
 async function loadNumbers(){ await Promise.allSettled([loadNumberSummary(), renderNumbers()]); if(typeof populateTestGeneratorNumbers==='function') populateTestGeneratorNumbers(); }
-async function renderNumbers(){
-  const state=pagerState('adminNumbersServer');
-  const len=document.getElementById('numLen').value;
+/* Shared builder: the SAME current filters+sort feed the paged table, the Select-All ids query and CSV export.
+   Keeping one builder means the provider/range/owner/search/allocation filters can never drift apart. */
+function numberFilterParams(){
+  const params=new URLSearchParams();
   const q=(document.getElementById('numSearch').value||'').trim();
-  const signature=JSON.stringify({len,q,range:numRangeFilter,owner:numClientFilter,allocation:clientFilterMode,sort:numSort.key||'',dir:numSort.dir});
-  if(state.signature && state.signature!==signature) state.page=1;
-  state.signature=signature;
-  const params=new URLSearchParams({paged:'1',page:String(state.page),limit:len});
   if(q) params.set('search',q);
   if(numRangeFilter) params.set('range',numRangeFilter);
+  /* provider filter is server-side (admin only); combines with range + owner + search + allocation */
+  if(numProviderFilter) params.set('provider',numProviderFilter);
   if(numClientFilter) params.set('owner',numClientFilter);
   if(clientFilterMode===1) params.set('allocation','unallocated');
   if(clientFilterMode===2) params.set('allocation','allocated');
   if(numSort.key) { params.set('sort',numSort.key); params.set('dir',numSort.dir===-1?'desc':'asc'); }
+  return params;
+}
+async function renderNumbers(){
+  const state=pagerState('adminNumbersServer');
+  const len=document.getElementById('numLen').value;
+  const q=(document.getElementById('numSearch').value||'').trim();
+  const signature=JSON.stringify({len,q,range:numRangeFilter,owner:numClientFilter,provider:numProviderFilter,allocation:clientFilterMode,sort:numSort.key||'',dir:numSort.dir});
+  if(state.signature && state.signature!==signature) state.page=1;
+  state.signature=signature;
+  /* any repaint invalidates a cross-page 'select all matching' selection (rows on screen change) */
+  selAllFiltered=false; selAllIds=[];
+  const params=numberFilterParams();
+  params.set('paged','1'); params.set('page',String(state.page)); params.set('limit',len);
   const reqSeq=++adminNumbersReqSeq;
   let data;
   try{ data=await API.get('/numbers?'+params.toString()); }catch(e){ data={rows:[],total:0,page:1,limit:25,totalPages:1}; }
   if(reqSeq!==adminNumbersReqSeq) return; // ignore stale search/filter responses
   numbersData=data.rows||[];
   state.page=data.page||state.page; state.totalPages=data.totalPages||1;
-  const total=Number(data.total||0);
+  const total=Number(data.total||0); state.total=total;
   const pageLimit=Number(data.limit||25);
   const rows=(data.rows||[]).map(r=>({
     _id:r.id, range:r.range_name||'', prefix:r.prefix||'', number:r.number||'',
     country:(window.GX&&(GX.countryOf(r.number)||{}).name)||'', manager:r.manager_name||'—', agent:(r.agent_name||r.agent_username||'—'),
     client:r.client_name||'', ownerType:(r.manager_name?'manager':(r.agent_name?'agent':(r.client_name?'client':'unallocated'))),
-    myPay:r.payterm||'Weekly', myVal:r.effective_rate||r.rate||'', payType:r.payterm||'Weekly', payVal:'$ '+(r.payout||'0'), sd:r.sd_limit||0, sw:r.sw_limit||0
+    myPay:r.payterm||'Weekly', myVal:r.effective_rate||r.rate||'', payType:r.payterm||'Weekly', payVal:'$ '+(r.payout||'0'), sd:r.sd_limit||0, sw:r.sw_limit||0,
+    /* ADMIN-ONLY: existing stored range provider rate for the row's cycle (blank => '—') */
+    provRate:(r.provider_rate||''), provider:(r.provider_name||'')
   }));
   document.getElementById('numbersBody').innerHTML=rows.map(r=>`<tr>
     ${window.PX_PANEL_MODE==='admin_light'?'':`<td data-label="Selected"><input type="checkbox" class="rowchk" data-id="${r._id}" onchange="updateSelInfo()"/></td>`}
@@ -2546,7 +2699,8 @@ async function renderNumbers(){
     <td data-label="Client">${r.client?`<span class="tag ${r.ownerType==='agent'?'tag-agt':'tag-mgr'}">${r.client}${window.PX_PANEL_MODE==='admin_light'?'':` <span class="x" onclick="unassignOne(${r._id})">✕</span>`}</span>`:`<span class="tag tag-gray">—</span>`}</td>
     <td data-label="My Rate">${r.myPay}<br><span class="cell-sub cell-money">${r.myVal}</span></td>
     <td data-label="Payout">${r.payType}<br><span class="cell-sub">${r.payVal}</span></td>
-    <td data-label="Limits" class="muted">SD : ${r.sd} | SW : ${r.sw}</td></tr>`).join('')||`<tr><td colspan="${window.PX_PANEL_MODE==='admin_light'?10:11}" class="muted" style="text-align:center;padding:24px">No numbers found</td></tr>`;
+    <td data-label="Provider Rate" class="muted"${r.provider?` title="Provider: ${r.provider}"`:''}>${r.provRate?`$ ${r.provRate}`:'—'}${r.provider?`<br><span class="cell-sub">${r.provider}</span>`:''}</td>
+    <td data-label="Limits" class="muted">SD : ${r.sd} | SW : ${r.sw}</td></tr>`).join('')||`<tr><td colspan="${window.PX_PANEL_MODE==='admin_light'?11:12}" class="muted" style="text-align:center;padding:24px">No numbers found</td></tr>`;
   const currentNumbers = (numbersData || []).map(r => String(r.number || '').trim()).filter(Boolean);
   const countEl = document.getElementById('numPageCount');
   if(countEl) countEl.textContent = currentNumbers.length.toLocaleString();
@@ -3076,6 +3230,7 @@ async function loadAdminPageData(page){
     if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return renderSmsReport(); }
     if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); /* BUGFIX: smsRecords was never loaded here, so renderSmsDetail() always filtered an empty array and every filter (including Date) appeared to do nothing. */ await ensureAdminSms(); await fillSmsDetailLiteFilters(); return renderSmsDetail(); }
     if(['clientStats','agentStats','managerStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'SBody')) buildEntityStats(k); await ensureAdminManagers(); return renderEntityStats(k); }
+    if(page==='providerSummary'){ if(!document.getElementById('psBody')) buildProviderSummary(); return renderProviderSummary(); }
     if(['rangeStats','numberStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'SBody')) buildDrillStats(k); await ensureAdminManagers(); return renderDrillStats(k); }
     if(page==='test'){ await ensureAdminRates(); await loadTestNumbers(); return renderTest(); }
     if(page==='payMgmt') return loadPayMgmt();
@@ -3130,7 +3285,7 @@ async function renderSmsReport(){
   try{ data=await API.get('/sms/paged?'+params.toString()); }catch(e){ console.warn('sms report load failed',e); }
   state.page=data.page||1; state.totalPages=data.totalPages||1;
   const rows=data.rows||[];
-  document.getElementById('srBody').innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-mgr">${r.manager_name||'—'}</span></td><td>${r.range_name||'—'}</td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td class="cell-money">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
+  document.getElementById('srBody').innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-mgr">${r.manager_name||'—'}</span></td><td>${r.range_name||'—'}</td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td class="cell-money">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="cell-money muted"${r.provider_name?` title="Provider: ${r.provider_name}"`:''}>${r.provider_rate?cleanDec(r.provider_rate):'—'}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
   srInfo.textContent=`Showing ${smsShownCount(data.page, data.limit, rows.length, data.total)} of ${data.total||0} records`;
   if(srPayoutInfo) srPayoutInfo.textContent=`Filtered total payout: ${money(data.totalPayment||'0')}`;
   setServerFoot(srInfo,state,renderSmsReport);

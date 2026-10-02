@@ -1,0 +1,293 @@
+{
+  "release": "p19k-2026-10-02",
+  "title": "Approved changes round: Test Panel pagination, file-based Bulk Range Import, Provider Rate visibility, Admin Provider filter, Provider/Range summary",
+  "date": "2026-10-02",
+  "base": "Galaxy-SMS-Three-Fixes-Source-v5.zip",
+  "scope_safety": {
+    "files_changed": [
+      "admin.html",
+      "agent.html",
+      "client.html",
+      "management.html",
+      "test.html",
+      "backend/server.js",
+      "backend/exportWorker.js"
+    ],
+    "files_unchanged": [
+      "manager.html",
+      "api.js",
+      "backend/auth.js",
+      "backend/schema.js",
+      "backend/db.js",
+      "backend/smppServer.js",
+      "backend/smppService.js",
+      "backend/providerSync.js",
+      "backend/creditNotes.js",
+      "backend/chat.js",
+      "backend/backup.js"
+    ],
+    "no_db_migration": true,
+    "no_new_tables": true,
+    "no_new_columns": true,
+    "business_logic_touched": {
+      "sms_receiving": false,
+      "http_api_ingest": false,
+      "smpp": false,
+      "number_allocation": false,
+      "range_allocation": false,
+      "panel_sharing": false,
+      "payment_calculations": false,
+      "payout_logic": false,
+      "commission": false,
+      "cdr_processing": false,
+      "users_roles_permissions": false,
+      "provider_configuration": false
+    },
+    "verified_byte_identical_to_v5": [
+      "manager.html",
+      "api.js",
+      "backend/auth.js",
+      "backend/schema.js",
+      "backend/db.js",
+      "backend/smppServer.js",
+      "backend/smppService.js",
+      "backend/providerSync.js",
+      "backend/creditNotes.js",
+      "backend/chat.js",
+      "backend/backup.js",
+      "assets/*",
+      "tests/*",
+      "scripts/*"
+    ],
+    "exportWorker_change": "single additive line: numbers export honours the existing provider filter (r.provider = ?) so a filtered table exports the same filtered rows"
+  },
+  "new_api_routes": [
+    {
+      "method": "GET",
+      "path": "/api/ranges/import-sample",
+      "role": "admin",
+      "purpose": "download the bulk range import sample (format=csv|xlsx|txt); generated from the same column spec the importer accepts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ranges/import-file",
+      "role": "admin",
+      "purpose": "parse + validate a whole CSV/XLSX/XLS/TXT file, then create/update ranges in one transaction using the existing range columns and normalizers; returns total/valid/invalid/imported/updated/skipped/errors rows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/provider-summary",
+      "role": "admin",
+      "purpose": "server-side GROUP BY aggregation: ranges (name + provider + number count) and per-provider totals (ranges, numbers) incl. registry providers with zero ranges"
+    }
+  ],
+  "existing_routes_extended_additively": [
+    {
+      "method": "GET",
+      "path": "/api/test-numbers",
+      "added": "?ranges_only=1 returns only the distinct range names of the active test pool (for the Test Panel range dropdown without loading the pool)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/test-panel/sms",
+      "added": "?range=<range name> optional filter (additive; empty = previous behaviour). Paged mode already existed."
+    },
+    {
+      "method": "GET",
+      "path": "/api/numbers",
+      "added": "?provider=<name> admin-only filter (numbers -> ranges.provider); admin responses additionally expose provider_name + provider_rate (stored value for the row payment cycle)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sms/paged",
+      "added": "admin responses additionally expose provider_name + provider_rate (stored ranges.provider_rate_* for the SMS payment cycle). Non-admin responses unchanged (no provider fields at all)."
+    },
+    {
+      "method": "GET",
+      "path": "/api/numbers",
+      "added": "?ids_only=1 returns ONLY {ids,total,cap,capped} for the same role-scoped filter set (used by Select-All across filtered pages — no row data is loaded into the browser)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/exports",
+      "added": "accepts the optional provider filter and passes it to the existing export worker allowlist (numbers type only)"
+    }
+  ],
+  "provider_rate": {
+    "source": "ranges.provider_rate_1_1 / provider_rate_7_1 / provider_rate_7_7 / provider_rate_30_45 (existing columns, existing values)",
+    "selection": "the column matching the row payment cycle (daily -> 1/1, weekly_7_1 -> 7/1, weekly_7_7 -> 7/7, monthly_30x45 -> 30/45)",
+    "never_derived_from": "payout rate / payout amount",
+    "blank_value_rendering": "—",
+    "visible_to": [
+      "admin"
+    ],
+    "hidden_from": [
+      "manager",
+      "agent",
+      "client",
+      "test"
+    ],
+    "calculated": false
+  },
+  "provider_filter": {
+    "admin_sms_numbers": "#numProvider (source: /api/provider-summary)",
+    "semantics": "shows every eligible number of the provider across ALL of its ranges; combines with Range, Owner, search, allocation filter and sorting; Select All covers the filtered result page",
+    "admin_only": true,
+    "existing_sms_report_provider_filter": "unchanged (was already admin-only)",
+    "select_all": "page-scoped by default; when the filters match more rows than the page shows the admin is asked once and can select ALL matching numbers across pages (ids-only server query). Selection is cleared whenever the filters/pagination change.",
+    "export_parity": "CSV export button sends the same filters (search/range/provider/owner/allocation)"
+  },
+  "provider_summary_page": {
+    "admin_nav": "CDR Stats > Provider / Range Summary",
+    "columns": [
+      "Provider",
+      "Range Name",
+      "Number Count"
+    ],
+    "per_provider_table": [
+      "Provider",
+      "Ranges",
+      "Numbers"
+    ],
+    "counts_source": "SQLite GROUP BY (server-side); the browser never receives number rows for counting",
+    "filter": "provider",
+    "export": "CSV (client-side export of the aggregated rows only)"
+  },
+  "test_panel_pagination": {
+    "page_size": 25,
+    "sections": [
+      "Test Numbers",
+      "SMS/OTP"
+    ],
+    "independent": true,
+    "server_side": true,
+    "surfaces": [
+      "test.html (Test Panel role)",
+      "client.html Test Panel",
+      "agent.html Test Panel"
+    ],
+    "admin_test_panel": "already server-paged (unchanged), verified",
+    "filters": "search, range filter and CLI filter are sent to the server so page counts stay exact; the 4s poll keeps the current page"
+  },
+  "bulk_range_import": {
+    "formats": [
+      "csv",
+      "xlsx",
+      "xls",
+      "txt (tab separated)",
+      "tsv"
+    ],
+    "columns": [
+      "Range Name",
+      "Prefixes",
+      "Currency",
+      "Payment Type",
+      "Rate",
+      "Provider Rate",
+      "Country",
+      "Provider",
+      "Range Start",
+      "Range End",
+      "Status",
+      "Memo"
+    ],
+    "optional_columns": [
+      "Test Numbers",
+      "Rate 1/1",
+      "Rate 7/1",
+      "Rate 7/7",
+      "Rate 30/45",
+      "Provider Rate 1/1",
+      "Provider Rate 7/1",
+      "Provider Rate 7/7",
+      "Provider Rate 30/45"
+    ],
+    "validations": [
+      "Range Name required",
+      "currency must be a 3-letter code",
+      "payment type must be Daily/Weekly/Monthly(30/45)",
+      "rate / provider rate decimal or NA (max 6 decimals)",
+      "country format",
+      "range start/end digits and start <= end",
+      "status Active/Inactive",
+      "duplicate range inside the file",
+      "existing range skipped unless update_existing=1",
+      "unsupported file format / empty file / missing Range Name header",
+      "unknown provider name -> warning (the Add Range form itself accepts free-text providers)"
+    ],
+    "summary_reported": [
+      "format",
+      "total",
+      "valid",
+      "invalid",
+      "imported",
+      "updated",
+      "skipped",
+      "errors (row + field + message + value)",
+      "skipped rows",
+      "warnings",
+      "created ranges"
+    ],
+    "atomicity": "whole file parsed and validated first; writes run inside one BEGIN IMMEDIATE transaction with rollback on failure",
+    "uses_existing_range_logic": true,
+    "existing_bulk_create_by_name_untouched": true,
+    "max_rows": 5000,
+    "sample_csv_bom": "CSV/XLSX/TXT samples include a UTF-8 BOM (Excel-friendly); the importer strips it on read"
+  },
+  "test_results": {
+    "p19k_api_suite": "80 PASS / 0 FAIL (idempotent — re-runs green; creates+removes its own ranges)",
+    "p19k_ui_suite": "81 PASS / 0 FAIL (sections U/V/W/X/Y, data-driven counts)",
+    "regressions": {
+      "test-issue1-api": "13 / 0",
+      "test-issue1-ui": "8 / 0",
+      "test-issue2-client-panel": "15 / 0",
+      "test-issue3-agent-panel": "19 / 0",
+      "test-extra-admin-management": "8 / 0",
+      "api-regression": "all groups green",
+      "dropdown-verify": "61 / 61",
+      "timing-display-check": "8 / 8",
+      "audit-ui-check": "18 / 18",
+      "smoke-all-panels": "51 pages / 0 JS errors / 0 write API calls",
+      "check-html-scripts": "0 FAIL on all 5 panels"
+    },
+    "fixture": "fresh isolated fixture: 3 ranges, 35 live numbers, 62 test numbers (3 pages), 65 test SMS (page 3 = 15), 3 providers (one with no ranges), 7 users; rebuilt with galaxy-ui-work/reseed-fixture.sh"
+  },
+  "files": {
+    "admin.html": {
+      "bytes": 290778,
+      "sha256": "c8ebf7a3b03c964d29df2b05f19b3c8254524c061e3f6eea2755b6e565e7f1cc",
+      "hunks_vs_v5": 17
+    },
+    "agent.html": {
+      "bytes": 175951,
+      "sha256": "6ae2457f0e913163e56deb53290322c5686fc27ac186436949a2c8fdb877cf9e",
+      "hunks_vs_v5": 3
+    },
+    "client.html": {
+      "bytes": 72149,
+      "sha256": "d54764d206cacd7e889512ca177b34ec3e66fa438a4f9cd4e441f67b297e3d13",
+      "hunks_vs_v5": 4
+    },
+    "management.html": {
+      "bytes": 272597,
+      "sha256": "136f29453cdeec3d2c0460e3df5553faf091ad86c8e1732fd7ac6bd11d2b33a1",
+      "hunks_vs_v5": 2
+    },
+    "test.html": {
+      "bytes": 17445,
+      "sha256": "7daaba5d7f0bf67abf8cb6c8716f7ff1369b53b350ac37c0f418dc54c34df519",
+      "hunks_vs_v5": 4
+    },
+    "backend/server.js": {
+      "bytes": 408266,
+      "sha256": "fdd5cdb4c6f9812b2563c50b03f7998c7e8253dd01c13887a59e4b5d554e1487",
+      "hunks_vs_v5": 11
+    },
+    "backend/exportWorker.js": {
+      "bytes": 5411,
+      "sha256": "3ce63397e7a17e5242d63b822510d9a1b0bbab33bb66d7a40c7115017e4805f1",
+      "hunks_vs_v5": 1
+    }
+  },
+  "apply": "copy the 6 changed files over the v5/v4 install (admin.html, agent.html, client.html, management.html, test.html, backend/server.js) and restart the backend. No DB migration, no config change."
+}

@@ -436,6 +436,37 @@ Nigeria"></textarea><div class="hint">Default rates will be NA. You can edit pay
             <div><div class="form-group"><label>Default Currency</label><select id="bulkRangeCurrency"><option value="USD">USD</option><option value="EUR">EUR</option><option value="PKR">PKR</option></select></div><div class="form-group"><label>Payment Type</label><select id="bulkRangePaymentType"><option value="daily">Daily</option><option value="weekly" selected>Weekly</option><option value="monthly_30x45">Monthly (30x45)</option></select></div><button class="btn btn-purple" style="width:100%;margin-top:10px" onclick="bulkCreateRanges()">Create All</button></div>
           </div>
         </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-head"><div><h3>Bulk Range Import (File)</h3><div class="sub">Upload a file of complete range records — CSV, XLSX, XLS or TXT. Uses the same validations and the same range fields as "+ Add Range". Nothing is saved until the whole file is validated.</div></div></div>
+          <div class="form-grid" style="grid-template-columns:2fr 240px;gap:14px;align-items:end">
+            <div class="form-group">
+              <label>Range File</label>
+              <div class="upload-box" onclick="document.getElementById('rangeImportFile').click()">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+                <div id="rangeImportFileInfo">Choose a .csv / .xlsx / .xls / .txt file</div>
+              </div>
+              <input type="file" id="rangeImportFile" accept=".csv,.txt,.tsv,.xlsx,.xls" style="display:none" onchange="rangeImportFileChosen()" />
+              <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:600"><input type="checkbox" id="rangeImportUpdate" style="width:auto"> Update existing ranges (a range with the same name is updated instead of skipped)</label>
+              <div class="hint">Required column: <b>Range Name</b>. Accepted columns: Prefixes, Currency, Payment Type, Rate, Provider Rate, Country, Provider, Range Start, Range End, Status, Memo (Test Numbers and per-cycle rate columns are optional).<br>
+              <b>TXT files must be tab-separated</b> (same columns as the CSV sample) — CSV comma/semicolon/pipe and XLSX/XLS are detected automatically. Rate fills the column of the row's Payment Type (Daily → 1/1, Weekly → 7/1, Monthly → 30/45).</div>
+            </div>
+            <div>
+              <div class="form-group"><label>Download Sample</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn btn-blue" onclick="downloadRangeImportSample('csv')">CSV</button>
+                  <button class="btn btn-green" onclick="downloadRangeImportSample('xlsx')">XLSX</button>
+                  <button class="btn btn-blue" onclick="downloadRangeImportSample('txt')">TXT</button>
+                </div>
+                <div class="hint">Sample = correct headers + 2 example rows, same columns as the importer.</div>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:6px">
+                <button class="btn btn-blue" style="flex:1" onclick="importRangesFile(true)">Validate File</button>
+                <button class="btn btn-purple" style="flex:1" onclick="importRangesFile(false)">Import</button>
+              </div>
+            </div>
+          </div>
+          <div id="rangeImportReport" style="margin-top:14px"></div>
+        </div>
         <!-- GALAXY: combined Range+Test bulk import UI removed per spec (backend endpoint untouched) -->
 
         <div class="table-wrap" style="padding:16px 18px;margin-top:0">
@@ -1230,6 +1261,91 @@ Test numbers added: ${data.added_test_numbers||0}`);
     await loadRates();
   }catch(e){alert('❌ '+e.message)}
 }
+
+/* =========================================================================
+ * BULK RANGE IMPORT (file) — P19k #2/#3/#4
+ * The server (/api/ranges/import-file) parses + validates the WHOLE file first
+ * and only then writes inside one transaction; it reuses the same range columns
+ * and the same normalizers as "+ Add Range". This UI only uploads the file and
+ * renders the returned summary — it never creates ranges by itself.
+ * ========================================================================= */
+function rangeImportFileChosen(){
+  const f=document.getElementById('rangeImportFile')?.files?.[0];
+  const info=document.getElementById('rangeImportFileInfo');
+  if(info) info.textContent=f?`${f.name} (${Math.max(1,Math.round((f.size||0)/1024))} KB)`:'Choose a .csv / .xlsx / .xls / .txt file';
+  const rep=document.getElementById('rangeImportReport'); if(rep) rep.innerHTML='';
+}
+async function downloadRangeImportSample(format){
+  try{
+    const token=sessionStorage.getItem('ms_token')||localStorage.getItem('ms_token');
+    const res=await fetch('/api/ranges/import-sample?format='+encodeURIComponent(format),{headers:{Authorization:'Bearer '+token}});
+    if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||('HTTP '+res.status)); }
+    const blob=await res.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='galaxy-range-import-sample.'+(format==='xls'?'xlsx':format);
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+  }catch(e){ alert('❌ Sample download failed: '+e.message); }
+}
+function rangeImportReportHtml(d){
+  const esc=v=>String(v===undefined||v===null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const chip=(label,val,cls)=>`<span class="gx-chip" style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:700;margin:0 8px 8px 0;background:${cls}">${label}: ${val}</span>`;
+  let html=`<div style="display:flex;flex-wrap:wrap;align-items:center">
+    ${chip('Rows in file',d.total,'#eef2ff')}
+    ${chip('Valid',d.valid,'#e8f7ee')}
+    ${chip('Invalid',d.invalid,d.invalid?'#fdeaea':'#eef2ff')}
+    ${chip('Imported',d.imported,'#e8f7ee')}
+    ${chip('Updated',d.updated,'#e8f7ee')}
+    ${chip('Skipped (already exists)',d.skipped,'#fff7e6')}
+    ${d.dry_run?'<span class="gx-chip" style="background:#f2f4f7">Validation only — nothing was saved</span>':''}
+  </div>`;
+  if(d.unknown_columns&&d.unknown_columns.length) html+=`<div class="hint" style="color:#a15c00">Ignored unknown column(s): ${esc(d.unknown_columns.join(', '))}</div>`;
+  if((d.errors||[]).length){
+    html+=`<div style="margin-top:8px"><b>Row errors (${d.errors.length}) — these rows were NOT created:</b>
+      <div class="tscroll" style="max-height:260px;overflow:auto;margin-top:6px"><table><thead><tr><th>Row</th><th>Field</th><th>Problem</th><th>Value</th></tr></thead><tbody>`
+      + d.errors.map(e=>`<tr><td>${e.row}</td><td>${esc((e.errors||[]).map(x=>x.field).join(', '))}</td><td>${esc((e.errors||[]).map(x=>x.message).join(' · '))}</td><td class="muted">${esc((e.errors||[]).map(x=>x.value).join(', '))}</td></tr>`).join('')
+      + `</tbody></table></div></div>`;
+  }
+  if((d.skipped_rows||[]).length){
+    html+=`<div style="margin-top:8px"><b>Skipped rows (${d.skipped_rows.length})</b>
+      <div class="tscroll" style="max-height:160px;overflow:auto;margin-top:6px"><table><thead><tr><th>Row</th><th>Range</th><th>Reason</th></tr></thead><tbody>`
+      + d.skipped_rows.map(r=>`<tr><td>${r.row}</td><td>${esc(r.name)}</td><td>${esc(r.reason||'')}</td></tr>`).join('')
+      + `</tbody></table></div></div>`;
+  }
+  if((d.created||[]).length){
+    html+=`<div style="margin-top:8px"><b>Created ranges</b><div class="hint">${d.created.map(c=>esc(c.name)).join(', ')}</div></div>`;
+  }
+  return html;
+}
+async function importRangesFile(validateOnly){
+  const file=document.getElementById('rangeImportFile')?.files?.[0];
+  if(!file){ alert('Choose a CSV / XLSX / XLS / TXT file first — or use "Download Sample" to get the correct format.'); return; }
+  const fd=new FormData();
+  fd.append('file',file);
+  if(validateOnly) fd.append('dry_run','1');
+  if(document.getElementById('rangeImportUpdate')?.checked) fd.append('update_existing','1');
+  const rep=document.getElementById('rangeImportReport');
+  if(rep) rep.innerHTML='<div class="hint">Reading and validating the file…</div>';
+  try{
+    const d=await API.upload('/ranges/import-file',fd);
+    if(rep) rep.innerHTML=rangeImportReportHtml(d)||'<div class="hint">Nothing to report.</div>';
+    if(!validateOnly && (d.imported||d.updated)){
+      /* The import result is already on screen; a failure while refreshing the rate
+         table must never overwrite it (loadRates -> renderAlloc has a pre-existing
+         null-element error on this page — unrelated to the import). */
+      try{ await loadRates(); }
+      catch(refreshErr){
+        if(rep){ const n=document.createElement('div'); n.className='hint'; n.style.color='#a15c00';
+          n.textContent='Note: the rate table could not refresh automatically ('+String(refreshErr.message||refreshErr)+') — reload the page to see the new ranges. The import itself succeeded.'; rep.appendChild(n); }
+      }
+    }
+  }catch(e){
+    if(rep) rep.innerHTML=`<div class="hint" style="color:#b00020"><b>Import failed:</b> ${String(e.message||e)}</div>`;
+    else alert('❌ '+e.message);
+  }
+}
+async function afterBulkRangeChange(){ try{ await loadRates(); }catch(_){} }
 
 async function bulkCreateRanges(){
   const text=(document.getElementById('bulkRangeNames')?.value||'').trim();

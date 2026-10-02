@@ -294,6 +294,8 @@ app.post('/api/exports', authRequired, requireRole('admin', 'manager', 'agent'),
     type,
     search: String(b.search || '').slice(0, 30) || '',
     range: String(b.range || '').slice(0, 80) || '',
+    /* provider filter (admin numbers page) — mirrors the range filter, no new export pathway */
+    provider: String(b.provider || '').slice(0, 80) || '',
     allocation: ['unallocated', 'allocated'].includes(b.allocation) ? b.allocation : '',
     from: /^\d{4}-\d{2}-\d{2}/.test(String(b.from || '')) ? String(b.from).slice(0, 10) + ' 00:00:00' : '',
     to: /^\d{4}-\d{2}-\d{2}/.test(String(b.to || '')) ? String(b.to).slice(0, 10) + ' 23:59:59' : '',
@@ -1017,6 +1019,37 @@ function payoutRateFromRow(r){
 function attachSmsPayoutFields(rows){
   return (rows||[]).map(r=>{ const rate=payoutRateFromRow(r); return {...r,payout_rate:rate,payout_amount:rate}; });
 }
+/* =========================================================================
+ * PROVIDER RATE (visibility layer only — existing field, existing data)
+ * -------------------------------------------------------------------------
+ * ranges.provider_rate_1_1/7_1/7_7/30_45 already exist and are managed in
+ * Rate Management. P19k #4 keeps them ADMIN-INTERNAL: they are never exposed
+ * to Manager/Agent/Client/Test in any API response. These helpers only READ
+ * the stored value for the row's payment cycle — no calculation, no fallback
+ * to the payout rate (a missing/NA provider rate stays empty and the UI
+ * renders '—').
+ * ========================================================================= */
+function providerRateSelectSql(role){
+  if (role !== 'admin') return '';
+  return `, r.provider AS provider_name,
+      r.provider_rate_1_1, r.provider_rate_7_1, r.provider_rate_7_7, r.provider_rate_30_45`;
+}
+function providerRateFromRow(r){
+  if (!r) return '';
+  const cycle = normalizePaymentCycle(r.payterm || r.payment_type || 'weekly_7_1');
+  const raw = cycle === 'daily' ? r.provider_rate_1_1
+            : cycle === 'weekly_7_7' ? r.provider_rate_7_7
+            : cycle === 'monthly_30x45' ? r.provider_rate_30_45
+            : r.provider_rate_7_1;
+  const v = normalizeDecimalString(raw);
+  return isPositiveDecimal(v) ? v : '';
+}
+/* admin keeps the stored provider rate columns (UI shows the cycle value);
+   any other role never even receives them. */
+function attachSmsProviderRate(rows, role){
+  if (role !== 'admin') return rows || [];
+  return (rows||[]).map(r => ({ ...r, provider_rate: providerRateFromRow(r) }));
+}
 function sumPayout(rows){ return (rows||[]).reduce((s,r)=>decimalAdd(s,r.payout_amount ?? r.payout_rate ?? payoutRateFromRow(r)), '0'); }
 /**
  * Rows for the caller's scope.
@@ -1731,6 +1764,372 @@ app.post('/api/ranges/import', authRequired, requireRole('admin'), (req,res)=>{
   logAction(req,'import_ranges_bulk','ranges',{inserted,updated,skipped,total:rows.length});
   res.json({ok:true,inserted,updated,skipped,total:rows.length,errors});
 });
+/* =========================================================================
+ * RATE MANAGEMENT — BULK RANGE IMPORT FROM FILE (CSV / XLSX / XLS / TXT)
+ * -------------------------------------------------------------------------
+ * Uses the SAME range-creation rules as the Add Range form:
+ *   - same columns written to `ranges` (name, prefix, currency, payment_type,
+ *     per-cycle rates + provider rates, country, provider, range_start/end,
+ *     status, memo)
+ *   - same normalizers (normalizePaymentType, syncRangeTestNumbers)
+ *   - same duplicate rule as the existing bulk paths: an existing range name is
+ *     never silently overwritten (skipped) unless update_existing is requested.
+ * Everything is parsed AND validated before a single row is written; the writes
+ * then run inside one transaction, so a failure cannot leave a half-import.
+ * Provider rates are admin-internal data — this route is admin-only, like the
+ * existing range routes.
+ * ========================================================================= */
+const RANGE_IMPORT_COLUMNS = [
+  { key: 'name',          header: 'Range Name',    required: true,  aliases: ['range name', 'ranges name', 'rangesname', 'range', 'name', 'range_name'] },
+  { key: 'prefix',        header: 'Prefixes',      required: false, aliases: ['prefixes', 'prefix', 'prefixe'] },
+  { key: 'currency',      header: 'Currency',      required: false, aliases: ['currency', 'cur'] },
+  { key: 'payment_type',  header: 'Payment Type',  required: false, aliases: ['payment type', 'paymenttype', 'pay type', 'paytype', 'payterm', 'payment_type'] },
+  { key: 'rate',          header: 'Rate',          required: false, aliases: ['rate'] },
+  { key: 'provider_rate', header: 'Provider Rate', required: false, aliases: ['provider rate', 'provider_rate', 'prov rate', 'provrate'] },
+  { key: 'country',       header: 'Country',       required: false, aliases: ['country'] },
+  { key: 'provider',      header: 'Provider',      required: false, aliases: ['provider', 'provider name'] },
+  { key: 'range_start',   header: 'Range Start',   required: false, aliases: ['range start', 'range_start', 'rangestart', 'start'] },
+  { key: 'range_end',     header: 'Range End',     required: false, aliases: ['range end', 'range_end', 'rangeend', 'end'] },
+  { key: 'status',        header: 'Status',        required: false, aliases: ['status'] },
+  { key: 'memo',          header: 'Memo',          required: false, aliases: ['memo', 'notes', 'note', 'remark', 'remarks'] },
+  /* optional extras (not part of the 12-column sample) */
+  { key: 'test_numbers',  header: 'Test Numbers',  required: false, aliases: ['test numbers', 'test number', 'test_numbers', 'test_number'], optional_in_sample: true },
+  { key: 'rate_1_1',      header: 'Rate 1/1',      required: false, aliases: ['rate 1/1', 'rate_1_1', '1/1'], optional_in_sample: true },
+  { key: 'rate_7_1',      header: 'Rate 7/1',      required: false, aliases: ['rate 7/1', 'rate_7_1', '7/1'], optional_in_sample: true },
+  { key: 'rate_7_7',      header: 'Rate 7/7',      required: false, aliases: ['rate 7/7', 'rate_7_7', '7/7'], optional_in_sample: true },
+  { key: 'rate_30_45',    header: 'Rate 30/45',    required: false, aliases: ['rate 30/45', 'rate_30_45', '30/45'], optional_in_sample: true },
+  { key: 'provider_rate_1_1',   header: 'Provider Rate 1/1',   required: false, aliases: ['provider rate 1/1', 'provider_rate_1_1'], optional_in_sample: true },
+  { key: 'provider_rate_7_1',   header: 'Provider Rate 7/1',   required: false, aliases: ['provider rate 7/1', 'provider_rate_7_1'], optional_in_sample: true },
+  { key: 'provider_rate_7_7',   header: 'Provider Rate 7/7',   required: false, aliases: ['provider rate 7/7', 'provider_rate_7_7'], optional_in_sample: true },
+  { key: 'provider_rate_30_45', header: 'Provider Rate 30/45', required: false, aliases: ['provider rate 30/45', 'provider_rate_30_45'], optional_in_sample: true },
+];
+const RANGE_IMPORT_SAMPLE_COLUMNS = RANGE_IMPORT_COLUMNS.filter(c => !c.optional_in_sample);
+const RANGE_IMPORT_SAMPLE_ROWS = [
+  ['Palestine Jawwal GO02', '97059', 'USD', 'weekly', '0.0130', '0.0080', 'Palestine', 'Provider 9AFE', '970590000000', '970599999999', 'Active', 'Example row — edit or delete before importing'],
+  ['Nigeria MTN 01',        '23481', 'USD', 'daily',  '0.0090', '0.0065', 'Nigeria',   'Provider 9AFE', '2348100000000', '2348199999999', 'Active', 'Daily cycle example — Rate lands in the 1/1 column'],
+];
+/* one CSV cell (RFC-4180-ish: quotes, embedded separators/newlines) */
+function rangeImportCsvCell(v, sep) {
+  const s = String(v === undefined || v === null ? '' : v);
+  return (s.includes(sep) || s.includes('"') || s.includes('\n') || s.includes('\r')) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function rangeImportToDelimited(rows, sep, eol='\r\n') {
+  return rows.map(r => r.map(c => rangeImportCsvCell(c, sep)).join(sep)).join(eol) + eol;
+}
+/* delimiter detection for CSV/TXT (tab, semicolon, pipe, comma) */
+function detectDelimiter(text) {
+  const first = String(text || '').split(/\r?\n/).find(l => String(l || '').trim()) || '';
+  const cands = ['\t', ';', '|', ','];
+  let best = ',', bestN = 0;
+  for (const c of cands) { const n = first.split(c).length - 1; if (n > bestN) { bestN = n; best = c; } }
+  return best;
+}
+function parseRangeImportDelimited(text, sep) {
+  const out = []; let row = []; let cell = ''; let inQ = false;
+  const src = String(text || '').replace(/^\uFEFF/, '');
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQ) {
+      if (ch === '"') { if (src[i+1] === '"') { cell += '"'; i++; } else inQ = false; }
+      else cell += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === sep) { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); out.push(row); row = []; cell = ''; }
+    else if (ch === '\r') { /* skip */ }
+    else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell); out.push(row); }
+  return out.filter(r => r.some(c => String(c || '').trim() !== ''));
+}
+/* rows -> objects keyed by canonical column key (header aliases accepted) */
+function mapRangeImportRows(table) {
+  if (!table || !table.length) return { header: [], rows: [], unknownHeaders: [] };
+  const header = (Array.isArray(table[0]) ? table[0] : String(table[0] || '').split(',')).map(h => String(h || '').trim());
+  const keyFor = header.map(h => {
+    const low = h.toLowerCase();
+    const col = RANGE_IMPORT_COLUMNS.find(c => c.aliases.includes(low) || c.header.toLowerCase() === low);
+    return col ? col.key : null;
+  });
+  const unknown = header.filter((h, i) => h && !keyFor[i]);
+  const rows = [];
+  for (let i = 1; i < table.length; i++) {
+    const obj = {};
+    (Array.isArray(table[i]) ? table[i] : String(table[i] || '').split(',')).forEach((cell, ci) => { const k = keyFor[ci]; if (k) obj[k] = String(cell === undefined || cell === null ? '' : cell).trim(); });
+    if (Object.keys(obj).length) rows.push({ row: i + 1, data: obj });
+  }
+  return { header, rows, unknownHeaders: unknown };
+}
+/* ---- validation: same rules as the Range Add form + explicit file checks ---- */
+const RANGE_IMPORT_MAX_ROWS = Math.max(1, parseInt(process.env.RANGE_IMPORT_MAX_ROWS || '5000', 10) || 5000);
+function validateRangeImportValue(key, raw) {
+  const v = String(raw === undefined || raw === null ? '' : raw).trim();
+  switch (key) {
+    case 'name':
+      if (!v) return { ok: false, message: 'Range Name is required' };
+      if (v.length > 120) return { ok: false, message: 'Range Name is too long (max 120 characters)' };
+      return { ok: true, value: v };
+    case 'currency': {
+      if (!v) return { ok: true, value: '' };                       // default applied later (USD, as the form)
+      if (!/^[A-Za-z]{3}$/.test(v)) return { ok: false, message: `Invalid currency "${v}" — 3-letter code expected (e.g. USD)` };
+      return { ok: true, value: v.toUpperCase() };
+    }
+    case 'payment_type': {
+      if (!v) return { ok: true, value: '' };
+      const t = normalizePaymentCycle(v);                            // throws nothing; unknown -> weekly_7_1
+      if (t !== 'weekly_7_1' || ['weekly', 'week', '7/1', '7_1', 'weekly_7_1'].includes(v.toLowerCase().replace(/[\s-]+/g, '_'))) {
+        return { ok: true, value: t };
+      }
+      return { ok: false, message: `Invalid payment type "${v}" — use Daily, Weekly or Monthly (30/45)` };
+    }
+    case 'status': {
+      if (!v) return { ok: true, value: '' };                        // default Active
+      const low = v.toLowerCase();
+      if (low === 'active') return { ok: true, value: 'Active' };
+      if (low === 'inactive') return { ok: true, value: 'Inactive' };
+      return { ok: false, message: `Invalid status "${v}" — use Active or Inactive` };
+    }
+    case 'rate': case 'provider_rate':
+      if (!v) return { ok: true, value: 'NA' };
+      if (/^(na|n\/a|-)$/i.test(v)) return { ok: true, value: 'NA' };
+      if (!/^\d+(\.\d+)?$/.test(v)) return { ok: false, message: `Invalid ${key === 'rate' ? 'rate' : 'provider rate'} "${v}" — decimal number or NA expected` };
+      { const dp = (v.split('.')[1] || '').length;
+        if (dp > 6) return { ok: false, message: `Invalid ${key === 'rate' ? 'rate' : 'provider rate'} "${v}" — max 6 decimal places` };
+        if (parseFloat(v) > 100000) return { ok: false, message: `Invalid ${key === 'rate' ? 'rate' : 'provider rate'} "${v}" — value too large` }; }
+      return { ok: true, value: v };
+    case 'country':
+      if (!v) return { ok: true, value: '' };
+      if (v.length > 60) return { ok: false, message: `Invalid country "${v}" — max 60 characters` };
+      if (!/^[A-Za-z][A-Za-z .'()-]*$/.test(v)) return { ok: false, message: `Invalid country "${v}" — letters, spaces and . ' ( ) - only` };
+      return { ok: true, value: v };
+    case 'provider':
+      if (!v) return { ok: true, value: '' };
+      if (v.length > 120) return { ok: false, message: `Invalid provider "${v}" — max 120 characters` };
+      return { ok: true, value: v };
+    case 'range_start': case 'range_end': {
+      if (!v) return { ok: true, value: '' };
+      const digits = v.replace(/[\s+\-()]/g, '');
+      if (!/^\d{5,20}$/.test(digits)) return { ok: false, message: `Invalid ${key === 'range_start' ? 'Range Start' : 'Range End'} "${v}" — 5-20 digits expected` };
+      return { ok: true, value: digits };
+    }
+    case 'memo':
+      if (v.length > 500) return { ok: false, message: 'Memo is too long (max 500 characters)' };
+      return { ok: true, value: v };
+    case 'prefix': case 'test_numbers':
+      if (v.length > 255) return { ok: false, message: `${key === 'prefix' ? 'Prefixes' : 'Test Numbers'} is too long` };
+      return { ok: true, value: v };
+    case 'rate_1_1': case 'rate_7_1': case 'rate_7_7': case 'rate_30_45':
+    case 'provider_rate_1_1': case 'provider_rate_7_1': case 'provider_rate_7_7': case 'provider_rate_30_45': {
+      if (!v) return { ok: true, value: '' };
+      if (/^(na|n\/a|-)$/i.test(v)) return { ok: true, value: 'NA' };
+      if (!/^\d+(\.\d+)?$/.test(v) || (v.split('.')[1] || '').length > 6) return { ok: false, message: `Invalid ${key.replace(/_/g, ' ')} "${v}" — decimal number or NA expected` };
+      return { ok: true, value: v };
+    }
+    default:
+      return { ok: true, value: v };
+  }
+}
+/* Build one validated range record (or an error list) from an import row. */
+function planRangeImportRow(raw, opts) {
+  const errors = [];
+  const data = {};
+  for (const [k, v] of Object.entries(raw || {})) {
+    const r = validateRangeImportValue(k, v);
+    if (!r.ok) errors.push({ field: k, message: r.message, value: String(v) });
+    else data[k] = r.value;
+  }
+  if (errors.length) return { errors };
+  /* payment cycle decides which per-cycle rate column an unqualified Rate fills */
+  const cycle = normalizePaymentCycle(data.payment_type || 'weekly_7_1');
+  const cycleCol = cycle === 'daily' ? 'rate_1_1' : cycle === 'weekly_7_7' ? 'rate_7_7' : cycle === 'monthly_30x45' ? 'rate_30_45' : 'rate_7_1';
+  const cycleProvCol = cycle === 'daily' ? 'provider_rate_1_1' : cycle === 'weekly_7_7' ? 'provider_rate_7_7' : cycle === 'monthly_30x45' ? 'provider_rate_30_45' : 'provider_rate_7_1';
+  const rec = {
+    name: data.name,
+    prefix: data.prefix || '',
+    test_numbers: data.test_numbers || '',
+    currency: data.currency || 'USD',
+    payment_type: normalizePaymentType(data.payment_type || 'weekly'),
+    memo: data.memo || '',
+    country: data.country || '',
+    provider: data.provider || '',
+    range_start: data.range_start || '',
+    range_end: data.range_end || '',
+    status: data.status || 'Active',
+    currency_rate: '', cli_limit: '',
+    self_alloc_enabled: 1, self_alloc_max: 100, self_alloc_periods: 'weekly,monthly',
+    /* '' = "not in the file" -> INSERT stores 'NA', UPDATE keeps the stored value */
+    rate_1_1: '', rate_7_1: '', rate_7_7: '', rate_30_45: '',
+    provider_rate_1_1: '', provider_rate_7_1: '', provider_rate_7_7: '', provider_rate_30_45: '',
+  };
+  for (const c of ['rate_1_1', 'rate_7_1', 'rate_7_7', 'rate_30_45', 'provider_rate_1_1', 'provider_rate_7_1', 'provider_rate_7_7', 'provider_rate_30_45']) {
+    if (data[c] !== undefined && data[c] !== '') rec[c] = data[c];
+  }
+  /* unqualified Rate / Provider Rate -> the column of the row's payment cycle (explicit per-cycle columns win) */
+  if (data.rate !== undefined && data.rate !== '' && !rec[cycleCol]) rec[cycleCol] = data.rate;
+  if (data.provider_rate !== undefined && data.provider_rate !== '' && !rec[cycleProvCol]) rec[cycleProvCol] = data.provider_rate;
+  /* start <= end when both given */
+  if (rec.range_start && rec.range_end && BigInt(rec.range_start) > BigInt(rec.range_end)) {
+    return { errors: [{ field: 'range_start', message: `Range Start (${rec.range_start}) is greater than Range End (${rec.range_end})`, value: rec.range_start }] };
+  }
+  /* Provider is free text on the Add Range form; if a provider registry exists and the
+     name is not in it we only WARN (same freedom as the normal form, nothing hidden). */
+  const unknownProvider = !!(rec.provider && opts.knownProviders && opts.knownProviders.size && !opts.knownProviders.has(rec.provider.toLowerCase()));
+  return { rec, unknownProvider };
+}
+app.post('/api/ranges/import-file', authRequired, requireRole('admin'), upload.single('file'), (req, res) => {
+  let table = null, format = '';
+  try {
+    if (req.file && req.file.buffer) {
+      const fileName = String(req.file.originalname || '').toLowerCase();
+      if (/\.xlsx?$/.test(fileName)) {
+        format = 'xlsx';
+        const XLSX = require('xlsx');
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const first = (wb.SheetNames || [])[0];
+        if (!first) return res.status(400).json({ error: 'The spreadsheet has no sheet' });
+        table = XLSX.utils.sheet_to_json(wb.Sheets[first], { header: 1, raw: false, defval: '' });
+      } else if (/\.csv$/.test(fileName) || /\.txt$/.test(fileName) || /\.tsv$/.test(fileName)) {
+        format = /\.txt$/.test(fileName) ? 'txt' : 'csv';
+        const text = req.file.buffer.toString('utf8');
+        const sep = /\.tsv$/.test(fileName) ? '\t' : detectDelimiter(text);
+        table = parseRangeImportDelimited(text, sep);
+      } else {
+        return res.status(400).json({ error: 'Unsupported file format — upload .csv, .xlsx, .xls or .txt' });
+      }
+    } else if (req.body && (req.body.text || req.body.content)) {
+      format = 'text';
+      const text = String(req.body.text || req.body.content || '');
+      table = parseRangeImportDelimited(text, detectDelimiter(text));
+    } else {
+      return res.status(400).json({ error: 'No file uploaded — choose a .csv, .xlsx, .xls or .txt file' });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'The file could not be read: ' + (e.message || String(e)) });
+  }
+  const mapped = mapRangeImportRows(table);
+  if (!mapped.header.length) return res.status(400).json({ error: 'The file is empty — download the sample file to see the expected columns' });
+  if (!mapped.header.some(h => RANGE_IMPORT_COLUMNS.find(c => c.key === 'name' && (c.aliases.includes(h.toLowerCase()) || c.header.toLowerCase() === h.toLowerCase())))) {
+    return res.status(400).json({ error: 'Required column "Range Name" is missing from the header row. Expected columns: ' + RANGE_IMPORT_SAMPLE_COLUMNS.map(c => c.header).join(' | ') });
+  }
+  if (mapped.rows.length > RANGE_IMPORT_MAX_ROWS) return res.status(400).json({ error: `Too many rows (${mapped.rows.length}) — the limit is ${RANGE_IMPORT_MAX_ROWS} rows per file` });
+  if (!mapped.rows.length) return res.status(400).json({ error: 'No data rows found under the header row' });
+
+  const dryRun = truthy(req.body && (req.body.dry_run || req.body.validate_only)) || String(req.query.dry_run || '') === '1';
+  const updateExisting = truthy(req.body && req.body.update_existing);
+  let knownProviders = new Set();
+  try { knownProviders = new Set(db.all('SELECT name FROM galaxy_providers').map(p => String(p.name).toLowerCase())); } catch (_) {}
+  const existingNames = new Map();   /* lowercase name -> range id */
+  try { for (const r of db.all("SELECT id, name FROM ranges WHERE COALESCE(deleted_at,'')=''")) existingNames.set(String(r.name).toLowerCase(), r.id); } catch (_) {}
+
+  const errors = []; const plan = []; const skipped = []; const seenInFile = new Set(); const warnings = [];
+  for (const row of mapped.rows) {
+    const p = planRangeImportRow(row.data, { knownProviders });
+    if (p.errors) { errors.push({ row: row.row, errors: p.errors }); continue; }
+    const rec = p.rec;
+    if (p.unknownProvider) warnings.push({ row: row.row, provider: rec.provider, message: `Provider "${rec.provider}" is not in the provider registry — the range will still be created with this provider name (same as the Add Range form)` });
+    const low = rec.name.toLowerCase();
+    if (seenInFile.has(low)) { errors.push({ row: row.row, errors: [{ field: 'name', message: `Duplicate range "${rec.name}" — the same name appears earlier in this file`, value: rec.name }] }); continue; }
+    seenInFile.add(low);
+    const existingId = existingNames.get(low);
+    if (existingId && !updateExisting) { skipped.push({ row: row.row, name: rec.name, reason: 'Range already exists (not modified)' }); continue; }
+    plan.push({ row: row.row, rec, existingId: existingId || null });
+  }
+  const summary = {
+    format, total: mapped.rows.length, valid: plan.length, invalid: errors.length,
+    imported: 0, updated: 0, skipped: skipped.length,
+    errors, skipped_rows: skipped, warnings,
+    unknown_columns: mapped.unknownHeaders || [],
+    dry_run: dryRun,
+  };
+  if (dryRun || !plan.length) return res.json({ ok: true, ...summary });
+
+  const inserted = [];
+  try {
+    if (!db.inTransaction()) db.exec('BEGIN IMMEDIATE');
+    for (const item of plan) {
+      const r = item.rec;
+      if (item.existingId) {
+        /* same UPDATE column set as PUT /api/ranges/:id; empty optional cells keep the stored value */
+        const cur = db.get('SELECT * FROM ranges WHERE id=?', [item.existingId]) || {};
+        const val = (v, fallback) => (v === undefined || v === null || String(v).trim() === '') ? fallback : v;
+        db.runNoSave(`UPDATE ranges SET name=?,prefix=?,currency=?,rate_1_1=?,rate_7_1=?,rate_7_7=?,rate_30_45=?,memo=?,payment_type=?,country=?,provider=?,currency_rate=?,cli_limit=?,range_start=?,range_end=?,status=?,provider_rate_1_1=?,provider_rate_7_1=?,provider_rate_7_7=?,provider_rate_30_45=?,self_alloc_enabled=?,self_alloc_max=?,self_alloc_periods=? WHERE id=?`,
+          [r.name, val(r.prefix, cur.prefix || ''), val(r.currency, cur.currency || 'USD'),
+           val(r.rate_1_1, cur.rate_1_1 || 'NA'), val(r.rate_7_1, cur.rate_7_1 || 'NA'), val(r.rate_7_7, cur.rate_7_7 || 'NA'), val(r.rate_30_45, cur.rate_30_45 || 'NA'),
+           val(r.memo, cur.memo || ''), normalizePaymentType(val(r.payment_type, cur.payment_type || 'weekly')),
+           val(r.country, cur.country || ''), val(r.provider, cur.provider || ''), cur.currency_rate || '', cur.cli_limit || '',
+           val(r.range_start, cur.range_start || ''), val(r.range_end, cur.range_end || ''), val(r.status, cur.status || 'Active'),
+           val(r.provider_rate_1_1, cur.provider_rate_1_1 || 'NA'), val(r.provider_rate_7_1, cur.provider_rate_7_1 || 'NA'),
+           val(r.provider_rate_7_7, cur.provider_rate_7_7 || 'NA'), val(r.provider_rate_30_45, cur.provider_rate_30_45 || 'NA'),
+           val(r.self_alloc_enabled, cur.self_alloc_enabled != null ? cur.self_alloc_enabled : 1),
+           val(r.self_alloc_max, cur.self_alloc_max != null ? cur.self_alloc_max : 100),
+           val(r.self_alloc_periods, cur.self_alloc_periods || 'weekly,monthly'),
+           item.existingId]);
+        if (r.test_numbers) syncRangeTestNumbers(item.existingId, r.test_numbers);
+        summary.updated++;
+      } else {
+        /* same INSERT column set/defaults as POST /api/ranges */
+        const ins = db.runNoSave(`INSERT INTO ranges (name,prefix,test_number,currency,rate_1_1,rate_7_1,rate_7_7,rate_30_45,memo,payment_type,country,provider,currency_rate,cli_limit,range_start,range_end,status,provider_rate_1_1,provider_rate_7_1,provider_rate_7_7,provider_rate_30_45,self_alloc_enabled,self_alloc_max,self_alloc_periods)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [r.name, r.prefix, '', r.currency, r.rate_1_1 || 'NA', r.rate_7_1 || 'NA', r.rate_7_7 || 'NA', r.rate_30_45 || 'NA', r.memo, normalizePaymentType(r.payment_type),
+           r.country, r.provider, '', '', r.range_start, r.range_end, r.status,
+           r.provider_rate_1_1 || 'NA', r.provider_rate_7_1 || 'NA', r.provider_rate_7_7 || 'NA', r.provider_rate_30_45 || 'NA',
+           r.self_alloc_enabled, r.self_alloc_max, r.self_alloc_periods]);
+        if (r.test_numbers) syncRangeTestNumbers(ins.lastInsertRowid, r.test_numbers);
+        summary.imported++;
+        inserted.push({ row: item.row, id: Number(ins.lastInsertRowid), name: r.name });
+      }
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    try { if (db.inTransaction()) db.exec('ROLLBACK'); } catch (_) {}
+    return res.status(500).json({ error: 'Import failed — no ranges were created (' + (e.message || String(e)) + ')', ...summary, imported: 0, updated: 0, rolled_back: true });
+  }
+  bumpNumbersVer(); clearApiReadCache();
+  logAction(req, 'import_ranges_file', 'ranges', { format, total: summary.total, imported: summary.imported, updated: summary.updated, skipped: summary.skipped, invalid: summary.invalid });
+  res.json({ ok: true, ...summary, created: inserted });
+});
+
+/* Sample file for the bulk range import — built from the SAME column spec the
+   importer accepts, so the sample can never drift from the parser. */
+app.get('/api/ranges/import-sample', authRequired, requireRole('admin'), (req, res) => {
+  const format = String(req.query.format || 'csv').toLowerCase();
+  const header = RANGE_IMPORT_SAMPLE_COLUMNS.map(c => c.header);
+  const rows = [header, ...RANGE_IMPORT_SAMPLE_ROWS];
+  const fileBase = 'galaxy-range-import-sample';
+  if (format === 'xlsx' || format === 'xls') {
+    try {
+      const XLSX = require('xlsx');
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Ranges');
+      const notes = [
+        ['How to use this sample'],
+        ['1. Keep the header row exactly as it is (column order does not matter, names must match).'],
+        ['2. Delete the example rows and enter your own ranges, then save as .xlsx or .csv.'],
+        ['3. Rate / Provider Rate = decimal (e.g. 0.0130) or NA. Rate fills the column of the row Payment Type (Daily -> 1/1, Weekly -> 7/1, Monthly -> 30/45).'],
+        ['4. Currency: 3-letter code (USD / EUR / PKR ...). Status: Active or Inactive.'],
+        ['5. Provider must already exist on the Providers page (or leave it empty).'],
+        ['6. Range Start / Range End: digits only, start must not be greater than end.'],
+        ['Optional columns accepted but not required: Test Numbers, Rate 1/1, Rate 7/1, Rate 7/7, Rate 30/45, Provider Rate 1/1, Provider Rate 7/1, Provider Rate 7/7, Provider Rate 30/45.'],
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(notes), 'README');
+      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileBase}.xlsx"`);
+      return res.send(buf);
+    } catch (e) { return res.status(500).json({ error: 'Sample generation failed: ' + e.message }); }
+  }
+  if (format === 'txt') {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileBase}.txt"`);
+    return res.send(rangeImportToDelimited(rows, '\t', '\n'));
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileBase}.csv"`);
+  /* UTF-8 BOM so Excel (Windows) opens the non-ASCII example values correctly;
+     the importer strips it on read. */
+  return res.send('\uFEFF' + rangeImportToDelimited(rows, ','));
+});
+
 app.put('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => {
   const b = req.body || {};
   /* P19k #4: provider_rate_* bhi admin hi set kar sakta hai (route admin-only hai) */
@@ -1780,6 +2179,13 @@ app.delete('/api/ranges/:id', authRequired, requireRole('admin'), (req, res) => 
 
 app.get('/api/test-numbers', authRequired, (req, res) => cachedJson(req, res, 3000, () => {
   // Test panel numbers are separate from actual panel numbers. UI should show only range name + number.
+  /* ranges_only=1 → just the distinct range names of the active test pool. Used by the
+     Test Panel range dropdown so the paginated tables never have to load the whole pool
+     into the browser to build that list. No new endpoint, no permission change. */
+  if (String(req.query.ranges_only||'')==='1') {
+    return { ranges: db.all(`SELECT DISTINCT r.name AS name FROM range_test_numbers t JOIN ranges r ON r.id=t.range_id
+      WHERE t.active=1 AND COALESCE(r.name,'')<>'' ORDER BY r.name COLLATE NOCASE`).map(x=>x.name) };
+  }
   const q=String(req.query.search||'').trim();
   const range=String(req.query.range||'').trim();
   const where=['t.active=1']; const params=[];
@@ -1942,8 +2348,13 @@ app.get('/api/test-panel/sms', authRequired, requireRole('admin','manager','agen
   const number = String(req.query.number || '').trim();
   const search = String(req.query.search || '').trim();
   const cli = String(req.query.cli || '').trim();
+  /* Test Panel pagination: the Range filter of the panel was applied client-side;
+     with server-side paging it must be part of the query so page counts stay exact.
+     Additive + optional: empty value = no filter (previous behaviour). */
+  const rangeFilter = String(req.query.range || '').trim();
   const params = [];
   const where = ['COALESCE(s.is_test,0)=1'];
+  if (rangeFilter) { where.push('r.name=?'); params.push(rangeFilter); }
   if (number) { where.push("REPLACE(REPLACE(REPLACE(REPLACE(s.number,'+',''),' ',''),'-',''),'_','')=?"); params.push(cleanPhone(number)); }
   if (cli) { where.push('LOWER(s.cli) LIKE ?'); params.push('%' + String(cli).toLowerCase() + '%'); }
   if (search) {
@@ -2106,6 +2517,11 @@ function buildNumberQuery(user, q) {
   }
   if (q.range) { where.push('r.name=?'); params.push(q.range); need.ranges = true; }
   if (q.range_id) { where.push('n.range_id=?'); params.push(+q.range_id); }
+  /* Provider filter — admin only (provider data is admin-internal, same rule as the
+     SMS report provider dimension P19k #3). Relationship: numbers -> ranges.provider. */
+  if (q.provider && user && user.role === 'admin') {
+    where.push("COALESCE(r.provider,'')=?"); params.push(String(q.provider)); need.ranges = true;
+  }
   if (q.owner) {
     if (user.role === 'admin') {
       // Admin owner can be Manager allocation or direct Agent allocation.
@@ -2189,10 +2605,26 @@ function numberSelectSql(where, options = {}) {
       ${cardRateExpr})`;
   }
 
+  // ADMIN-ONLY provider visibility (existing ranges.provider + ranges.provider_rate_*):
+  // the stored provider rate for the number's payment cycle. Never sent to other roles.
+  const providerExpr = role === 'admin' ? `,
+            r.provider AS provider_name,
+            CASE
+              WHEN UPPER(TRIM(COALESCE(n.payterm, r.payment_type,'')))  LIKE '%30%'
+                OR UPPER(TRIM(COALESCE(n.payterm, r.payment_type,'')))  LIKE '%MONTH%'
+                THEN NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.provider_rate_30_45,''))),'NA'),'')
+              WHEN UPPER(TRIM(COALESCE(n.payterm, r.payment_type,'')))  LIKE '%7_7%'
+                THEN NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.provider_rate_7_7,''))),'NA'),'')
+              WHEN UPPER(TRIM(COALESCE(n.payterm, r.payment_type,'')))  LIKE '%1_1%'
+                OR UPPER(TRIM(COALESCE(n.payterm, r.payment_type,'')))  LIKE '%DAIL%'
+                THEN NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.provider_rate_1_1,''))),'NA'),'')
+              ELSE NULLIF(NULLIF(UPPER(TRIM(COALESCE(r.provider_rate_7_1,''))),'NA'),'')
+            END AS provider_rate` : '';
+
   // Display query: LIMIT-bounded, so keeping display JOINs here is cheap.
   // sharing_users becomes a scalar subquery (no row duplication).
   return `SELECT n.*, r.name AS range_name,
-            ${effExpr} AS effective_rate,
+            ${effExpr} AS effective_rate${providerExpr},
             CASE WHEN n.client_id IS NOT NULL THEN 'client' WHEN n.agent_id IS NOT NULL THEN 'agent' WHEN n.manager_id IS NOT NULL THEN 'manager' ELSE 'unallocated' END AS owner_type,
             cu.username AS client_name,
             COALESCE((SELECT s1.panel_name FROM sharing_users s1 WHERE s1.agent_user_id=n.agent_id ORDER BY s1.id LIMIT 1), au.username) AS agent_name,
@@ -2221,6 +2653,61 @@ app.get('/api/numbers/summary', authRequired, (req, res) => cachedJson(req, res,
     ${having}
     ORDER BY r.name COLLATE NOCASE ASC`, scope.params);
   return rows.map(r => ({...r, total:+(r.total||0), available:+(r.available||0), allocated:+(r.allocated||0)}));
+}, 'numbers_ver'));
+
+/* =========================================================================
+ * ADMIN — PROVIDER / RANGE SUMMARY
+ * -------------------------------------------------------------------------
+ * Range Name + Provider + Number Count, computed by SQLite (GROUP BY), never by
+ * loading numbers into the browser. Relationship used: numbers.range_id -> ranges
+ * (ranges.provider is the existing provider link; galaxy_providers is the registry,
+ * so providers without ranges are listed with 0/0).
+ * Admin-only: same rule as /api/providers-info and the SMS provider dimension.
+ * ========================================================================= */
+app.get('/api/provider-summary', authRequired, requireRole('admin'), (req, res) => cachedJson(req, res, 15000, () => {
+  const providerFilter = String(req.query.provider || '').trim();
+  const rangeWhere = ["COALESCE(r.deleted_at,'')=''"];
+  const rangeParams = [];
+  if (providerFilter) { rangeWhere.push("COALESCE(r.provider,'')=?"); rangeParams.push(providerFilter); }
+  /* per-range count (server-side aggregation) */
+  const ranges = db.all(`SELECT r.id AS range_id, r.name AS range_name, COALESCE(r.provider,'') AS provider,
+      COUNT(n.id) AS numbers
+    FROM ranges r LEFT JOIN numbers n ON n.range_id=r.id
+    WHERE ${rangeWhere.join(' AND ')}
+    GROUP BY r.id, r.name, r.provider
+    ORDER BY COALESCE(r.provider,'') COLLATE NOCASE ASC, r.name COLLATE NOCASE ASC`, rangeParams)
+    .map(r => ({ ...r, numbers: +(r.numbers || 0) }));
+  /* per-provider totals (all ranges, unfiltered, so the totals card always shows the whole picture) */
+  const totals = db.all(`SELECT COALESCE(r.provider,'') AS provider,
+      COUNT(DISTINCT r.id) AS ranges, COUNT(n.id) AS numbers
+    FROM ranges r LEFT JOIN numbers n ON n.range_id=r.id
+    WHERE COALESCE(r.deleted_at,'')=''
+    GROUP BY COALESCE(r.provider,'')
+    ORDER BY COALESCE(r.provider,'') COLLATE NOCASE ASC`)
+    .map(r => ({ ...r, ranges: +(r.ranges || 0), numbers: +(r.numbers || 0) }));
+  /* registry providers that own no range yet (0/0) — keeps the filter complete */
+  let registry = [];
+  try { registry = db.all('SELECT name FROM galaxy_providers ORDER BY name COLLATE NOCASE').map(p => String(p.name)); } catch (_) {}
+  const seen = new Set(totals.map(t => String(t.provider).toLowerCase()));
+  for (const name of registry) {
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    totals.push({ provider: name, ranges: 0, numbers: 0 });
+  }
+  totals.sort((a, b) => String(a.provider).localeCompare(String(b.provider), undefined, { sensitivity: 'base' }));
+  const unassigned = totals.find(t => !t.provider) || { provider: '', ranges: 0, numbers: 0 };
+  const grand = totals.reduce((a, t) => ({ ranges: a.ranges + t.ranges, numbers: a.numbers + t.numbers }), { ranges: 0, numbers: 0 });
+  return {
+    ok: true,
+    provider_filter: providerFilter,
+    /* dropdown source for the Admin Provider filters (Numbers page + this page) */
+    providers: totals.map(t => t.provider).filter(Boolean).concat(registry).filter((v, i, arr) => arr.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i),
+    ranges,
+    totals,
+    unassigned,
+    grand,
+    count_source: 'server_side_group_by',
+  };
 }, 'numbers_ver'));
 
 // list numbers visible to caller (supports server-side pagination with ?paged=1)
@@ -2268,6 +2755,20 @@ function parsePositiveInt(v, fallback) {
    Pages > STREAM_JSON_MAX_ROWS stream row-by-row (flat memory, identical JSON shape). */
 app.get('/api/numbers', authRequired, (req, res, next) => {
   const q = req.query || {};
+  /* P19k #8: ids-only mode — used by the admin page's "select ALL numbers matching the current
+     filters" action. Runs the SAME role-scoped buildNumberQuery as the table (range + provider +
+     owner + search + allocation) but returns only ids + total, so no number rows are ever loaded
+     into the browser just to build a selection. Bulk actions still receive an explicit id list. */
+  if (String(q.ids_only || '') === '1') {
+    try {
+      const query = buildNumberQuery(req.user, q);
+      const countFrom = numberFromSql(query.where, query.need);
+      const total = +(db.get(`SELECT COUNT(*) AS c ${countFrom}`, query.params)?.c || 0);
+      const cap = ROLE_ALL_MAX[req.user.role] || rolePageMax(req.user.role);
+      const rows = db.all(`SELECT n.id ${countFrom} ORDER BY n.id ASC LIMIT ?`, [...query.params, cap]);
+      return res.json({ ids: rows.map(r => r.id), total, cap, capped: total > rows.length });
+    } catch (e) { return res.status(500).json({ error: 'Query failed' }); }
+  }
   const paged = q.paged || q.page || q.limit;
   if (!paged) return next();
   const limitRaw = String(q.limit || NUMBER_PAGE_DEFAULT);
@@ -3482,15 +3983,17 @@ app.get('/api/sms/paged', authRequired, (req, res, next) => {
     const page = Math.min(Math.max(1, parseInt(q.page || '1', 10) || 1), totalPages);
     const offset = (page - 1) * limit;
     const orderSql = smsPagedOrderSql(q);
+    /* ADMIN-ONLY provider rate columns (see providerRateSelectSql). */
+    const provCols = providerRateSelectSql(req.user.role);
     sendPagedStreaming(res,
       { total, page, limit, totalPages, totalPayment },
       `SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
           n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
-          r.currency AS range_currency, r.provider AS range_provider,
+          r.currency AS range_currency, r.provider AS range_provider${provCols},
           cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
         ${built.baseSql}
         ORDER BY ${orderSql} LIMIT ? OFFSET ?`,
-      [...built.params, limit, offset], (row) => attachSmsPayoutFields([row])[0]);
+      [...built.params, limit, offset], (row) => attachSmsPayoutFields([attachSmsProviderRate([row], req.user.role)[0] || row])[0]);
   } catch (e) { console.warn('sms stream failed', e.message); if (res.headersSent) { try { res.end(); } catch (_) {} } else res.status(500).json({ error: 'Query failed' }); }
 });
 
@@ -3511,23 +4014,24 @@ app.get('/api/sms/paged', authRequired, (req, res) => cachedJson(req, res, 1200,
   // history in constant time (OFFSET on 10M+ rows is O(offset); cursor is O(1)
   // per page). Without cursor, behaviour is unchanged (page/offset as before).
   const cursor = parseInt(q.cursor, 10);
+  const provCols = providerRateSelectSql(req.user.role);   /* ADMIN-ONLY provider rate columns */
   if (Number.isFinite(cursor) && cursor > 0) {
     const cRows = db.all(`SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
         n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
-        r.currency AS range_currency, r.provider AS range_provider,
+        r.currency AS range_currency, r.provider AS range_provider${provCols},
         cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
       ${built.baseSql} AND s.id < ?
       ORDER BY s.id DESC LIMIT ?`, [...built.params, cursor, limit]);
     const nextCursor = cRows.length === limit ? cRows[cRows.length - 1].id : null;
-    return { rows: attachSmsPayoutFields(cRows), total, page: 1, limit, totalPages: Math.max(1, Math.ceil(total / limit)), totalPayment, next_cursor: nextCursor, cursor_mode: true };
+    return { rows: attachSmsPayoutFields(attachSmsProviderRate(cRows, req.user.role)), total, page: 1, limit, totalPages: Math.max(1, Math.ceil(total / limit)), totalPayment, next_cursor: nextCursor, cursor_mode: true };
   }
   const rows = db.all(`SELECT s.*, r.name AS range_name, r.rate_1_1, r.rate_7_1, r.rate_7_7, r.rate_30_45,
       n.rate AS number_rate, n.payout AS number_payout, n.payterm AS payterm, r.payment_type AS payment_type,
-      r.currency AS range_currency, r.provider AS range_provider,
+      r.currency AS range_currency, r.provider AS range_provider${provCols},
       cu.username AS client_name, COALESCE(su.panel_name, au.username) AS agent_name, au.username AS agent_username, su.panel_name AS sharing_panel_name, su.id AS sharing_user_id, mu.username AS manager_name
     ${built.baseSql}
     ORDER BY ${orderSql} LIMIT ? OFFSET ?`, [...built.params, limit, offset]);
-  return { rows: attachSmsPayoutFields(rows), total, page, limit, totalPages, totalPayment };
+  return { rows: attachSmsPayoutFields(attachSmsProviderRate(rows, req.user.role)), total, page, limit, totalPages, totalPayment };
 }, 'numbers_ver')); /* P19: number-delete report cache turant invalidate */
 app.get('/api/stats-summary/:by', authRequired, (req, res) => cachedJson(req, res, 1500, () => {
   const by = req.params.by;
