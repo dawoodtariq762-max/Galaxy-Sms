@@ -1386,7 +1386,21 @@ async function openAllocAll(){const ids=getSelectedIds();if(!ids.length){alert('
   document.getElementById('allocAllModal').classList.add('show');}
 async function confirmAllocAll(){const ids=getSelectedIds();const target=document.getElementById('aaClient').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;
   if(!target){alert('Select a manager.');return;}
-  try{ await API.post('/numbers/allocate',{ids,target_id:+target,payterm:pt,payout:po}); closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers(); }catch(e){ alert('❌ '+e.message); }}
+  const body={ids,target_id:+target,payterm:pt,payout:po};
+  try{
+    /* Same ownership rule as the Admin/Manager/Agent panels: numbers already
+       allocated to somebody else are reported as `blocked` and are only reassigned
+       after an explicit confirmation (force=true). */
+    let res=await API.post('/numbers/allocate',body);
+    const blocked=(res&&res.blocked_ids)||[];
+    if(blocked.length){
+      if(confirm(`⚠ ${blocked.length} of the ${ids.length} selected numbers are already allocated to another user/client.\n\nReassign those ${blocked.length} numbers to the selected target? This moves them away from their current owner.\n\nOK = reassign · Cancel = leave them allocated as they are.`)){
+        res=await API.post('/numbers/allocate',Object.assign({},body,{ids:blocked,force:true}));
+      }
+    }
+    closeModal('allocAllModal');
+    const done=(res&&res.allocated!=null)?res.allocated:ids.length, left=(res&&res.blocked)?res.blocked:0;
+    alert(`✅ ${done} numbers allocated.`+(left?`\n⏭ ${left} numbers were left unchanged (already allocated).`:'')); loadNumbers(); }catch(e){ alert('❌ '+e.message); }}
 
 /* ===== SMART DIVIDE (Admin -> Managers, unallocated auto-divide) ===== */
 async function openSmart(){

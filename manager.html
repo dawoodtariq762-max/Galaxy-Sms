@@ -774,7 +774,21 @@ async function confirmAllocAll(){const ids=selIds();const a=document.getElementB
   const rv = (document.getElementById('aaRate')?.value || '').trim();
   const body = {ids, target_id:+a, payterm:pt, payout:rv||po};
   if(rv) body.rate = rv;
-  try{await API.post('/numbers/allocate',body);closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
+  try{
+    /* Numbers already allocated to somebody else are never taken away silently:
+       the server reports them as `blocked` and asks nothing; the user is asked here,
+       and only an explicit confirmation resends them with force=true. */
+    let res=await API.post('/numbers/allocate',body);
+    const blocked=(res&&res.blocked_ids)||[];
+    if(blocked.length){
+      if(confirm(`⚠ ${blocked.length} of the ${ids.length} selected numbers are already allocated to another user/client.\n\nReassign those ${blocked.length} numbers to the selected target? This moves them away from their current owner.\n\nOK = reassign · Cancel = leave them allocated as they are.`)){
+        res=await API.post('/numbers/allocate',Object.assign({},body,{ids:blocked,force:true}));
+      }
+    }
+    closeModal('allocAllModal');
+    const done=(res&&res.allocated!=null)?res.allocated:ids.length, left=(res&&res.blocked)?res.blocked:0;
+    alert(`✅ ${done} numbers allocated.`+(left?`\n⏭ ${left} numbers were left unchanged (already allocated).`:''));loadNumbers();
+  }catch(e){alert('❌ '+e.message);}}
 /* Smart Divide (to Agents) */
 async function openSmart(){const ranges=await API.get('/ranges');if(!agentsData.length)agentsData=await API.get('/users/agent');
   document.getElementById('smRanges').innerHTML=ranges.map(r=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="smR" value="${r.id}" style="width:auto"/> ${r.name}</label>`).join('');

@@ -508,13 +508,39 @@ function renderNumbers(){const rf=document.getElementById('numRange').value,len=
   document.getElementById('numInfo').textContent=`Showing ${rows.length} of ${t} numbers`;}
 
 /* SMS STATS (API) */
-async function loadTestNumbers(){try{const data=await API.get('/test-numbers?paged=1&page=1&limit=100');const rows=data.rows||data;testNumbers=(rows||[]).map(t=>({range:t.range_name,num:t.number,payout:t.payout||'Ask'}));}catch(e){testNumbers=[];}}
+async function loadTestNumbers(){try{const data=await API.get('/test-numbers?paged=1&page=1&limit=100');const rows=data.rows||data;testNumbers=(rows||[]).map(t=>({range:t.range_name,num:t.number,payout:t.payout||'Ask'}));}catch(e){testNumbers=[];}
+  renderTestRangeSelect();}
 
 async function loadStats(){ try{ smsRecords=await API.get('/sms'); stats=smsRecords.map(r=>{const msg=r.message||'';return {range:r.range_name||'',number:r.number,cli:r.cli||'',msg,date:(r.received_at||'').slice(0,19),otp:extractOTP(msg)};}); }catch(e){ smsRecords=[]; stats=[]; } renderStats(); renderNumbers(); }
 
 
 
 /* TEST PANEL (masked CLI + masked SMS; range filter only on test numbers) */
+/* TEST PANEL RANGE FILTER — options come from the Test Panel's own data.
+   A client keeps every range it already owns numbers in (the existing /api/ranges
+   scope is untouched) and additionally gets the ranges of the active test numbers
+   this panel is already showing it (/api/test-numbers = the same rows listed in the
+   SMS Test Numbers table below). No new endpoint, no new permission and no widened
+   scope: a range with neither the client's numbers nor test numbers stays absent. */
+function testPanelRangeNames(){
+  const names=[...new Set([...(rangeNames||[]),...((testNumbers||[]).map(t=>t.range))].filter(Boolean))];
+  return names.sort((a,b)=>String(a).localeCompare(String(b),undefined,{sensitivity:'base'}));
+}
+function renderTestRangeSelect(){
+  const list=testPanelRangeNames();
+  const cur=(document.getElementById('testRange')?.value)||'';
+  const value=list.includes(cur)?cur:'';
+  if (window.renderSearchSelect && document.getElementById('testRangeContainer')) {
+    window.renderSearchSelect('testRangeContainer', {
+      id: 'testRange', placeholder: 'Select Range', searchPlaceholder: 'Search range...',
+      items: list.map(r => ({ value: r, label: r })),
+      value: value,
+      onChange: () => renderTest()
+    });
+  } else {
+    fillSel('testRange', list);
+  }
+}
 function normPhone(v){return String(v||'').replace(/[^0-9]/g,'');}
 async function renderTest(){const rf=document.getElementById('testRange').value,cf=(document.getElementById('testCli').value||'').toLowerCase();
   document.getElementById('tnBody').innerHTML=testNumbers.filter(r=>!rf||r.range===rf).map(r=>`<tr><td>${r.range}</td><td class="mono">${r.num}</td></tr>`).join('');
@@ -569,18 +595,7 @@ async function loadRanges(){
     fillSel('stRange',rangeNames);
   }
 
-  if (window.renderSearchSelect && document.getElementById('testRangeContainer')) {
-    const items = rangeNames.map(r => ({ value: r, label: r }));
-    window.renderSearchSelect('testRangeContainer', {
-      id: 'testRange',
-      placeholder: 'Select Range',
-      items: items,
-      value: (document.getElementById('testRange')?.value) || '',
-      onChange: () => renderTest()
-    });
-  } else {
-    fillSel('testRange',rangeNames);
-  }
+  renderTestRangeSelect();
   try{ let dl=document.getElementById('stNumDl'); if(!dl){ dl=document.createElement('datalist'); dl.id='stNumDl'; const inp=document.getElementById('stNumber'); if(inp&&inp.parentNode) inp.parentNode.appendChild(dl); }
     const rj=await API.smsNumbers({from:(document.getElementById('stFrom')?.value)||'',to:(document.getElementById('stTo')?.value)||''});
     dl.innerHTML=(rj.items||[]).map(x=>`<option value="${String(x.number).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${x.count!=null?x.count+' OTPs':''}</option>`).join(''); }catch(e){}
@@ -593,7 +608,7 @@ async function loadClientPageData(page){
     if(page==='dashboard') return loadDashboard();
     if(page==='numbers'){ loadRanges(); return loadNumbers(); }
     if(page==='stats'){ await loadRanges(); return renderStats(); }
-    if(page==='test'){ await loadRanges(); await loadTestNumbers(); return renderTest(); }
+    if(page==='test'){ await loadRanges(); await loadTestNumbers(); renderTestRangeSelect(); return renderTest(); }
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
   }catch(e){console.warn('loadClientPageData failed',page,e);}
 }

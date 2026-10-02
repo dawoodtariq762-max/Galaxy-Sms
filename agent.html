@@ -336,6 +336,8 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
         <div class="rsubitem" data-page="bulkAlloc"><span class="d"></span><span class="lbl">Range Allocation</span></div>
       </div>
 
+      <div class="ritem" data-page="test"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 6 0v6"/><rect x="4" y="18" width="16" height="3"/><path d="M12 3v3"/></svg><span class="lbl">Test Panel</span></div>
+
       <div class="rsec">Communication</div>
       <div class="ritem" data-page="complaints"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="lbl">Complaints</span><span class="gx-nav-badge" id="gxCompBadge" style="display:none"></span></div>
       <div class="ritem" data-page="clients"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg><span class="lbl">Client Management</span></div>
@@ -492,6 +494,27 @@ thead th{font-size:11.5px!important;letter-spacing:.25px!important;}
       </section>
 
       <!-- BULK ALLOC -->
+      <!-- SMS TEST PANEL (Agent) — same structure/masking as the existing Client/Manager Test Panel -->
+      <section class="page" id="page-test">
+        <div class="page-head"><div><h2>SMS Test Panel</h2><div class="breadcrumb"><b>Agent</b> › Test Panel</div></div>
+          <div class="head-actions"><span class="masknote">🔒 CLI &amp; SMS masked (Agent)</span></div></div>
+        <div class="toolbar"><div class="filter-row">
+          <div id="testRangeContainer" style="display:inline-block;min-width:180px"></div>
+          <button type="button" class="gx-btn gx-blue"  onclick="renderTest()" data-tip="Filters" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
+          <button type="button" class="gx-btn"  onclick="if(window.setSearchDropdownValue) setSearchDropdownValue('testRange','','Select Range'); const tr=document.getElementById('testRange'); if(tr) tr.value=''; renderTest()" data-tip="Reset" title="Reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+          <span class="muted" style="font-size:11.5px">(Range filter applies only to Test Numbers)</span>
+        </div></div>
+        <div class="grid2" style="grid-template-columns:1fr 1.3fr">
+          <div><h3 style="margin-bottom:12px;font-size:15px">SMS Test Numbers</h3>
+            <div class="table-wrap" style="margin-top:0"><div class="tscroll"><table>
+              <thead><tr><th>Range</th><th>Test Number</th></tr></thead><tbody id="tnBody"></tbody></table></div></div></div>
+          <div><h3 style="margin-bottom:12px;font-size:15px">Recent SMS Test</h3>
+            <div class="toolbar" style="margin-bottom:12px;padding:12px 14px"><div class="filter-row" style="margin:0"><input type="text" id="testCli" placeholder="Filter by CLI" oninput="renderTest()" style="min-width:180px"/></div></div>
+            <div class="table-wrap" style="margin-top:0"><div class="tscroll"><table>
+              <thead><tr><th>Date</th><th>Range</th><th>Number</th><th>CLI</th><th>SMS</th></tr></thead><tbody id="trBody"></tbody></table></div></div></div>
+        </div>
+      </section>
+
       <section class="page" id="page-bulkAlloc">
         <div class="page-head"><div><h2>SMS Range Allocation</h2><div class="breadcrumb"><b>SMS Numbers</b> › Range Allocation</div></div></div>
         <div class="toolbar">
@@ -894,6 +917,48 @@ function smsToCdr(r){return {client:r.client_name||'—',range:r.range_name||'�
 /* CLI masking */
 /* fill selects */
 function fillSel(id,arr,keep=true){const s=document.getElementById(id);if(!s)return;const f=keep?s.children[0].outerHTML:'';s.innerHTML=f+arr.map(x=>`<option>${x}</option>`).join('');}
+/* ===== SMS TEST PANEL (Agent) =================================================
+   Reuses the SAME Test Panel endpoints as the Client/Manager/Admin panels:
+     /api/test-numbers     -> active test numbers (Range | Test Number)
+     /api/test-panel/sms   -> test-panel SMS rows (date | range | number | CLI | SMS)
+   Masking follows the existing Test Panel rule for agents (admin.html models the
+   same rule: "admin=full, agent=masked"): CLI is masked and the SMS body is never
+   shown in this panel. Read-only — it calls no write endpoint, so no number, range,
+   client or other user's data can be changed from here. */
+function maskCLI(cli){ cli=String(cli||''); if(!cli) return ''; if(cli.length<=2) return cli; return cli.slice(0,2)+'x'.repeat(cli.length-2); }
+/* Range options = the agent's own ranges (/api/ranges — unchanged, ownership-scoped)
+   plus the ranges of the active test numbers this panel is already showing. */
+function testPanelRangeNames(){
+  const names=[...new Set([...(rangeNames||[]),...((testNumbers||[]).map(t=>t.range))].filter(Boolean))];
+  return names.sort((a,b)=>String(a).localeCompare(String(b),undefined,{sensitivity:'base'}));
+}
+function renderTestRangeSelect(){
+  const list=testPanelRangeNames();
+  const cur=(document.getElementById('testRange')?.value)||'';
+  const value=list.includes(cur)?cur:'';
+  if (window.renderSearchSelect && document.getElementById('testRangeContainer')) {
+    window.renderSearchSelect('testRangeContainer', {
+      id: 'testRange', placeholder: 'Select Range', searchPlaceholder: 'Search range...',
+      items: list.map(r => ({ value: r, label: r })),
+      value: value,
+      onChange: () => renderTest()
+    });
+  } else {
+    fillSel('testRange', list);
+  }
+}
+async function loadTestNumbers(){try{const data=await API.get('/test-numbers?paged=1&page=1&limit=100');const rows=data.rows||data;testNumbers=(rows||[]).map(t=>({range:t.range_name,num:t.number,payout:t.payout||'Ask'}));}catch(e){testNumbers=[];}
+  renderTestRangeSelect();}
+async function loadTestRanges(){ try{ const scoped=await API.get('/ranges'); rangeNames=(scoped||[]).map(r=>r.name); }catch(e){ rangeNames=rangeNames||[]; } }
+async function renderTest(){
+  const rf=(document.getElementById('testRange')?.value)||'', cf=(document.getElementById('testCli')?.value||'').toLowerCase();
+  document.getElementById('tnBody').innerHTML=(testNumbers||[]).filter(r=>!rf||r.range===rf).map(r=>`<tr><td>${r.range||''}</td><td class="mono">${r.num||''}</td></tr>`).join('')||`<tr><td colspan="2" class="muted" style="text-align:center;padding:22px">No test numbers found</td></tr>`;
+  const apiRows=await API.get('/test-panel/sms').catch(()=>[]);
+  const rows=(apiRows||[]).map(r=>({date:(r.received_at||'').slice(0,19),range:r.range_name||'',num:r.number||'',cli:r.cli||''}))
+    .filter(r=>(!rf||r.range===rf)&&(!cf||maskCLI(r.cli).toLowerCase().includes(cf)||String(r.cli||'').toLowerCase().includes(cf)));
+  document.getElementById('trBody').innerHTML=rows.map(r=>`<tr><td class="muted">${r.date}</td><td>${r.range}</td><td class="mono">${r.num}</td><td class="mono">${maskCLI(r.cli)}</td><td class="mono">xxxxxxxxxxxx</td></tr>`).join('')||`<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">No test panel SMS found</td></tr>`;
+}
+
 function refreshAgentNumbersFilters() {
   const rList = (rangeNames || []).slice();
   rList.sort((a,b)=>a.localeCompare(b));
@@ -1007,7 +1072,22 @@ async function openAllocAll(){const ids=selIds();if(!ids.length){alert('Please s
   document.getElementById('aaCount').innerHTML=`<b>${ids.length}</b> numbers selected — they will be allocated to the Client.`;
   document.getElementById('allocAllModal').classList.add('show');}
 async function confirmAllocAll(){const ids=selIds();const c=document.getElementById('aaClient').value,pt=document.getElementById('aaPayterm').value,po=document.getElementById('aaPayout').value;if(!c){alert('Select a client.');return;}
-  try{await API.post('/numbers/allocate',{ids,target_id:+c,payterm:pt,payout:po,rate:po});closeModal('allocAllModal');alert(`✅ ${ids.length} numbers allocated.`);loadNumbers();}catch(e){alert('❌ '+e.message);}}
+  const body={ids,target_id:+c,payterm:pt,payout:po,rate:po};
+  try{
+    /* Numbers already allocated to somebody else are never taken away silently:
+       the server reports them as `blocked`; the user is asked here and only an
+       explicit confirmation resends them with force=true. */
+    let res=await API.post('/numbers/allocate',body);
+    const blocked=(res&&res.blocked_ids)||[];
+    if(blocked.length){
+      if(confirm(`⚠ ${blocked.length} of the ${ids.length} selected numbers are already allocated to another user/client.\n\nReassign those ${blocked.length} numbers to the selected client? This moves them away from their current owner.\n\nOK = reassign · Cancel = leave them allocated as they are.`)){
+        res=await API.post('/numbers/allocate',Object.assign({},body,{ids:blocked,force:true}));
+      }
+    }
+    closeModal('allocAllModal');
+    const done=(res&&res.allocated!=null)?res.allocated:ids.length, left=(res&&res.blocked)?res.blocked:0;
+    alert(`✅ ${done} numbers allocated.`+(left?`\n⏭ ${left} numbers were left unchanged (already allocated).`:''));loadNumbers();
+  }catch(e){alert('❌ '+e.message);}}
 /* Smart Divide (to Clients) */
 async function openSmart(){const ranges=await API.get('/ranges');if(!clientsData.length)clientsData=await API.get('/users/client');
   document.getElementById('smRanges').innerHTML=ranges.map(r=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="smR" value="${r.id}" style="width:auto"/> ${r.name}</label>`).join('');
@@ -1464,6 +1544,7 @@ async function loadAgentPageData(page){
     if(page==='rateCard') return loadRateCard();
     if(page==='numbers'){ loadNumbers(); return Promise.allSettled([loadRateCard(), loadClients()]).then(refreshAgentNumbersFilters); }
     if(page==='bulkAlloc'){ await Promise.allSettled([loadClients(), loadNumberSummaryForBulk()]); return; }
+    if(page==='test'){ await loadTestRanges(); await loadTestNumbers(); renderTestRangeSelect(); return renderTest(); }
     if(page==='clients'){ buildClients(); return loadClients(); }
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
     if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return loadSms(); }

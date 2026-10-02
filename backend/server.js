@@ -2474,10 +2474,20 @@ function handleAllocate(req, res) {
     // Direct Reassignment for SMS Numbers:
     // Authorized callers can directly move numbers between permitted owners
     // within their scope (e.g. Client A -> Client B) without manual unallocation first.
-    const updParams = [...vals, ...scope.params];
+    //
+    // OWNERSHIP GUARD (the one described above but previously missing from the SQL):
+    // a plain allocate may only touch numbers that are still unallocated at the
+    // target tier or that already belong to exactly this target. Numbers that are
+    // already owned by somebody else at that tier (e.g. a client's numbers) are
+    // left untouched — `skipped`/`blocked` in the response — unless the caller
+    // explicitly asks for a reassignment with force=true. This is what stops a
+    // client allocation from silently disappearing when another allocation runs
+    // over the same ids.
+    const slotGuard = force ? '1=1' : `(n.${slotCol} IS NULL OR n.${slotCol} = ?)`;
+    const updParams = [...vals, ...scope.params, ...(force ? [] : [target.id])];
     const upd = db.runNoSave(
       `UPDATE numbers AS n SET ${sets}
-       WHERE n.id IN (SELECT id FROM ${TEMP}) AND (${scope.where})`,
+       WHERE n.id IN (SELECT id FROM ${TEMP}) AND (${scope.where}) AND ${slotGuard}`,
       updParams);
     allocatedCount = upd.changes || 0;
     // capture the post-state rows we actually own now (for history + response)
@@ -2487,6 +2497,8 @@ function handleAllocate(req, res) {
     if (db.inTransaction()) db.exec('COMMIT');
 
     const conflictRows = beforeRows.filter(r => (r.manager_id || r.agent_id || r.client_id) && r[slotCol] && r[slotCol] !== target.id);
+    // Rows the ownership guard refused to touch (owned by somebody else at the target tier).
+    const blockedRows = force ? [] : conflictRows;
     // history only for rows this call actually set to the target (before-state kept)
     try {
       db.beginBatch();
@@ -2501,9 +2513,11 @@ function handleAllocate(req, res) {
       skipped: Math.max(0, beforeRows.length - allocatedCount),
       ...(conflictRows.length ? { reassigned: conflictRows.length } : {}),
       ...(conflictRows.length && !force ? { conflicts_sample: conflictRows.slice(0, 10).map(r => ({ id: r.id, number: r.number })) } : {}),
+      /* blocked = already allocated to somebody else; untouched without force. */
+      ...(blockedRows.length ? { blocked: blockedRows.length, blocked_ids: blockedRows.map(r => r.id), blocked_sample: blockedRows.slice(0, 10).map(r => ({ id: r.id, number: r.number })) } : {}),
     };
     logAction(req, 'allocate_numbers', 'numbers',
-      { count: allocatedCount, requested: beforeRows.length, skipped: response.skipped, target: target.username, target_role: target.role, ...(rateVal ? { rate_override: rateVal } : {}), ...(force ? { force: true } : {}) });
+      { count: allocatedCount, requested: beforeRows.length, skipped: response.skipped, blocked: blockedRows.length || undefined, target: target.username, target_role: target.role, ...(rateVal ? { rate_override: rateVal } : {}), ...(force ? { force: true } : {}) });
     bumpNumbersVer();
     if (app.broadcastSseAll) app.broadcastSseAll('allocation_update', { action: 'allocate', count: allocatedCount, target_id: target.id, target_role: target.role, timestamp: Date.now() });
     if (idemKey) idempotencyStore(req, 'allocate', idemKey, response);

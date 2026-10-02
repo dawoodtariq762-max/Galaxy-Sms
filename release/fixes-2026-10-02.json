@@ -1,0 +1,92 @@
+{
+ "task": "2026-10-02 targeted fixes: (1) client numbers silently losing their client allocation, (2) Client Test Panel range filter showing nothing although the panel lists test numbers, (3) Test Panel added to the Agent panel",
+ "scope": "Only these three issues. No changes to SMS receiving, HTTP/API behaviour, SMPP, providers, DB schema, users/roles/permissions, payments, rates, commission, CDR, reports, existing business rules, theme, sidebar layout or any other panel behaviour.",
+ "changed_files": [
+  {
+   "path": "backend/server.js",
+   "bytes": 374030,
+   "sha256": "4a9ca965f75e571043b0f6da3f3a46f03ff74a6b7cd6c30b7e9fb3cd707484ad"
+  },
+  {
+   "path": "admin.html",
+   "bytes": 278551,
+   "sha256": "6a030e9d1ad69fabc29fc782b72bcaabe08c2e9227641e9904cf9fc31aaa35b3"
+  },
+  {
+   "path": "manager.html",
+   "bytes": 166281,
+   "sha256": "f4b1763f5312755dad96a424c9e8ce10f3e1b745d6b56467177bb45f5e59bcaf"
+  },
+  {
+   "path": "agent.html",
+   "bytes": 172272,
+   "sha256": "bef228a73a2a47a4f466cb1d785ba838f9d42cf503ddceb877ba750d1dd1eb63"
+  },
+  {
+   "path": "client.html",
+   "bytes": 68243,
+   "sha256": "8e21e8f7a40c227363cc0278109a14cf8c259e50f4aa45e933d48b977560054d"
+  },
+  {
+   "path": "management.html",
+   "bytes": 263985,
+   "sha256": "202c7cefcdeeda48281944ee50a0c780d724f667e85827f2d71d355f0b45d2ef"
+  }
+ ],
+ "issue1_client_allocation_lost": {
+  "symptom": "A number that was allocated to a client later appears unallocated / disappears from that client's panel without the client doing anything.",
+  "investigation": "Audited the whole lifecycle on the isolated fixture: 173 API routes, all 24 UPDATE numbers sites, every timer (runRetentionSweep, providerSync, SMPP outbox, cleanupApiIntegrationTables, STATS-RECONCILE), DB triggers (only FTS), backend/backup.js, scripts/, ecosystem.config.js, exportWorker.js, the api-integration poller and every front-end call site. A Playwright sweep over every page of all four panels (178s) recorded 0 non-GET API calls and 0 ownership changes; a controlled allocate->monitor test (423s) showed no change in client_id. There is no scheduled/background/auto-release process for client ownership.",
+  "root_cause": "POST /api/numbers/allocate -> handleAllocate() (backend/server.js). The UPDATE it runs was only limited by the caller's hierarchy scope: `WHERE n.id IN (SELECT id FROM tmp_alloc_ids) AND (<scope>)`. The ownership guard documented in the comment right above it ('only unallocated numbers (or numbers already owned by this target) are assigned - silent ownership steal is impossible / Explicit force=true ... reassigns') was never in the SQL, and no panel ever sent force=true. Any allocate request whose id list contains numbers that already belong to a client therefore overwrote them: allocating to another client moved the numbers away from the first client, and allocating to a manager/agent tier (or a range/select-all that includes client rows) wrote client_id=NULL - i.e. the client's numbers became unallocated with no confirmation and no audit of a deliberate reassignment.",
+  "fix": "handleAllocate now only touches numbers that are unallocated at the target tier or already owned by that exact target, unless the caller explicitly sends force=true (the deliberate reassignment feature is preserved). The response additionally reports blocked / blocked_ids / blocked_sample so a UI can ask before reassigning. admin.html, manager.html, agent.html and management.html 'Allocate All' flows now show the real allocated count, ask for confirmation when numbers are already allocated to somebody else, and only then resend those ids with force=true.",
+  "verification": {
+   "harness": "galaxy-ui-work/test-issue1-api.cjs (13/13 PASS), galaxy-ui-work/test-issue1-ui.cjs (8/8 PASS), galaxy-ui-work/lifecycle-test.cjs (pre-fix monitor, 423s, 0 unexplained releases), galaxy-ui-work/probe-panel-writes.cjs (0 write calls, 0 ownership changes)",
+   "checks": [
+    "plain allocate of a client-owned number returns allocated:0, blocked:N and the client keeps the number (A1-A4)",
+    "force=true still performs the deliberate reassignment (B1-B2)",
+    "re-allocating to the same owner and allocating free numbers is unaffected (C1, D1)",
+    "a manager allocating a client's number down to an agent no longer strips the client (E1-E2)",
+    "client ownership is identical before/after every attempt (F)",
+    "through the real UI: the prompt appears, Cancel leaves everything untouched, OK reassigns only after that explicit confirmation (1a-2b)",
+    "monitored window with panels navigating: no number changed owner, history rows are all explicit user actions (3a-3c)"
+   ]
+  }
+ },
+ "issue2_client_test_panel_range_filter": {
+  "symptom": "Client Test Panel: the Range dropdown shows no options ('Not Available') although the panel below lists test numbers for those ranges.",
+  "root_cause": "The Range filter of the client Test Panel was built from /api/ranges only. That route is ownership scoped for non-admins (P19f: only ranges in which the user holds numbers), while the Test Panel data itself (/api/test-numbers, /api/test-panel/sms) is the shared test-number pool. A client with no allocated numbers - or with numbers in only one range - therefore got an empty (or partial) filter while the panel was showing test numbers of ranges that never appeared in it.",
+  "fix": "client.html: the Test Panel range list is now the union of the ranges the client owns (unchanged /api/ranges scope) and the ranges of the active test numbers the panel is already displaying (/api/test-numbers). No new endpoint, no server-side scope change and no permission widened; ranges that have neither the client's numbers nor test numbers stay unavailable. The agent Test Panel (issue 3) uses the same rule.",
+  "verification": {
+   "harness": "galaxy-ui-work/test-issue2-client-panel.cjs (15/15 PASS), galaxy-ui-work/dropdown-verify.cjs (61/61 PASS)",
+   "checks": [
+    "client with zero allocated numbers: dropdown now lists the ranges the panel is showing while /api/ranges still returns [] (1a-1d)",
+    "selecting Range A/B filters both the test numbers and the SMS table; Reset restores all rows (1e-1h)",
+    "a range with no test numbers and no client numbers stays unavailable, for both clients (2a-2c)",
+    "client owning only range-B numbers sees his own range plus the test ranges, filter works (3a-3c)",
+    "the panel performs exactly the same API calls as before - no new endpoint, no widened permissions (4a)"
+   ]
+  }
+ },
+ "issue3_agent_test_panel": {
+  "symptom": "The Agent panel had no Test Panel at all.",
+  "fix": "agent.html: new top-level 'Test Panel' entry in the existing rail navigation (same icon/structure as the Manager/Client Test Panel, no sidebar redesign) plus a #page-test section that reuses the existing Test Panel endpoints (/api/test-numbers, /api/test-panel/sms), the existing range-filter logic and the existing agent masking rule (CLI masked, SMS body never shown - the same rule admin.html models as 'admin=full, agent=masked'). Read-only: the page performs no write call.",
+  "verification": {
+   "harness": "galaxy-ui-work/test-issue3-agent-panel.cjs (19/19 PASS), galaxy-ui-work/smoke-all-panels.cjs (50 pages, 0 JS errors, 0 write calls)",
+   "checks": [
+    "entry exists and opens #page-test; heading/table structure identical to the other panels (1a-2e)",
+    "CLI masked in every row, real CLI and OTP digits never rendered, SMS body never rendered (3a-3d)",
+    "range filter limits both tables correctly (4a-4b)",
+    "no write API call, no admin/manager/management-only endpoint, all responses 2xx, no JS error (5a-5d)",
+    "every other agent page still renders and no JS error appears (6a-6b)"
+   ]
+  }
+ },
+ "unchanged_systems": [
+  "SMS receiving / HTTP ingest / SMPP",
+  "API behaviour and response shapes (only the existing allocate response gained additive blocked* fields)",
+  "number allocation, range allocation, self allocate, smart divide semantics for unallocated stock",
+  "payments, ledger, rates, commission, CDR, reports",
+  "users, roles, permissions, DB schema, business rules",
+  "theme, sidebar layout, navigation of existing pages",
+  "Test Panel data, masking rules and endpoints"
+ ]
+}
