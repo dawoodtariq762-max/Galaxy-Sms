@@ -624,7 +624,7 @@ function money(v){return '$ '+cleanDec(v);}
 async function loadProfile(){try{const me=await API.get('/me');CLIENT=me.name||me.username||CLIENT;document.querySelectorAll('.nm').forEach(e=>e.textContent=CLIENT);document.querySelectorAll('.av').forEach(e=>e.textContent=(CLIENT[0]||'C').toUpperCase());}catch(e){}}
 async function loadDashboard(){try{const d=await API.get('/dashboard').catch(e=>{window.GXDashboard && GXDashboard.error();throw e;});const cards=document.querySelectorAll('#page-dashboard .stat-card .stat-info h3');/* P19c FIX#1: Client dashboard ab THIS WEEK payout dikhata hai (payout_week — Monday-start UK week, backend ka existing engine). Rollback: '$ '+pay3(d.payout_month) */[(d.otp_today||d.sms_today||0),(d.sms_yesterday||0),(d.sms_7d||0),'$ '+pay3(d.payout_week)].forEach((v,i)=>{if(cards[i])cards[i].textContent=String(v)});const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];drawWeek((d.daily7||[]).map(x=>({l:days[new Date(x.date).getDay()]||'',v:x.count||0})));window.GX&&GX.map('#gxMap',(d.sms_by_country||[]));
     window.GXDashboard && GXDashboard.render(d, 'client');
-    window.GXDashboard && GXDashboard.refreshExtras('client');const recentCard=[...document.querySelectorAll('#page-dashboard .card')].find(c=>c.textContent.includes('Recent Activity'));if(recentCard){const head=recentCard.querySelector('.card-head')?.outerHTML||'';recentCard.innerHTML=head+((d.recent||[]).map(r=>`<div class="li"><div class="l"><div class="ic si ro"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><div class="t1">New SMS — ${r.number||'—'}</div><div class="t2">${(r.received_at||'').slice(0,19)} · ${r.cli||'—'}</div></div></div></div>`).join('')||'<div class="muted" style="padding:18px">No recent activity yet</div>');}}catch(e){console.warn(e)}}
+    window.GXDashboard && GXDashboard.refreshExtras('client');gxRenderClientRecent(d.recent);}catch(e){console.warn(e)}}
 async function loadRanges(){
   try{
     const ranges=await API.get('/ranges');
@@ -669,7 +669,7 @@ async function loadClientPageData(page){
   try{
     if(page==='dashboard') return loadDashboard();
     if(page==='numbers'){ loadRanges(); return loadNumbers(); }
-    if(page==='stats'){ await loadRanges(); return renderStats(); }
+    if(page==='stats'){ await loadRanges(); return renderStats(true); }
     if(page==='test'){ await loadRanges(); await loadTestNumbers(); renderTestRangeSelect(); return renderTest(); }
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
   }catch(e){console.warn('loadClientPageData failed',page,e);}
@@ -732,7 +732,7 @@ async function loadNumbers(){return renderNumbers();}
 /* SERVER-SIDE SMS STATS (performance) */
 let cliStatsPager={page:1,totalPages:1,signature:''};
 function cliStatsSig(o){try{return JSON.stringify(o)}catch(e){return String(Date.now())}}
-async function renderStats(){if(!document.getElementById('statsBody'))return;
+async function renderStats(fresh){if(!document.getElementById('statsBody'))return;
   const uk=(window.API&&API.ukToday)?API.ukToday():todayStr();
   const f=document.getElementById('stFrom'),t=document.getElementById('stTo');
   if(f&&!f.value){f.value=uk;f.dataset.gxAuto='1';} else if(f&&f.dataset.gxAuto==='1'&&f.value!==uk){f.value=uk;}
@@ -753,6 +753,7 @@ async function renderStats(){if(!document.getElementById('statsBody'))return;
     /* ---- GROUPED MODE: /api/sms/report (client scope backend-enforced) ---- */
     const sig=cliStatsSig({mode:'group',g:groups.join(','),f:base.toString(),len});if(cliStatsPager.signature!==sig){cliStatsPager.page=1;cliStatsPager.signature=sig;}
     const params=new URLSearchParams(base);params.set('group',groups.join(','));params.set('page',String(cliStatsPager.page));params.set('limit',len);
+    if(fresh)params.set('_gxr',String(Date.now()));   /* auto-refresh: bypass the short GET cache */
     let data={rows:[],total:0,page:1,limit:25,totalPages:1,totals:{}};try{data=await API.get('/sms/report?'+params.toString())}catch(e){console.warn(e)}
     cliStatsPager.page=data.page||1;cliStatsPager.totalPages=data.totalPages||1;
     const dimL={hour:'Hour',day:'Day',month:'Month',range:'Range',number:'Number',cli:'CLI',currency:'Currency'};
@@ -769,6 +770,7 @@ async function renderStats(){if(!document.getElementById('statsBody'))return;
   /* ---- DETAIL MODE: /api/sms/paged (OTP view — unchanged columns) ---- */
   const sig=cliStatsSig({mode:'detail',f:base.toString(),len});if(cliStatsPager.signature!==sig){cliStatsPager.page=1;cliStatsPager.signature=sig;}
   const params=new URLSearchParams(base);params.set('page',String(cliStatsPager.page));params.set('limit',len);params.set('sort','date');params.set('dir','desc');
+  if(fresh)params.set('_gxr',String(Date.now()));     /* auto-refresh: bypass the short GET cache */
   let data={rows:[],total:0,page:1,limit:25,totalPages:1};try{data=await API.get('/sms/paged?'+params.toString())}catch(e){console.warn(e)}cliStatsPager.page=data.page||1;cliStatsPager.totalPages=data.totalPages||1;
   const rows=(data.rows||[]).map(r=>{const msg=r.message||'';return {range:r.range_name||'',number:r.number||'',cli:r.cli||'',msg,date:(r.received_at||'').slice(0,19),otp:r.otp_code||extractOTP(msg)}});
   stats=rows;stHead.innerHTML='<tr><th>Date</th><th>Range</th><th>Number</th><th>CLI</th><th>OTP Code</th><th>Copy</th><th>Message</th></tr>';
@@ -777,6 +779,57 @@ async function renderStats(){if(!document.getElementById('statsBody'))return;
   statsInfo.textContent=`Showing ${data.total===0?0:Math.min(data.total,((data.page||1)-1)*Number(data.limit||25)+rows.length)} of ${data.total||0} records (UK: ${from||'…'} → ${to||'…'})`;const pag=statsInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,cliStatsPager,renderStats);}
 function stResetFilters(){ ['stTFrom','stTTo','stNumber','stCliSearch'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['stRange'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['hour','day','month','range','number','cli','currency'].forEach(d=>{const e=document.getElementById('stGb_'+d); if(e) e.checked=false;}); ['stFrom','stTo'].forEach(id=>{const e=document.getElementById(id); if(e){e.value='';e.dataset.gxAuto='';}}); renderStats(); }
 async function loadStats(){ await renderStats(); renderNumbers(); }
+
+/* ============================================================================
+   P20 LATEST-FIRST AUTO REFRESH - Client SMS Detailed Report (+ newest-SMS card)
+   The client's newest-OTP surfaces are the SMS Detailed Report page (stats) and the
+   dashboard "Recent Activity" list. Both pick up a newly received OTP/SMS at the TOP
+   automatically, without the user touching a Range/filter. Backend ordering is already
+   correct (received_at DESC, id DESC - unchanged); these views simply never re-fetched.
+   A limit-1 probe detects a new top record, then the existing loader re-runs with a
+   cache-bypassing GET. Columns, filters, pagination and scoping are untouched.
+   ========================================================================== */
+const GX_SMS_REFRESH_MS = 8000;
+let gxSmsTopSeenId = null, gxSmsTotalSeen = null;
+function gxClientSmsPageVisible(){
+  const vis=(id)=>{ const el=document.getElementById('page-'+id); return !!(el&&el.classList.contains('active')); };
+  if(vis('stats')) return 'stats';
+  if(vis('dashboard')) return 'dashboard';
+  return '';
+}
+async function gxSmsTopProbeId(){
+  /* the newest row of this client's scope + the scoped total: two cheap facts, no row data */
+  try{
+    const d=await API.get('/sms/paged?page=1&limit=1&sort=date&dir=desc&_gxr='+Date.now());
+    const r=d&&d.rows&&d.rows[0];
+    return { id:r?String(r.id):'', total:String(d&&d.total!=null?d.total:'') };
+  }catch(e){ return null; }
+}
+/* one shared renderer for the dashboard "Recent Activity" card (KPI cards / charts untouched) */
+function gxRenderClientRecent(list){
+  const recentCard=[...document.querySelectorAll('#page-dashboard .card')].find(c=>c.textContent.includes('Recent Activity'));
+  if(!recentCard) return;
+  const head=recentCard.querySelector('.card-head')?.outerHTML||'';
+  recentCard.innerHTML=head+((list||[]).map(r=>`<div class="li"><div class="l"><div class="ic si ro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><div class="t1">New SMS — ${r.number||'—'}</div><div class="t2">${(r.received_at||'').slice(0,19)} · ${r.cli||'—'}</div></div></div></div>`).join('')||'<div class="muted" style="padding:18px">No recent activity yet</div>');
+}
+async function gxSmsAutoRefresh(){
+  if(document.hidden) return;
+  const page=gxClientSmsPageVisible();
+  if(!page) return;
+  const probe=await gxSmsTopProbeId();
+  if(!probe||!probe.id) return;
+  if(gxSmsTopSeenId===null){ gxSmsTopSeenId=probe.id; gxSmsTotalSeen=probe.total; return; } /* first look */
+  /* refresh when a NEW top record appeared, or when the scoped total changed (a new SMS whose
+     carrier timestamp is older still has to show up, in its own date position) */
+  const changed = (probe.id!==gxSmsTopSeenId) || (probe.total!==gxSmsTotalSeen);
+  gxSmsTopSeenId=probe.id; gxSmsTotalSeen=probe.total;
+  if(!changed) return;
+  if(page==='stats') return renderStats(true);              /* keeps the current page + filters */
+  try{ const d=await API.get('/dashboard?_gxr='+Date.now()); gxRenderClientRecent(d.recent); }catch(e){}
+}
+setInterval(gxSmsAutoRefresh, GX_SMS_REFRESH_MS);
+setTimeout(gxSmsAutoRefresh, 1500);                          /* establish the baseline early */
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) setTimeout(gxSmsAutoRefresh, 200); });
 
 /* FAST PRIORITY INIT */
 loadProfile();loadDashboard();

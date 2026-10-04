@@ -1254,7 +1254,7 @@ async function gxPopSmsFilterLists(){
   }catch(e){}
 }
 function srResetFilters(){window.__srSort={k:'',d:''};gxResetSortHeads('srSort_'); ['srTFrom','srTTo','srNumber'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); ['srRange'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';}); setDefaultDates('srFrom','srTo'); /* P17: reset = DEFAULT state (UK aaj), full-history nahi */ renderSmsReport(); }
-async function loadSms(){ try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; }
+async function loadSms(fresh){ try{ smsRecords=await API.get(fresh?('/sms?_gxr='+Date.now()):'/sms'); }catch(e){ smsRecords=[]; }
   const byCli={};smsRecords.forEach(r=>{const c=r.client_name||'—';byCli[c]=(byCli[c]||0)+1;});
   const b=document.getElementById('clSumBody');
   if(b)b.innerHTML=Object.keys(byCli).map(c=>`<tr><td><span class="tag tag-cli">${c}</span></td><td class="cell-money">${byCli[c]}</td><td class="cell-money" style="color:#86efac">$ ${sumPay((smsRecords||[]).filter(r=>r.client_name===c))}</td></tr>`).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:16px">No records found</td></tr>`;
@@ -1419,6 +1419,9 @@ async function renderSmsDetail_legacy_dead_P19(){/* P19: DEAD legacy copy — ka
   }
   const state=agtPager('agtSmsDetailServer');const sig=agtSig({dateVal,rangeVal,userVal,cliVal,tfVal,ttVal,search,len});if(state.signature!==sig){state.page=1;state.signature=sig;}
   const params=new URLSearchParams({page:String(state.page),limit:len,from:dateFrom,to:dateTo,sort:'date',dir:'desc'});
+  /* auto-refresh passes fresh=1 -> cache-bypassing GET so a just-received OTP is really fetched
+     (unknown query key: the endpoint ignores it, it only makes the short read caches miss) */
+  if(fresh)params.set('_gxr',String(Date.now()));
   if(rangeVal)params.set('range',rangeVal); if(userVal)params.set('client',userVal); if(search)params.set('search',search);
   if(cliVal)params.set('cli',cliVal); if(tfVal)params.set('tfrom',tfVal); if(ttVal)params.set('tto',ttVal);
   let data={rows:[],total:0,page:1,limit:25,totalPages:1,totalPayment:'0'}; try{data=await API.get('/sms/paged?'+params.toString())}catch(e){}
@@ -1539,7 +1542,7 @@ async function loadRateCard(){
 }
 async function loadNumbers(){ refreshAgentNumbersFilters(); return renderNumbers(); }
 async function loadClients(){ try{ clientsData=await API.get('/users/client'); }catch(e){ clientsData=[]; } refreshClients(); refreshClientSelects(); renderClients(); }
-async function loadSms(){ try{ smsRecords=await API.get('/sms'); }catch(e){ smsRecords=[]; } cdr=(smsRecords||[]).map(smsToCdr); recentTests=(smsRecords||[]).slice(0,50).map(r=>({date:(r.received_at||'').slice(0,19),range:r.range_name||'—',num:r.number||'',cli:r.cli||'',msg:r.message||''})); refreshClients(); const byCli={};smsRecords.forEach(r=>{const c=r.client_name||'—';byCli[c]=(byCli[c]||0)+1;});const b=document.getElementById('clSumBody');if(b)b.innerHTML=Object.keys(byCli).map(c=>`<tr><td><span class="tag tag-cli">${c}</span></td><td class="cell-money">${byCli[c]}</td><td class="cell-money" style="color:#86efac">$ ${sumPay((smsRecords||[]).filter(r=>r.client_name===c))}</td></tr>`).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:16px">No records found</td></tr>`; if(document.getElementById('srBody'))renderSmsReport();if(document.getElementById('sdBody'))renderSmsDetail();if(document.getElementById('csBody'))renderClientStats();['range','number'].forEach(k=>{if(document.getElementById(k+'Body')){renderDrill(k);}});}
+async function loadSms(fresh){ try{ smsRecords=await API.get(fresh?('/sms?_gxr='+Date.now()):'/sms'); }catch(e){ smsRecords=[]; } cdr=(smsRecords||[]).map(smsToCdr); recentTests=(smsRecords||[]).slice(0,50).map(r=>({date:(r.received_at||'').slice(0,19),range:r.range_name||'—',num:r.number||'',cli:r.cli||'',msg:r.message||''})); refreshClients(); const byCli={};smsRecords.forEach(r=>{const c=r.client_name||'—';byCli[c]=(byCli[c]||0)+1;});const b=document.getElementById('clSumBody');if(b)b.innerHTML=Object.keys(byCli).map(c=>`<tr><td><span class="tag tag-cli">${c}</span></td><td class="cell-money">${byCli[c]}</td><td class="cell-money" style="color:#86efac">$ ${sumPay((smsRecords||[]).filter(r=>r.client_name===c))}</td></tr>`).join('')||`<tr><td colspan="3" class="muted" style="text-align:center;padding:16px">No records found</td></tr>`; if(document.getElementById('srBody'))renderSmsReport();if(document.getElementById('sdBody'))renderSmsDetail();if(document.getElementById('csBody'))renderClientStats();['range','number'].forEach(k=>{if(document.getElementById(k+'Body')){renderDrill(k);}});}
 function baRow(i){const q=parseInt(document.getElementById('bq'+i).value),c=document.getElementById('bc'+i).value;if(!q||!c){alert('Select client and quantity.');return;}const row=baData[i],cl=(clientsData||[]).find(x=>x.username===c);if(!row||!cl)return;API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[cl.id],qty:q,payterm:(document.getElementById('baPayterm')?.value||'weekly_7_1')}).then(res=>{alert(`✅ ${res.total||0} numbers allocated.`);loadNumberSummaryForBulk();renderNumbers();}).catch(e=>alert('❌ '+e.message));}
 function baUn(i){const q=parseInt(document.getElementById('bu'+i).value),row=baData[i];if(!q||!row){alert('Enter quantity.');return;}const ids=(numData||[]).filter(n=>n.range===row.range&&n.client).slice(0,q).map(n=>n.id);if(!ids.length){alert('Allocated numbers were not found.');return;}API.post('/numbers/unallocate',{ids}).then(()=>{alert(`✅ ${ids.length} numbers unallocated.`);loadNumbers();}).catch(e=>alert('❌ '+e.message));}
 function doBulk(){const r=document.getElementById('baRange').value,c=document.getElementById('baClient').value,q=parseInt(document.getElementById('baQty').value);if(!r||!c||!q){alert('Range, Select client and quantity.');return;}const row=(baData||[]).find(x=>x.range===r)|| (rateCard||[]).find(x=>x.range===r),cl=(clientsData||[]).find(x=>x.username===c);if(!row||!cl)return;API.post('/numbers/smart-divide',{range_ids:[row.id],target_ids:[cl.id],qty:q,payterm:(document.getElementById('baPayterm')?.value||'weekly_7_1')}).then(res=>{alert(`✅ ${res.total||0} numbers allocated.`);document.getElementById('baQty').value='';loadNumberSummaryForBulk();renderNumbers();}).catch(e=>alert('❌ '+e.message));}
@@ -1607,8 +1610,8 @@ async function loadAgentPageData(page){
     if(page==='test'){ await loadTestRanges(); await loadTestNumbers(); renderTestRangeSelect(); return renderTest(); }
     if(page==='clients'){ buildClients(); return loadClients(); }
     if(page==='complaints') return window.GXChat?GXChat.open('complaints'):null;
-    if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return loadSms(); }
-    if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); fillSdFilterSelects(); return loadSms(); }
+    if(page==='smsReport'){ if(!document.getElementById('srBody')) buildSmsReport(); return loadSms(true); }
+    if(page==='smsDetail'){ if(!document.getElementById('sdBody')) buildSmsDetail(); fillSdFilterSelects(); return loadSms(true); }
     if(page==='clientStats'){ if(!document.getElementById('csBody')) buildClientStats(); return loadSms(); }
     if(['rangeStats','numberStats'].includes(page)){ const k=page.replace('Stats',''); if(!document.getElementById(k+'Body')) buildDrill(k); return loadSms(); }
     if(page==='payment'){
@@ -1640,14 +1643,15 @@ function gxSdSumSort(col){ const st=(window.__sdSumSort=window.__sdSumSort||{k:'
 function srListArgs(){ const g=(id)=>{const e=document.getElementById(id);return (e&&e.value)?String(e.value).trim():'';}; const o={from:g('srFrom'),to:g('srTo'),tfrom:g('srTFrom'),tto:g('srTTo'),range:g('srRange'),number:g('srNumber'),search:g('srSearch')}; Object.keys(o).forEach(k=>{if(!o[k])delete o[k];}); return o; }
 function sdListArgs(){ const g=(id)=>{const e=document.getElementById(id);return (e&&e.value)?String(e.value).trim():'';}; const o={from:g('sdDateFrom'),to:g('sdDateTo'),range:g('sdRange'),client:g('sdUser'),search:g('sdSearch')}; Object.keys(o).forEach(k=>{if(!o[k])delete o[k];}); return o; }
 function shownSrv(p,l,n,t){return t===0?0:Math.min(t,((p-1)*Number(l||25))+n)}
-async function renderSmsReport(){if(!document.getElementById('srBody'))return;gxPopSmsFilterLists();const len=srLen.value||'25',search=(srSearch.value||'').trim();
+async function renderSmsReport(fresh){if(!document.getElementById('srBody'))return;gxPopSmsFilterLists();const len=srLen.value||'25',search=(srSearch.value||'').trim();
   const from=(document.getElementById('srFrom')?.value)||'',to=(document.getElementById('srTo')?.value)||'';
   const tfrom=(document.getElementById('srTFrom')?.value)||'',tto=(document.getElementById('srTTo')?.value)||'';
   const rangeVal=(document.getElementById('srRange')?.value)||'',numberVal=(document.getElementById('srNumber')?.value||'').trim();
   const state=agtPager('agtSmsReportServer');const _sst=(window.__srSort=window.__srSort||{k:'',d:''});const sig=agtSig({len,search,from,to,tfrom,tto,rangeVal,numberVal,sk:_sst.k,sd:_sst.d});if(state.signature!==sig){state.page=1;state.signature=sig;}
   const params=new URLSearchParams({page:String(state.page),limit:len,search,sort:(_sst.k||'date'),dir:(_sst.k?_sst.d:'desc')});
+  if(fresh)params.set('_gxr',String(Date.now()));   /* auto-refresh: bypass the short GET cache */
   if(from)params.set('from',from); if(to)params.set('to',to); if(tfrom)params.set('tfrom',tfrom); if(tto)params.set('tto',tto); if(rangeVal)params.set('range',rangeVal); if(numberVal)params.set('number',numberVal);let data={rows:[],total:0,page:1,limit:25,totalPages:1};try{data=await API.get('/sms/paged?'+params.toString())}catch(e){}state.page=data.page||1;state.totalPages=data.totalPages||1;const rows=data.rows||[];srBody.innerHTML=rows.map(r=>`<tr><td class="muted">${(r.received_at||'').slice(0,19)}</td><td><span class="tag tag-cli">${r.client_name||'—'}</span></td><td>${r.range_name||'—'}</td><td class="mono">${r.number||''}</td><td class="mono">${r.cli||''}</td><td class="cell-money">${cleanDec(r.payout_rate||r.payout_amount||0)}</td><td class="msg-body">${r.message||''}</td></tr>`).join('')||`<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;srInfo.textContent=`Showing ${shownSrv(data.page,data.limit,rows.length,data.total)} of ${data.total||0} records`;const pag=srInfo.closest('.table-foot')?.querySelector('.pagination');if(pag&&window.drawServerPagination)drawServerPagination(pag,state,renderSmsReport);}
-async function renderSmsDetail(){if(!document.getElementById('sdBody'))return;
+async function renderSmsDetail(fresh){if(!document.getElementById('sdBody'))return;
   const chips=document.getElementById('sdChips'); if(chips) chips.innerHTML=sdChipsHtml();
   const _sdF=(document.getElementById('sdDateFrom')?.value)||'',_sdT=(document.getElementById('sdDateTo')?.value)||'';let dateFrom=_sdF,dateTo=_sdT;if(!dateFrom&&!dateTo){dateFrom=todayStr();dateTo=todayStr();}else if(dateFrom&&!dateTo){dateTo='2099-12-31';}else if(!dateFrom&&dateTo){dateFrom='1970-01-01';}if(dateFrom>dateTo){const _s=dateFrom;dateFrom=dateTo;dateTo=_s;}
   const tfVal=sdUseTime?.checked?(document.getElementById('sdTimeFrom')?.value||''):'',ttVal=sdUseTime?.checked?(document.getElementById('sdTimeTo')?.value||''):'',search=(sdSearch?.value||'').trim(),len=sdLen?.value||'25';
@@ -1833,6 +1837,53 @@ async function renderDrill(kind){
   body.innerHTML=rows.map(x=>`<tr><td><b>${kind==='number'?'<span class="mono">'+x.val+'</span>':x.val}</b></td><td><span class="tag tag-cli">${c||'All'}</span></td><td class="cell-money">${x.sms.toLocaleString()}</td><td class="cell-money" style="color:#86efac">${money(x.pay)}</td></tr>`).join('')||`<tr><td colspan="4" class="muted" style="text-align:center;padding:24px">No records found</td></tr>`;
   document.getElementById(kind+'Info').textContent=`Showing ${rows.length} of ${pag.total} rows`;
 }
+
+/* ============================================================================
+   P20 LATEST-FIRST AUTO REFRESH - Agent SMS CDR Report + SMS Detail Report
+   A newly received OTP/SMS must reach the TOP of the report on its own; the user must
+   not have to touch a Range/filter first. The backend ordering is already correct
+   (ORDER BY s.received_at DESC, s.id DESC - unchanged, same stored timestamp field);
+   these reports simply never re-fetched after their first paint.
+   A light probe asks for THE newest row of this agent's scope (limit 1). Only when that
+   id changes is the visible report re-loaded through its existing loader (fresh=1 ->
+   cache-bypassing GET), so the new record is really fetched instead of coming from the
+   panel's short GET cache. Columns, filters, sorting, pagination and role scoping are
+   untouched.
+   ========================================================================== */
+const GX_SMS_REFRESH_MS = 8000;
+let gxSmsTopSeenId = null, gxSmsTotalSeen = null;
+function gxAgentSmsPageVisible(){
+  const vis=(id)=>{ const el=document.getElementById('page-'+id); return !!(el&&el.classList.contains('active')); };
+  if(vis('smsReport')) return 'smsReport';
+  if(vis('smsDetail')) return 'smsDetail';
+  return '';
+}
+async function gxSmsTopProbeId(){
+  /* the newest row of this role's scope + the scoped total: two cheap facts, no row data */
+  try{
+    const d=await API.get('/sms/paged?page=1&limit=1&sort=date&dir=desc&_gxr='+Date.now());
+    const r=d&&d.rows&&d.rows[0];
+    return { id:r?String(r.id):'', total:String(d&&d.total!=null?d.total:'') };
+  }catch(e){ return null; }
+}
+async function gxSmsAutoRefresh(){
+  if(document.hidden) return;
+  const page=gxAgentSmsPageVisible();
+  if(!page) return;
+  const probe=await gxSmsTopProbeId();
+  if(!probe||!probe.id) return;
+  if(gxSmsTopSeenId===null){ gxSmsTopSeenId=probe.id; gxSmsTotalSeen=probe.total; return; } /* first look */
+  /* refresh when a NEW top record appeared, or when the scoped total changed (a new SMS whose
+     carrier timestamp is older still has to show up, in its own date position) */
+  const changed = (probe.id!==gxSmsTopSeenId) || (probe.total!==gxSmsTotalSeen);
+  gxSmsTopSeenId=probe.id; gxSmsTotalSeen=probe.total;
+  if(!changed) return;
+  if(page==='smsReport') await renderSmsReport(true);       /* the page's own server-paged loader */
+  else await renderSmsDetail(true);                         /* keeps the current page + filters */
+}
+setInterval(gxSmsAutoRefresh, GX_SMS_REFRESH_MS);
+setTimeout(gxSmsAutoRefresh, 1500);                          /* establish the baseline early */
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) setTimeout(gxSmsAutoRefresh, 200); });
 
 /* FAST PRIORITY INIT */
 loadProfile();loadDashboard();

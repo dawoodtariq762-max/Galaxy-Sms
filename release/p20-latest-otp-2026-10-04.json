@@ -1,0 +1,80 @@
+{
+  "release": "p20-latest-otp-2026-10-04",
+  "title": "Agent + Client SMS CDR / Detail reports: newest OTP appears at the top automatically",
+  "date": "2026-10-04",
+  "base": "Galaxy-SMS-P19k-Source-v6.zip",
+  "problem": {
+    "reported": "A newly received OTP/SMS is not reliably shown at the top of the Agent and Client SMS CDR / Detail reports; older records stay above it and it only becomes visible after searching/filtering by a Range or another filter action.",
+    "root_cause": "Frontend staleness. The CDR/Detail views were loaded once (page open / navigation) and never re-fetched: no polling of any kind existed on these pages, and the shared client-side GET cache (api.js: /sms 5 s, /sms/paged 2.5 s, key = full URL incl. query) kept every repeat request on the same URL stale. Changing a filter changed the URL, so it missed the cache and pulled fresh data - exactly the 'it appears after searching a Range' symptom.",
+    "backend_verified_correct": [
+      "GET /api/sms            -> ORDER BY s.received_at DESC LIMIT <role cap> (smsRowsForScope)",
+      "GET /api/sms/paged      -> ORDER BY s.received_at DESC, s.id DESC (smsPagedOrderSql, sort=date&dir=desc)",
+      "received_at is written by every ingest path as UTC 'YYYY-MM-DD HH:MM:SS' (datetime('now') default; carrier api_dt normalised by parseIncomingDate) -> string ordering == chronological ordering",
+      "page-1 / page-2 windows are disjoint and strictly descending (asserted in the harness, A5-A8)"
+    ]
+  },
+  "fix": {
+    "scope": "frontend only (agent.html, client.html). No backend, no SQL, no schema, no permission change.",
+    "mechanism": "P20 latest-first auto refresh: every GX_SMS_REFRESH_MS (8000 ms, only when the browser tab is visible AND one of the affected report pages is the active page) the panel asks for two cheap facts - the newest row of its own role scope (limit 1) and the scoped total - via GET /api/sms/paged?page=1&limit=1&sort=date&dir=desc. When either fact changes (new top record, or a new row whose carrier timestamp is older) the visible page is re-loaded through ITS OWN existing loader with a cache-bypassing GET. On tab focus (visibilitychange) the check runs immediately. No rows are ever loaded into the browser just to detect changes.",
+    "cache_bypass": "the refresh GETs append an unknown _gxr=<ms> query key: the endpoints ignore it, and it changes both the browser cache key (api.js cachedGet) and the server read-cache key, so the just-received record is really fetched.",
+    "loaders_used": {
+      "agent smsReport": "renderSmsReport(true) - the page's existing server-paged renderer (page/limit/search/from/to/tfrom/tto/range/number/sort untouched)",
+      "agent smsDetail": "renderSmsDetail(true) - existing server-paged renderer; current page + filters kept",
+      "client stats (SMS Detailed Report)": "renderStats(true) - existing server-paged renderer; current page + filters kept",
+      "client dashboard Recent Activity": "gxRenderClientRecent(d.recent) from a fresh GET /dashboard - only that card's newest-SMS list is re-rendered; KPI cards, charts and map are untouched"
+    },
+    "page_open_fresh": "opening the two agent report pages now loads with fresh=1 (loadSms(true) / renderStats(true)) so the newest record is there on first paint as well.",
+    "pagination_behaviour": "the loaders re-run with the current pager state; the signature only resets the page when filters/page-size change, so a refresh never jumps the user back to page 1 and never duplicates rows (the table is re-rendered from the response, never appended)."
+  },
+  "files": {
+    "agent.html": {
+      "hunks": 6,
+      "bytes": 179112,
+      "sha256": "300d9ba9e59bab7e4d8eeab068eeb0b553ce3f2062b04251b69f9628e3aa234e"
+    },
+    "client.html": {
+      "hunks": 6,
+      "bytes": 75126,
+      "sha256": "c101dc45cc2ccd47ec3865ee3b94809cf681a9365e57d2d3a0528183998c1164"
+    }
+  },
+  "not_changed": [
+    "backend/server.js and every other backend file (byte-identical to v6)",
+    "manager.html, admin.html, management.html, test.html, assets/*, api.js (byte-identical to v6)",
+    "report columns, filters, sorting, grouping, pagination, CSV/export, permissions and role scoping",
+    "rates, payout calculations, provider rate, allocation/ownership, CDR/SMS storage, authentication"
+  ],
+  "tests": {
+    "harness": "galaxy-ui-work/test-latest-otp.cjs (55 checks)",
+    "run": "cd galaxy-ui-work && bash reseed-fixture.sh && LD_LIBRARY_PATH=/tmp/pwlibs/root/usr/lib/x86_64-linux-gnu:/tmp/pwlibs/root/lib/x86_64-linux-gnu node test-latest-otp.cjs",
+    "result": "55 PASS / 0 FAIL on a freshly re-seeded fixture; the harness deletes the SMS rows it injects",
+    "covered": [
+      "A: backend ordering = newest first, stored received_at used as-is, page 1/2 disjoint + descending, client scope respected",
+      "S1 agent SMS Report: new SMS at top automatically (measured ~6 s) without any filter action; 2nd SMS becomes the new top; ordering kept; no duplicate copy; multi-page pagination via the pager; back to page 1; range filter; search filter; 0 JS errors",
+      "S2 agent Detail Report: same set + number filter",
+      "S3 client Detailed Report: same set + number filter",
+      "S4 client dashboard Recent Activity: newest SMS at top automatically; 0 JS errors"
+    ],
+    "regressions_green_on_final_code": {
+      "test-p19k-api.cjs": "80/0",
+      "test-p19k-ui.cjs": "81/0",
+      "test-issue1-api.cjs": "13/0",
+      "test-issue1-ui.cjs": "8/0",
+      "test-issue2-client-panel.cjs": "15/0",
+      "test-issue3-agent-panel.cjs": "19/0",
+      "test-extra-admin-management.cjs": "8/0",
+      "audit-ui-check.cjs": "18/18",
+      "api-regression.cjs": "all groups green",
+      "dropdown-verify.cjs": "61/61",
+      "timing-display-check.cjs": "8/8",
+      "smoke-all-panels.cjs": "51 pages / 0 JS errors / 0 write API calls",
+      "check-html-scripts.js": "0 FAIL on all 5 panels"
+    }
+  },
+  "notes": [
+    "The client panel has no page literally titled 'SMS CDR Report'; its newest-OTP surfaces are the SMS Detailed Report page and the dashboard Recent Activity list - both are covered (the dashboard fix touches only that card's list).",
+    "The isolated fixture stores synthetic SMS rows at a fixed 10:00:00 per day (some of them in the future relative to the sandbox clock), so the harness injects the new arrivals with a carrier timestamp just after the current maximum - the same field a real carrier callback fills (api_dt).",
+    "Polling is skipped while the tab is hidden and while none of the affected pages is active, so background load is one limit-1 request every 8 s per open report page."
+  ],
+  "apply": "copy agent.html and client.html over the current install and hard-refresh the panels. No backend restart needed, no DB migration, no config change."
+}
